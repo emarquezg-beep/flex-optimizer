@@ -1,0 +1,6 @@
+# Archivo de secretos
+.env
+
+# Dependencias
+node_modules/
+frontend/node_modules/
