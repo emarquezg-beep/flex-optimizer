@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES DE ESTADO Y DATOS (sin cambios) ---
+// --- VARIABLES Y DATOS (sin cambios) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -25,36 +25,26 @@ const customDestination = ref('');
 
 // --- PROPIEDADES COMPUTADAS ---
 const optimizedDisplayList = computed(() => {
-  if (!backendResponse.value || !backendResponse.value.optimizedOrder) {
+  // ¡CORRECCIÓN IMPORTANTE! Ahora usamos la lista reordenada del backend.
+  if (!backendResponse.value || !backendResponse.value.optimizedAddressList) {
     return extractedAddresses.value;
   }
-  return backendResponse.value.optimizedOrder.map(index => extractedAddresses.value[index]);
+  return backendResponse.value.optimizedAddressList;
 });
 
-// ¡NUEVA LÓGICA PARA EL CÁLCULO DE TIEMPO AJUSTADO!
 const adjustedWorkTime = computed(() => {
-    if (!backendResponse.value || !backendResponse.value.workDuration) {
-        return null;
-    }
-
-    let totalStopTime = 0;
-    let apartmentCount = 0;
+    if (!backendResponse.value || !backendResponse.value.workDuration) { return null; }
+    let totalStopTime = 0; let apartmentCount = 0;
     const stopCount = optimizedDisplayList.value.length;
-
     optimizedDisplayList.value.forEach(address => {
         const upperCaseAddress = address.toUpperCase();
-        // 1. Añadimos 1.5 minutos base por cada parada.
         totalStopTime += 1.5;
-
-        // 2. Si es un apartamento, añadimos 1.5 minutos extra.
         if (upperCaseAddress.includes('APT') || upperCaseAddress.includes('UNIT') || upperCaseAddress.includes('#')) {
             apartmentCount++;
             totalStopTime += 1.5;
         }
     });
-
     const totalEstimatedDuration = backendResponse.value.workDuration + totalStopTime;
-
     return {
         driveDuration: backendResponse.value.workDuration,
         stopDuration: totalStopTime,
@@ -63,6 +53,19 @@ const adjustedWorkTime = computed(() => {
         apartmentCount: apartmentCount
     };
 });
+
+// --- ¡NUEVA FUNCIÓN DE PRUEBA! ---
+function shuffleAddresses() {
+    // Algoritmo de Fisher-Yates para barajar un array.
+    for (let i = extractedAddresses.value.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [extractedAddresses.value[i], extractedAddresses.value[j]] = [extractedAddresses.value[j], extractedAddresses.value[i]];
+    }
+    // Forzamos la actualización visual (un truco de Vue)
+    extractedAddresses.value = [...extractedAddresses.value];
+    // Limpiamos la respuesta anterior para ver el cambio claramente
+    backendResponse.value = null; 
+}
 
 
 // --- FUNCIONES (sin cambios) ---
@@ -137,7 +140,7 @@ async function sendToBackend() {
         <div v-if="extractedAddresses.length > 0 && !isProcessing">
             <div class="controls-container">
                 <div class="control-group">
-                    <label for="warehouse-select">Punto de Partida (Warehouse)</label>
+                    <label for="warehouse-select">Punto de Partida</label>
                     <select id="warehouse-select" v-model="selectedWarehouse">
                         <option v-for="wh in warehouses" :key="wh.code" :value="wh.address">{{ wh.code }}</option>
                     </select>
@@ -155,23 +158,24 @@ async function sendToBackend() {
             </div>
 
             <div class="address-list">
-                <h2 v-if="backendResponse && backendResponse.optimizedOrder">🗺️ Ruta Optimizada ({{ optimizedDisplayList.length }} paradas)</h2>
+                <h2 v-if="backendResponse && backendResponse.optimizedAddressList">🗺️ Ruta Optimizada ({{ optimizedDisplayList.length }} paradas)</h2>
                 <h2 v-else>📍 Direcciones Extraídas ({{ extractedAddresses.length }} paradas)</h2>
                 
                 <ol>
                     <li v-for="(address, index) in optimizedDisplayList" :key="index">{{ address }}</li>
                 </ol>
                 
-                <button @click="sendToBackend" class="button-map">Calcular Ruta Optimizada</button>
+                <div class="button-group">
+                    <button @click="shuffleAddresses" class="button-shuffle">🔀 Desordenar para Prueba</button>
+                    <button @click="sendToBackend" class="button-map">Calcular Ruta Optimizada</button>
+                </div>
 
                 <div v-if="backendResponse">
                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Optimizando ruta...</div>
                     <div v-else-if="backendResponse.workDistance" class="results-container">
-                        
                         <div class="result-block">
                             <h4>💼 Millas de Trabajo (Sin Peajes)</h4>
                             <p class="main-metric">{{ backendResponse.workDistance }} mi</p>
-                            
                             <div v-if="adjustedWorkTime" class="time-breakdown">
                                 <p>Tiempo de Conducción: <strong>{{ adjustedWorkTime.driveDuration }} min</strong></p>
                                 <p class="adjustment-calc">+ Tiempo en Paradas: <strong>{{ adjustedWorkTime.stopDuration }} min</strong>
@@ -204,60 +208,41 @@ async function sendToBackend() {
 
 <style scoped>
     /* ... (Estilos anteriores) ... */
-    /* ¡NUEVOS ESTILOS Y ARREGLOS DE COLOR! */
-    .results-container {
+    /* ¡NUEVOS ESTILOS PARA LOS BOTONES! */
+    .button-group {
+        display: flex;
+        gap: 10px;
         margin-top: 20px;
+    }
+    .button-map {
+        flex-grow: 1; /* El botón principal ocupa más espacio */
+    }
+    .button-shuffle {
         padding: 15px;
-        background-color: #f7f9fc; /* Un color de fondo ligeramente diferente */
-        border: 1px solid #e1e8ed;
-        border-radius: 8px;
-        color: #212529; /* Color de texto oscuro por defecto */
-    }
-    .result-block h4 {
-        margin: 0 0 10px 0;
-        color: #495057; /* Un gris más suave para los títulos */
-    }
-    .result-block p {
-        margin: 5px 0;
-        font-size: 1.1em;
-        color: #212529; /* Asegura que el texto principal sea oscuro */
-    }
-    .main-metric {
-        font-size: 1.4em !important;
+        font-size: 1em;
         font-weight: bold;
+        color: #5a67d8;
+        background-color: #e0e7ff;
+        border: 1px solid #c3dafe;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s;
     }
-    .time-breakdown {
-        margin-top: 15px;
-        padding-top: 10px;
-        border-top: 1px dashed #ced4da;
+    .button-shuffle:hover {
+        background-color: #c3dafe;
     }
-    .adjustment-calc {
-        font-size: 1em !important;
-    }
-    .calc-details {
-        font-size: 0.85em;
-        color: #6c757d;
-        display: block;
-    }
-    .total-time {
-        font-size: 1.2em !important;
-        font-weight: bold;
-        color: #007bff; /* Un color de acento para el total */
-    }
-    .dotted-hr {
-        border: none;
-        border-top: 2px dotted #adb5bd;
-        margin: 8px 0;
-    }
-    .commute .option p {
-        color: #212529; /* Asegura que este texto también sea oscuro */
-    }
-    .cost {
-        font-size: 1em !important;
-        color: #495057; /* Color de costo arreglado */
-    }
-
-    /* Estilos base (sin cambios) */
+    .main-metric { font-size: 1.4em !important; font-weight: bold; }
+    .time-breakdown { margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ced4da; }
+    .adjustment-calc { font-size: 1em !important; }
+    .calc-details { font-size: 0.85em; color: #6c757d; display: block; }
+    .total-time { font-size: 1.2em !important; font-weight: bold; color: #007bff; }
+    .dotted-hr { border: none; border-top: 2px dotted #adb5bd; margin: 8px 0; }
+    .results-container { color: #212529; }
+    .result-block h4 { color: #495057; }
+    .result-block p { color: #212529; }
+    .commute .option p { color: #212529; }
+    .cost { color: #495057; }
+    /* Estilos base */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
@@ -270,8 +255,6 @@ async function sendToBackend() {
     .address-list h2 { margin-top: 0; color: #388e3c; }
     ol { padding-left: 25px; }
     li { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: #333; }
-    .button-map { display: block; width: 100%; padding: 15px; margin-top: 20px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
-    .button-map:hover { background-color: #1565c0; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
     .commute .option { padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 5px solid #eee; }
     .commute .option:first-of-type { border-left-color: #f44336; }
