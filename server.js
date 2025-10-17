@@ -158,7 +158,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor backend corriendo en http://localhost:${PORT}`);
 });
 
-  } catch (error) {
+  catch (error) {
     console.error("❌ Error con Google Maps:", error.response?.data?.error_message || error.message);
     res.status(500).json({ message: 'Error al optimizar la ruta.' });
   }
