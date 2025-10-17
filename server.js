@@ -6,6 +6,7 @@ const { Client } = require('@googlemaps/google-maps-services-js');
 const app = express();
 const PORT = 3000;
 
+// Configuración de CORS que ya funciona perfectamente
 const allowedOrigins = [ 'http://localhost:5173', 'https://flex-optimizer.vercel.app' ];
 const corsOptions = {
   origin: function (origin, callback) {
@@ -20,145 +21,68 @@ app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
-// --- FUNCIONES ASISTENTES ---
-function getDistance(p1, p2) {
-    const R = 6371e3; const φ1 = p1.lat * Math.PI/180; const φ2 = p2.lat * Math.PI/180;
-    const Δφ = (p2.lat-p1.lat) * Math.PI/180; const Δλ = (p2.lng-p1.lng) * Math.PI/180;
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+// Función asistente para extraer las métricas de forma segura
+function extractMetrics(response) {
+    const leg = response?.data?.routes[0]?.legs[0];
+    if (!leg) {
+        return { distance: 0, duration: 0 }; // Devuelve 0 si no se encuentra una ruta
+    }
+    return {
+        distance: (leg.distance.value / 1609.34).toFixed(2), // Convertido a millas
+        duration: Math.round(leg.duration.value / 60)       // Convertido a minutos
+    };
 }
-function chunkArray(array, size) {
-    const chunks = [];
-    for (let i = 0; i < array.length; i += size) { chunks.push(array.slice(i, i + size)); }
-    return chunks;
-}
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-
 
 app.post('/api/optimize-route', async (req, res) => {
   let { addresses } = req.body;
   addresses = addresses.filter(addr => addr && addr.trim() !== '');
 
-  if (!addresses || addresses.length < 2) {
-    return res.status(400).json({ message: 'Se necesitan al menos un origen y un destino.' });
+  // Ahora necesitamos al menos 3 puntos: Origen, 1 parada, Destino final.
+  if (!addresses || addresses.length < 3) {
+    return res.status(400).json({ message: 'Se necesitan al menos Origen, una Parada y un Destino.' });
   }
 
   try {
-    const originAddress = addresses[0];
-    const finalDestination = addresses[addresses.length - 1];
-    let workStops = addresses.slice(1, -1);
-    
-    // Geocodificación y Validación
-    const allPointsToGeocode = [originAddress, ...workStops];
-    const geocodePromises = allPointsToGeocode.map(addr => 
-        mapsClient.geocode({ params: { address: addr, key: process.env.GOOGLE_MAPS_API_KEY } })
-    );
-    const geocodeResults = await Promise.all(geocodePromises);
-    
-    const validLocations = [];
-    geocodeResults.forEach((result, i) => {
-        const locationData = result.data.results[0];
-        const currentAddress = allPointsToGeocode[i];
-        if (locationData && locationData.geometry.location_type !== 'APPROXIMATE') {
-            validLocations.push({ address: currentAddress, coords: locationData.geometry.location });
-        } else {
-            console.log(`\n\n🕵️‍♂️ ALERTA: DIRECCIÓN DESCARTADA: "${currentAddress}"\n\n`);
-        }
-    });
+    // --- 1. DEFINIMOS LOS PUNTOS CLAVE PARA LOS CÁLCULOS ---
+    const origin = addresses[0];                                  // Warehouse
+    const firstStop = addresses[1];                               // Primera parada de la lista
+    const lastStop = addresses[addresses.length - 2];             // Última parada de la lista
+    const finalDestination = addresses[addresses.length - 1];   // Casa u otro destino
 
-    const originLocation = validLocations.find(loc => loc.address === originAddress);
-    if (!originLocation) { return res.status(400).json({ message: 'La dirección de origen no es válida.' }); }
-    
-    const validWorkStops = validLocations.filter(loc => loc.address !== originAddress);
+    console.log('✅ v1.0: Calculando escenarios...');
 
-    // Pre-clasificación
-    const sortedStops = [];
-    let currentLocation = originLocation;
-    let unvisited = [...validWorkStops];
-    while (unvisited.length > 0) {
-        let nearestIndex = -1; let minDistance = Infinity;
-        unvisited.forEach((stop, index) => {
-            const distance = getDistance(currentLocation.coords, stop.coords);
-            if (distance < minDistance) { minDistance = distance; nearestIndex = index; }
-        });
-        currentLocation = unvisited[nearestIndex];
-        sortedStops.push(currentLocation.address);
-        unvisited.splice(nearestIndex, 1);
-    }
-    workStops = sortedStops;
-
-    // Optimización por Segmentos con Pausa
-    const MAX_WAYPOINTS = 10;
-    let fullOptimizedAddressList = [];
-    let totalWorkDistance = 0;
-    let totalWorkDuration = 0;
-    
-    const workStopChunks = chunkArray(workStops, MAX_WAYPOINTS);
-    console.log(`Procesando en ${workStopChunks.length} segmentos...`);
-    let lastStopOfPreviousChunk = originAddress;
-
-    for (const [index, chunk] of workStopChunks.entries()) {
-        if (chunk.length === 0) continue;
-        if (index > 0) {
-            console.log('--- Tomando un respiro (2s) ---');
-            await delay(2000);
-        }
-
-        const destination = chunk[chunk.length - 1];
-        const waypoints = chunk.slice(0, -1);
-
-        const response = await mapsClient.directions({ params: { origin: lastStopOfPreviousChunk, destination, waypoints, optimize: true, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } });
-        const route = response.data.routes[0];
-        
-        // --- ¡LA LÓGICA DE DEPURACIÓN FINAL ESTÁ AQUÍ! ---
-        if (!route) {
-            console.error(`\n\n🔥🔥🔥 FALLO CRÍTICO EN EL SEGMENTO ${index + 1} 🔥🔥🔥`);
-            console.error(`Google no pudo encontrar una ruta para este segmento. La dirección problemática probablemente es el DESTINO.`);
-            console.error(`   ORIGEN: ${lastStopOfPreviousChunk}`);
-            console.error(`   DESTINO: ${destination}`);
-            console.error(`   WAYPOINTS: ${waypoints.join(' | ')}`);
-            // Forzamos un error para detener todo y enviar una respuesta clara.
-            throw new Error(`Fallo al optimizar el segmento ${index + 1}. Verifica las direcciones.`);
-        }
-        
-        const orderedWaypoints = route.waypoint_order.map(i => chunk[i]);
-        const orderedChunk = [...orderedWaypoints, destination];
-        fullOptimizedAddressList.push(...orderedChunk);
-        
-        route.legs.forEach(leg => { totalWorkDistance += leg.distance.value; totalWorkDuration += leg.duration.value; });
-        console.log(`-- Segmento ${index + 1} completado. Total acumulado: ${fullOptimizedAddressList.length} paradas.`);
-        lastStopOfPreviousChunk = destination;
-    }
-    
-    // Cálculo de Commute
-    const lastWorkStop = fullOptimizedAddressList.length > 0 ? fullOptimizedAddressList[fullOptimizedAddressList.length - 1] : originAddress;
-    const commutePromises = [
-        mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, key: process.env.GOOGLE_MAPS_API_KEY } }),
-        mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } })
+    // --- 2. PREPARAMOS LAS 5 LLAMADAS A LA API DE GOOGLE ---
+    const promises = [
+        // Tramo A: Warehouse -> Primera Parada
+        mapsClient.directions({ params: { origin, destination: firstStop, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } }),
+        // Tramo B: Última Parada -> Casa
+        mapsClient.directions({ params: { origin: lastStop, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } }),
+        // Tramo C: Warehouse -> Última Parada
+        mapsClient.directions({ params: { origin, destination: lastStop, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } }),
+        // Tramo D: Primera Parada -> Casa
+        mapsClient.directions({ params: { origin: firstStop, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } }),
+        // Tramo X (El Bloque): Primera Parada -> Última Parada (sin optimizar waypoints)
+        mapsClient.directions({ params: { origin: firstStop, destination: lastStop, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } })
     ];
-    const [withTollsResult, withoutTollsResult] = await Promise.all(commutePromises);
-    
-    const withTollsLeg = withTollsResult.data.routes[0]?.legs[0];
-    const withoutTollsLeg = withoutTollsResult.data.routes[0]?.legs[0];
-    const tollCost = withTollsResult.data.routes[0]?.fare?.text || '$0.00';
 
+    // --- 3. EJECUTAMOS TODAS LAS LLAMADAS AL MISMO TIEMPO ---
+    const results = await Promise.all(promises);
+
+    // --- 4. EXTRAEMOS LOS RESULTADOS Y LOS ENVIAMOS AL FRONTEND ---
+    const [tramoA, tramoB, tramoC, tramoD, tramoX] = results.map(extractMetrics);
+
+    console.log('🎉 v1.0: Escenarios calculados con éxito!');
     res.json({
-        workDistance: (totalWorkDistance / 1609.34).toFixed(2),
-        workDuration: Math.round(totalWorkDuration / 60),
-        optimizedAddressList: fullOptimizedAddressList,
-        commute: {
-            withTolls: { distance: (withTollsLeg?.distance.value / 1609.34).toFixed(2), duration: Math.round(withTollsLeg?.duration.value / 60), cost: tollCost },
-            withoutTolls: { distance: (withoutTollsLeg?.distance.value / 1609.34).toFixed(2), duration: Math.round(withoutTollsLeg?.duration.value / 60), }
-        }
+      scenarioData: { tramoA, tramoB, tramoC, tramoD, tramoX },
+      originalStops: addresses.slice(1, -1) // Enviamos las paradas originales para el cálculo de tiempo
     });
 
   } catch (error) {
-    console.error("❌ Error en el proceso:", error.message);
-    res.status(500).json({ message: `Error al optimizar la ruta. ${error.message}` });
+    console.error("❌ Error en el cálculo de escenarios:", error.response?.data?.error_message || error.message);
+    res.status(500).json({ message: 'Error al calcular los escenarios.' });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor backend v1.0 corriendo en http://localhost:${PORT}`);
 });
