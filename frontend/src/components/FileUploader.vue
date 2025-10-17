@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES Y DATOS (sin cambios) ---
+// --- VARIABLES Y DATOS ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,7 +23,7 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDADES COMPUTADAS (sin cambios) ---
+// --- PROPIEDADES COMPUTADAS ---
 const optimizedDisplayList = computed(() => {
   if (!backendResponse.value || !backendResponse.value.optimizedAddressList) {
     return extractedAddresses.value;
@@ -52,7 +52,7 @@ const adjustedWorkTime = computed(() => {
     };
 });
 
-// --- FUNCIONES PARA EDITAR LA LISTA (sin cambios) ---
+// --- FUNCIONES PARA EDITAR LA LISTA ---
 function removeAddress(index) {
     const addressToRemove = optimizedDisplayList.value[index];
     const originalIndex = extractedAddresses.value.findIndex(addr => addr === addressToRemove);
@@ -64,7 +64,7 @@ function addAddress() {
     extractedAddresses.value.push('');
 }
 
-// --- FUNCIONES DE PROCESAMIENTO (sin cambios) ---
+// --- FUNCIONES DE PROCESAMIENTO ---
 function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
