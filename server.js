@@ -20,7 +20,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
-// --- FUNCIONES ASISTENTES (sin cambios) ---
+// --- Helper Functions (unchanged) ---
 function getDistance(p1, p2) {
     const R = 6371e3; const φ1 = p1.lat * Math.PI/180; const φ2 = p2.lat * Math.PI/180;
     const Δφ = (p2.lat-p1.lat) * Math.PI/180; const Δλ = (p2.lng-p1.lng) * Math.PI/180;
@@ -47,33 +47,34 @@ app.post('/api/optimize-route', async (req, res) => {
     const finalDestination = addresses[addresses.length - 1];
     let workStops = addresses.slice(1, -1);
     
-    // --- PASO CERO: GEOCODIFICACIÓN ---
+    // --- Geocoding with Quality Check ---
     console.log(`Geocodificando ${workStops.length + 1} puntos de ruta...`);
     const geocodePromises = [originAddress, ...workStops].map(addr => 
         mapsClient.geocode({ params: { address: addr, key: process.env.GOOGLE_MAPS_API_KEY } })
     );
     const geocodeResults = await Promise.all(geocodePromises);
     
-    // --- ¡NUEVO INSPECTOR DE CALIDAD! ---
     const validLocations = [];
     geocodeResults.forEach((result, i) => {
         const locationData = result.data.results[0];
-        // Solo aceptamos direcciones que Google encontró con precisión (ROOFTOP, RANGE_INTERPOLATED, etc.)
-        if (locationData && locationData.geometry.location_type !== 'APPROXIMATE') {
+        const currentAddress = [originAddress, ...workStops][i];
+        
+        // --- THIS IS THE NEW "SPY" LOGIC ---
+        // If the address is bad, we print it before discarding it.
+        if (!locationData || locationData.geometry.location_type === 'APPROXIMATE') {
+            console.warn(`🕵️  DIRECCIÓN SOSPECHOSA DESCARTADA: "${currentAddress}"`);
+        } else {
             validLocations.push({
-                address: [originAddress, ...workStops][i],
+                address: currentAddress,
                 coords: locationData.geometry.location
             });
-        } else {
-            console.warn(`Descartando dirección imprecisa o no encontrada: ${[originAddress, ...workStops][i]}`);
         }
     });
-    // --- FIN DEL INSPECTOR ---
 
-    const originLocation = validLocations.shift(); // Sacamos el origen validado
+    const originLocation = validLocations.shift();
     if (!originLocation) { return res.status(400).json({ message: 'La dirección de origen no es válida.' }); }
     
-    // --- PASO UNO: PRE-CLASIFICACIÓN (ahora solo con direcciones válidas) ---
+    // --- Pre-sorting with valid locations ---
     console.log(`Realizando pre-clasificación con ${validLocations.length} paradas válidas...`);
     const sortedStops = [];
     let currentLocation = originLocation;
@@ -89,9 +90,9 @@ app.post('/api/optimize-route', async (req, res) => {
         sortedStops.push(currentLocation.address);
         unvisited.splice(nearestIndex, 1);
     }
-    workStops = sortedStops; // Usamos la lista limpia y pre-ordenada
+    workStops = sortedStops;
 
-    // --- PASO DOS: OPTIMIZACIÓN POR SEGMENTOS ---
+    // --- Optimization in Chunks ---
     const MAX_WAYPOINTS = 25;
     let fullOptimizedAddressList = [];
     let totalWorkDistance = 0;
@@ -113,7 +114,7 @@ app.post('/api/optimize-route', async (req, res) => {
         }
     }
     
-    // --- CÁLCULO DE COMMUTE ---
+    // --- Commute Calculation ---
     const lastWorkStop = fullOptimizedAddressList.length > 0 ? fullOptimizedAddressList[fullOptimizedAddressList.length - 1] : originAddress;
     const commutePromises = [
         mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, key: process.env.GOOGLE_MAPS_API_KEY } }),
