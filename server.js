@@ -47,7 +47,7 @@ app.post('/api/optimize-route', async (req, res) => {
     const finalDestination = addresses[addresses.length - 1];
     let workStops = addresses.slice(1, -1);
     
-    // --- PASO CERO: GEOCODIFICACIÓN CON LOGGING MEJORADO ---
+    // --- PASO CERO: GEOCODIFICACIÓN ---
     console.log(`Geocodificando ${workStops.length + 1} puntos de ruta...`);
     const allPointsToGeocode = [originAddress, ...workStops];
     const geocodePromises = allPointsToGeocode.map(addr => 
@@ -75,7 +75,7 @@ app.post('/api/optimize-route', async (req, res) => {
     console.log(`Realizando pre-clasificación con ${validWorkStops.length} paradas válidas...`);
     const sortedStops = [];
     let currentLocation = originLocation;
-    let unvisited = [...validWorkStops]; // Usamos una copia para poder modificarla
+    let unvisited = [...validWorkStops];
     while (unvisited.length > 0) {
         let nearestIndex = -1; let minDistance = Infinity;
         unvisited.forEach((stop, index) => {
@@ -88,7 +88,7 @@ app.post('/api/optimize-route', async (req, res) => {
     }
     workStops = sortedStops;
 
-    // --- PASO DOS: OPTIMIZACIÓN POR SEGMENTOS (LÓGICA CORREGIDA) ---
+    // --- PASO DOS: OPTIMIZACIÓN POR SEGMENTOS ---
     const MAX_WAYPOINTS = 25;
     let fullOptimizedAddressList = [];
     let totalWorkDistance = 0;
@@ -99,14 +99,22 @@ app.post('/api/optimize-route', async (req, res) => {
     let lastStopOfPreviousChunk = originAddress;
 
     for (const [index, chunk] of workStopChunks.entries()) {
-        if(chunk.length === 0) continue; // Salta segmentos vacíos
+        if(chunk.length === 0) continue;
 
-        console.log(`-- Optimizando segmento ${index + 1}/${workStopChunks.length}...`);
+        const destination = chunk[chunk.length - 1];
+        const waypoints = chunk.slice(0, -1);
+        
+        // --- ¡NUEVO LOG DE DEPURACIÓN! ---
+        console.log(`\n-- Optimizando segmento ${index + 1}/${workStopChunks.length}...`);
+        console.log(`   ORIGEN: ${lastStopOfPreviousChunk}`);
+        console.log(`   DESTINO: ${destination}`);
+        console.log(`   WAYPOINTS: ${waypoints.length}`);
+        
         const response = await mapsClient.directions({ 
             params: { 
                 origin: lastStopOfPreviousChunk, 
-                destination: chunk[chunk.length - 1], 
-                waypoints: chunk.slice(0, -1), 
+                destination: destination, 
+                waypoints: waypoints, 
                 optimize: true, 
                 avoid: ['tolls'], 
                 key: process.env.GOOGLE_MAPS_API_KEY 
@@ -125,7 +133,7 @@ app.post('/api/optimize-route', async (req, res) => {
             totalWorkDuration += leg.duration.value; 
         });
 
-        console.log(`-- Segmento ${index + 1} completado. Total de paradas acumuladas: ${fullOptimizedAddressList.length}`);
+        console.log(`-- Segmento ${index + 1} completado. Total acumulado: ${fullOptimizedAddressList.length} paradas.`);
         lastStopOfPreviousChunk = chunk[chunk.length - 1];
     }
     
