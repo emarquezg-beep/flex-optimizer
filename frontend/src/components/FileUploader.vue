@@ -111,11 +111,20 @@ async function handleFileChange(event) {
   isProcessing.value = false;
 }
 async function sendToBackend() {
-  if (extractedAddresses.value.length === 0) return;
+  // Filtramos la lista ANTES de enviarla
+  const validExtractedAddresses = extractedAddresses.value.filter(addr => addr && addr.trim() !== '');
+
+  if (validExtractedAddresses.length === 0) {
+      alert('No hay direcciones válidas para optimizar.');
+      return;
+  }
+  
   const finalDestination = selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value;
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
-  const fullRoute = [selectedWarehouse.value, ...extractedAddresses.value, finalDestination];
+  
+  const fullRoute = [selectedWarehouse.value, ...validExtractedAddresses, finalDestination];
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+  
   backendResponse.value = { status: 'loading' }; 
   try {
     const response = await fetch(`${backendUrl}/api/optimize-route`, {

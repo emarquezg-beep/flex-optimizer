@@ -6,10 +6,7 @@ const { Client } = require('@googlemaps/google-maps-services-js');
 const app = express();
 const PORT = 3000;
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://flex-optimizer.vercel.app'
-];
+const allowedOrigins = [ 'http://localhost:5173', 'https://flex-optimizer.vercel.app' ];
 const corsOptions = {
   origin: function (origin, callback) {
     if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
@@ -23,11 +20,21 @@ app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
-app.get('/', (req, res) => {
-  res.send('<h1>Servidor Backend Activo y Listo para Rutas Largas</h1>');
-});
+// --- NUEVAS FUNCIONES ASISTENTES ---
 
-// Función asistente para dividir un array en segmentos de un tamaño específico.
+// Calcula la distancia entre dos puntos con coordenadas
+function getDistance(p1, p2) {
+    const R = 6371e3; // Metros
+    const φ1 = p1.lat * Math.PI/180;
+    const φ2 = p2.lat * Math.PI/180;
+    const Δφ = (p2.lat-p1.lat) * Math.PI/180;
+    const Δλ = (p2.lng-p1.lng) * Math.PI/180;
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// Divide un array en segmentos
 function chunkArray(array, size) {
     const chunks = [];
     for (let i = 0; i < array.length; i += size) {
@@ -36,97 +43,108 @@ function chunkArray(array, size) {
     return chunks;
 }
 
+
 app.post('/api/optimize-route', async (req, res) => {
-  const { addresses } = req.body;
+  let { addresses } = req.body;
+  addresses = addresses.filter(addr => addr && addr.trim() !== ''); // Limpiamos direcciones vacías
+
   if (!addresses || addresses.length < 2) {
     return res.status(400).json({ message: 'Se necesitan al menos un origen y un destino.' });
   }
 
   try {
-    const origin = addresses[0];
+    const originAddress = addresses[0];
     const finalDestination = addresses[addresses.length - 1];
-    const workStops = addresses.slice(1, -1);
+    let workStops = addresses.slice(1, -1);
     
-    const MAX_WAYPOINTS = 25; // Límite de la API de Google
+    // --- PASO CERO: GEOCODIFICACIÓN ---
+    console.log(`Geocodificando ${workStops.length + 1} puntos de ruta...`);
+    const geocodePromises = [originAddress, ...workStops].map(addr => 
+        mapsClient.geocode({ params: { address: addr, key: process.env.GOOGLE_MAPS_API_KEY } })
+    );
+    const geocodeResults = await Promise.all(geocodePromises);
+    const locations = geocodeResults.map((result, i) => ({
+        address: [originAddress, ...workStops][i],
+        coords: result.data.results[0].geometry.location
+    }));
     
+    // --- PASO UNO: PRE-CLASIFICACIÓN GEOGRÁFica ---
+    console.log('Realizando pre-clasificación geográfica...');
+    const sortedStops = [];
+    let currentLocation = locations.shift(); // Empezamos en el origin
+    let unvisited = locations;
+
+    while (unvisited.length > 0) {
+        let nearestIndex = -1;
+        let minDistance = Infinity;
+        
+        unvisited.forEach((stop, index) => {
+            const distance = getDistance(currentLocation.coords, stop.coords);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestIndex = index;
+            }
+        });
+        
+        currentLocation = unvisited[nearestIndex];
+        sortedStops.push(currentLocation.address);
+        unvisited.splice(nearestIndex, 1);
+    }
+    workStops = sortedStops; // Reemplazamos la lista desordenada con la pre-clasificada
+    
+    // --- PASO DOS: OPTIMIZACIÓN POR SEGMENTOS (CÓDIGO ANTERIOR, AHORA CON UNA LISTA MEJOR) ---
+    const MAX_WAYPOINTS = 25;
     let fullOptimizedAddressList = [];
     let totalWorkDistance = 0;
     let totalWorkDuration = 0;
     
     if (workStops.length <= MAX_WAYPOINTS) {
-        // --- LÓGICA PARA RUTAS NORMALES (MENOS DE 25 PARADAS) ---
-        console.log(`✅ Ruta estándar detectada. Optimizando...`);
-        const response = await mapsClient.directions({
-            params: {
-                origin: origin,
-                destination: workStops.length > 0 ? workStops[workStops.length - 1] : origin,
-                waypoints: workStops.slice(0, -1),
-                optimize: true,
-                avoid: ['tolls'],
-                key: process.env.GOOGLE_MAPS_API_KEY,
-            },
-        });
-        const route = response.data.routes[0];
-        if (route) {
-            const orderedWaypoints = route.waypoint_order.map(index => workStops[index]);
-            fullOptimizedAddressList = [...orderedWaypoints, workStops[workStops.length - 1]];
-            route.legs.forEach(leg => {
-                totalWorkDistance += leg.distance.value;
-                totalWorkDuration += leg.duration.value;
-            });
+        // Lógica para rutas normales
+        if (workStops.length > 0) {
+            const response = await mapsClient.directions({ params: { origin: originAddress, destination: workStops[workStops.length - 1], waypoints: workStops.slice(0, -1), optimize: true, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY, } });
+            const route = response.data.routes[0];
+            if (route) {
+                const orderedWaypoints = route.waypoint_order.map(index => workStops[index]);
+                fullOptimizedAddressList = [...orderedWaypoints, workStops[workStops.length - 1]];
+                route.legs.forEach(leg => { totalWorkDistance += leg.distance.value; totalWorkDuration += leg.duration.value; });
+            }
         }
     } else {
-        // --- LÓGICA MEJORADA PARA RUTAS LARGAS ---
+        // Lógica para rutas largas
         const workStopChunks = chunkArray(workStops, MAX_WAYPOINTS);
-        console.log(`✅ Ruta larga detectada. Procesando en ${workStopChunks.length} segmentos...`);
-        
-        let lastStopOfPreviousChunk = origin;
-
+        console.log(`Ruta larga pre-clasificada. Procesando en ${workStopChunks.length} segmentos...`);
+        let lastStopOfPreviousChunk = originAddress;
         for (const [index, chunk] of workStopChunks.entries()) {
-            console.log(`-- Optimizando segmento ${index + 1}/${workStopChunks.length}...`);
-            const response = await mapsClient.directions({
-                params: {
-                    origin: lastStopOfPreviousChunk,
-                    destination: chunk[chunk.length - 1],
-                    waypoints: chunk.slice(0, -1),
-                    optimize: true,
-                    avoid: ['tolls'],
-                    key: process.env.GOOGLE_MAPS_API_KEY,
-                },
-            });
+            const response = await mapsClient.directions({ params: { origin: lastStopOfPreviousChunk, destination: chunk[chunk.length - 1], waypoints: chunk.slice(0, -1), optimize: true, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY, } });
             const route = response.data.routes[0];
             if (!route) continue;
-
             const orderedWaypoints = route.waypoint_order.map(i => chunk[i]);
             const orderedChunk = [...orderedWaypoints, chunk[chunk.length - 1]];
             fullOptimizedAddressList.push(...orderedChunk);
-
-            route.legs.forEach(leg => {
-                totalWorkDistance += leg.distance.value;
-                totalWorkDuration += leg.duration.value;
-            });
+            route.legs.forEach(leg => { totalWorkDistance += leg.distance.value; totalWorkDuration += leg.duration.value; });
             lastStopOfPreviousChunk = chunk[chunk.length - 1];
         }
     }
     
-    // --- CÁLCULO DE COMMUTE (SIN CAMBIOS) ---
-    const lastWorkStop = fullOptimizedAddressList[fullOptimizedAddressList.length - 1];
-    const commuteWithTollsPromise = mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, key: process.env.GOOGLE_MAPS_API_KEY } });
-    const commuteWithoutTollsPromise = mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } });
+    // --- CÁLCULO DE COMMUTE ---
+    const lastWorkStop = fullOptimizedAddressList.length > 0 ? fullOptimizedAddressList[fullOptimizedAddressList.length - 1] : originAddress;
+    const commutePromises = [
+        mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, key: process.env.GOOGLE_MAPS_API_KEY } }),
+        mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } })
+    ];
+    const [withTollsResult, withoutTollsResult] = await Promise.all(commutePromises);
     
-    const [withTollsResult, withoutTollsResult] = await Promise.all([commuteWithTollsPromise, commuteWithoutTollsPromise]);
     const withTollsLeg = withTollsResult.data.routes[0]?.legs[0];
     const withoutTollsLeg = withoutTollsResult.data.routes[0]?.legs[0];
     const tollCost = withTollsResult.data.routes[0]?.fare?.text || '$0.00';
 
-    console.log(`🎉 Optimización completada. Total de ${fullOptimizedAddressList.length} paradas de trabajo ordenadas.`);
     res.json({
         workDistance: (totalWorkDistance / 1609.34).toFixed(2),
         workDuration: Math.round(totalWorkDuration / 60),
         optimizedAddressList: fullOptimizedAddressList,
         commute: {
-            withTolls: { distance: (withTollsLeg.distance.value / 1609.34).toFixed(2), duration: Math.round(withTollsLeg.duration.value / 60), cost: tollCost },
-            withoutTolls: { distance: (withoutTollsLeg.distance.value / 1609.34).toFixed(2), duration: Math.round(withoutTollsLeg.duration.value / 60), }
+            withTolls: { distance: (withTollsLeg?.distance.value / 1609.34).toFixed(2), duration: Math.round(withTollsLeg?.duration.value / 60), cost: tollCost },
+            withoutTolls: { distance: (withoutTollsLeg?.distance.value / 1609.34).toFixed(2), duration: Math.round(withoutTollsLeg?.duration.value / 60), }
         }
     });
 
