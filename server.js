@@ -6,13 +6,10 @@ const { Client } = require('@googlemaps/google-maps-services-js');
 const app = express();
 const PORT = 3000;
 
-// --- CONFIGURACIÓN DE CORS DEFINITIVA ---
-// 1. Lista de los "invitados" que permitimos entrar.
 const allowedOrigins = [
-  'http://localhost:5173', // Para tus pruebas locales
-  'https://flex-optimizer.vercel.app' // ¡LA URL CORRECTA DE TU APP EN VIVO!
+  'http://localhost:5173',
+  'https://flex-optimizer.vercel.app'
 ];
-
 const corsOptions = {
   origin: function (origin, callback) {
     if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
@@ -22,15 +19,10 @@ const corsOptions = {
     }
   }
 };
-
-// 2. Usamos esta configuración.
 app.use(cors(corsOptions));
-// --- FIN DE LA CONFIGURACIÓN ---
-
 app.use(express.json());
 const mapsClient = new Client({});
 
-// El resto del código no cambia...
 app.get('/', (req, res) => {
   res.send('<h1>Servidor Backend Activo y Listo para Comparar Peajes</h1>');
 });
@@ -40,39 +32,55 @@ app.post('/api/optimize-route', async (req, res) => {
   if (!addresses || addresses.length < 2) {
     return res.status(400).json({ message: 'Se necesitan al menos un origen y un destino.' });
   }
-  console.log(`✅ Recibidas ${addresses.length} paradas. Optimizando ruta de trabajo (SIN PEAJES)...`);
+
+  console.log(`✅ Recibidas ${addresses.length} paradas. Optimizando...`);
+  
   try {
+    const waypoints = addresses.slice(1, -2); // Las 13 paradas intermedias
+    const workDestination = addresses[addresses.length - 2]; // La parada 14
+
     const workRouteResponse = await mapsClient.directions({
       params: {
         origin: addresses[0],
-        destination: addresses[addresses.length - 2],
-        waypoints: addresses.slice(1, -2),
+        destination: workDestination,
+        waypoints: waypoints,
         optimize: true,
         avoid: ['tolls'],
         key: process.env.GOOGLE_MAPS_API_KEY,
       },
     });
+
     const workRoute = workRouteResponse.data.routes[0];
-    if (!workRoute || !workRoute.legs) {
-        return res.status(500).json({ message: 'Google Maps no pudo encontrar una ruta de trabajo.' });
-    }
+    if (!workRoute) { return res.status(500).json({ message: 'No se pudo encontrar una ruta de trabajo.' }); }
+
+    // --- ¡AQUÍ ESTÁ LA LÓGICA CORREGIDA! ---
+    // 1. Reordenamos los puntos intermedios según la respuesta de Google.
+    const orderedWaypoints = workRoute.waypoint_order.map(index => waypoints[index]);
+    // 2. Creamos la lista final añadiendo el destino fijo al final.
+    const fullOptimizedAddressList = [...orderedWaypoints, workDestination];
+    // --- FIN DE LA CORRECCIÓN ---
+
     let workDistance = 0; let workDuration = 0;
     workRoute.legs.forEach(leg => {
         workDistance += leg.distance.value;
         workDuration += leg.duration.value;
     });
-    const lastStop = addresses[addresses.length - 2];
+
     const finalDestination = addresses[addresses.length - 1];
-    const commuteWithTollsPromise = mapsClient.directions({ params: { origin: lastStop, destination: finalDestination, key: process.env.GOOGLE_MAPS_API_KEY } });
-    const commuteWithoutTollsPromise = mapsClient.directions({ params: { origin: lastStop, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } });
+    const commuteWithTollsPromise = mapsClient.directions({ params: { origin: workDestination, destination: finalDestination, key: process.env.GOOGLE_MAPS_API_KEY } });
+    const commuteWithoutTollsPromise = mapsClient.directions({ params: { origin: workDestination, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } });
+    
     const [withTollsResult, withoutTollsResult] = await Promise.all([commuteWithTollsPromise, commuteWithoutTollsPromise]);
+
     const withTollsLeg = withTollsResult.data.routes[0]?.legs[0];
     const withoutTollsLeg = withoutTollsResult.data.routes[0]?.legs[0];
     const tollCost = withTollsResult.data.routes[0]?.fare?.text || '$0.00';
+
     res.json({
         workDistance: (workDistance / 1609.34).toFixed(2),
         workDuration: Math.round(workDuration / 60),
-        optimizedOrder: workRoute.waypoint_order, 
+        // Enviamos la lista completa y corregida al frontend.
+        optimizedAddressList: fullOptimizedAddressList, 
         commute: {
             withTolls: { distance: (withTollsLeg.distance.value / 1609.34).toFixed(2), duration: Math.round(withTollsLeg.duration.value / 60), cost: tollCost },
             withoutTolls: { distance: (withoutTollsLeg.distance.value / 1609.34).toFixed(2), duration: Math.round(withoutTollsLeg.duration.value / 60), }
