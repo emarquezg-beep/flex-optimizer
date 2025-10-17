@@ -103,10 +103,10 @@ app.post('/api/optimize-route', async (req, res) => {
     for (const [index, chunk] of workStopChunks.entries()) {
         if (chunk.length === 0) continue;
 
-        // ¡LA CORRECCIÓN ESTÁ AQUÍ! Le damos 2 segundos de respiro.
+        // ¡LA CORRECCIÓN ESTÁ AQUÍ! Le damos 5 segundos de respiro.
         if (index > 0) {
-            console.log('--- Tomando un respiro (2s) ---');
-            await delay(2000);
+            console.log('--- Tomando un respiro largo (5s) ---');
+            await delay(5000);
         }
 
         console.log(`-- Optimizando segmento ${index + 1}/${workStopChunks.length}...`);
