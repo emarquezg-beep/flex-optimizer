@@ -2,7 +2,6 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES DE ESTADO Y DATOS ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,7 +22,6 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDADES COMPUTADAS ---
 const optimizedDisplayList = computed(() => {
   if (!backendResponse.value || !backendResponse.value.optimizedAddressList) {
     return extractedAddresses.value;
@@ -53,7 +51,6 @@ const adjustedWorkTime = computed(() => {
     };
 });
 
-// --- FUNCIONES ---
 function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
@@ -68,28 +65,48 @@ function preprocessImage(file) {
     }; img.src = e.target.result; }; reader.readAsDataURL(file);
   });
 }
+
+// --- PARSER MEJORADO (v10) ---
 function parseAddresses(rawText) {
-  const finalAddresses = []; const lines = rawText.split('\n'); const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
+  console.log("Iniciando limpieza v10 (Nombres Propios)...");
+  const finalAddresses = [];
+  const lines = rawText.split('\n');
+  const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
+
   for (let i = 0; i < lines.length; i++) {
-    let currentLine = lines[i]; const addressPattern = /(\d{3,4}\s[A-Z].*)/; const match = currentLine.match(addressPattern);
+    let currentLine = lines[i];
+    
+    // El patrón ahora busca el número en CUALQUIER PARTE de la línea.
+    const addressPattern = /(\d{3,5}\s[A-Z].*)/; 
+    const match = currentLine.match(addressPattern);
+
     if (match) {
+      // Extraemos la dirección limpia desde donde la encontró.
       let fullAddress = match[1].trim();
+      
       if (i + 1 < lines.length) {
-        const nextLine = lines[i+1].trim(); const isJunk = stopWords.some(word => nextLine.includes(word));
-        if (nextLine.length > 3 && !isJunk) { fullAddress += ` ${nextLine}`; }
+        const nextLine = lines[i+1].trim();
+        const isJunk = stopWords.some(word => nextLine.includes(word));
+        // Añadimos la siguiente línea si es texto significativo
+        if (nextLine.length > 3 && !isJunk) {
+          fullAddress += ` ${nextLine}`;
+        }
       }
+      
       finalAddresses.push(fullAddress);
     }
   }
   return finalAddresses;
 }
+
 async function handleFileChange(event) {
   const files = event.target.files; if (!files.length) return;
   isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null; let allParsedAddresses = [];
   for (const file of files) {
     const processedImage = await preprocessImage(file);
     const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-    const addressesFromFile = parseAddresses(text); allParsedAddresses.push(...addressesFromFile);
+    const addressesFromFile = parseAddresses(text);
+    allParsedAddresses.push(...addressesFromFile);
   }
   const uniqueAddresses = [...new Set(allParsedAddresses)];
   extractedAddresses.value = uniqueAddresses;
