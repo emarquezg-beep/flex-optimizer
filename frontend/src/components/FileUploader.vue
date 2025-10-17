@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES DE ESTADO Y DATOS (sin cambios) ---
+// --- VARIABLES Y DATOS (sin cambios) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -52,17 +52,20 @@ const adjustedWorkTime = computed(() => {
     };
 });
 
-// --- ¡NUEVAS FUNCIONES PARA EDITAR LA LISTA! ---
+// --- FUNCIONES PARA EDITAR LA LISTA (sin cambios) ---
 function removeAddress(index) {
-    extractedAddresses.value.splice(index, 1);
+    const addressToRemove = optimizedDisplayList.value[index];
+    const originalIndex = extractedAddresses.value.findIndex(addr => addr === addressToRemove);
+    if (originalIndex > -1) {
+        extractedAddresses.value.splice(originalIndex, 1);
+    }
 }
-
 function addAddress() {
-    extractedAddresses.value.push(''); // Añade un campo vacío al final
+    extractedAddresses.value.push('');
 }
 
 
-// --- FUNCIONES (sin cambios) ---
+// --- FUNCIONES DE PROCESAMIENTO ---
 function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
@@ -77,26 +80,37 @@ function preprocessImage(file) {
     }; img.src = e.target.result; }; reader.readAsDataURL(file);
   });
 }
+
 function parseAddresses(rawText) {
-  const finalAddresses = []; const lines = rawText.split('\n'); const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
+  const finalAddresses = [];
+  const lines = rawText.split('\n');
+  const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
   for (let i = 0; i < lines.length; i++) {
     let currentLine = lines[i];
     const addressPattern = /(\d{3,5}\s[A-Z].*)/; 
     const match = currentLine.match(addressPattern);
     if (match) {
-      let fullAddress = match[1].trim();
+      let street = match[1].trim();
+      let city = '';
       if (i + 1 < lines.length) {
-        const nextLine = lines[i+1].trim();
-        const isJunk = stopWords.some(word => nextLine.includes(word));
-        if (nextLine.length > 3 && !isJunk) {
-          fullAddress += ` ${nextLine}`;
+        let nextLine = lines[i+1].trim();
+        for (const word of stopWords) {
+            if (nextLine.includes(word)) {
+                nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim();
+            }
+        }
+        if (nextLine.length > 3) {
+          city = nextLine;
         }
       }
-      finalAddresses.push(fullAddress);
+      if (street && city) {
+        finalAddresses.push(`${street} ${city}`);
+      }
     }
   }
   return finalAddresses;
 }
+
 async function handleFileChange(event) {
   const files = event.target.files; if (!files.length) return;
   isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null; let allParsedAddresses = [];
@@ -110,19 +124,28 @@ async function handleFileChange(event) {
   extractedAddresses.value = uniqueAddresses;
   isProcessing.value = false;
 }
-async function sendToBackend() {
-  // Filtramos la lista ANTES de enviarla
-  const validExtractedAddresses = extractedAddresses.value.filter(addr => addr && addr.trim() !== '');
 
-  if (validExtractedAddresses.length === 0) {
-      alert('No hay direcciones válidas para optimizar.');
-      return;
-  }
+// --- ¡NUEVA FUNCIÓN DE LIMPIEZA! ---
+function sanitizeAddress(address) {
+    if (!address) return '';
+    // Elimina cualquier carácter que no sea letra, número, espacio o #.
+    // También reemplaza múltiples espacios con uno solo.
+    return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+async function sendToBackend() {
+  // ¡AQUÍ APLICAMOS LA LIMPIEZA ANTES DE ENVIAR!
+  const sanitizedAddresses = extractedAddresses.value.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
+
+  if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
   
-  const finalDestination = selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value;
+  const finalDestination = selectedDestination.value === 'custom' 
+    ? sanitizeAddress(customDestination.value) 
+    : sanitizeAddress(selectedDestination.value);
+    
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
   
-  const fullRoute = [selectedWarehouse.value, ...validExtractedAddresses, finalDestination];
+  const fullRoute = [sanitizeAddress(selectedWarehouse.value), ...sanitizedAddresses, finalDestination];
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
   
   backendResponse.value = { status: 'loading' }; 
@@ -218,38 +241,6 @@ async function sendToBackend() {
 </template>
 
 <style scoped>
-    /* ... (Estilos anteriores) ... */
-    /* ¡NUEVOS ESTILOS PARA LA LISTA EDITABLE! */
-    .editable-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    .address-input {
-        flex-grow: 1;
-        padding: 8px;
-        font-size: 1em;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-    }
-    .button-delete, .button-add {
-        padding: 8px 12px;
-        font-size: 1em;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        background-color: #f8d7da;
-        color: #721c24;
-    }
-    .button-add {
-        background-color: #d4edda;
-        color: #155724;
-        display: block;
-        width: 100%;
-        margin-bottom: 20px;
-    }
-
-    /* Estilos base (sin cambios) */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
@@ -262,7 +253,11 @@ async function sendToBackend() {
     .address-list h2 { margin-top: 0; color: #388e3c; }
     ol { padding-left: 25px; }
     li { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: #333; }
-    .button-map { display: block; width: 100%; padding: 15px; margin-top: 20px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
+    .editable-item { display: flex; align-items: center; gap: 10px; }
+    .address-input { flex-grow: 1; padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; }
+    .button-delete, .button-add { padding: 8px 12px; font-size: 1em; border: none; border-radius: 4px; cursor: pointer; background-color: #f8d7da; color: #721c24; }
+    .button-add { background-color: #d4edda; color: #155724; display: block; width: 100%; margin-bottom: 20px; }
+    .button-map { display: block; width: 100%; padding: 15px; margin-top: 20px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; transition: background-color: 0.3s; }
     .button-map:hover { background-color: #1565c0; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
     .results-container { margin-top: 20px; padding: 15px; background-color: #f7f9fc; border: 1px solid #e1e8ed; border-radius: 8px; color: #212529; }
