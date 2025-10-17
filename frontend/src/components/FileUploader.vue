@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES Y DATOS (sin cambios) ---
+// --- VARIABLES DE ESTADO Y DATOS (sin cambios) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,7 +23,7 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDAD COMPUTADA (sin cambios) ---
+// --- PROPIEDADES COMPUTADAS ---
 const optimizedDisplayList = computed(() => {
   if (!backendResponse.value || !backendResponse.value.optimizedOrder) {
     return extractedAddresses.value;
@@ -31,7 +31,41 @@ const optimizedDisplayList = computed(() => {
   return backendResponse.value.optimizedOrder.map(index => extractedAddresses.value[index]);
 });
 
-// --- FUNCIONES DE PROCESAMIENTO (sin cambios) ---
+// ¡NUEVA LÓGICA PARA EL CÁLCULO DE TIEMPO AJUSTADO!
+const adjustedWorkTime = computed(() => {
+    if (!backendResponse.value || !backendResponse.value.workDuration) {
+        return null;
+    }
+
+    let totalStopTime = 0;
+    let apartmentCount = 0;
+    const stopCount = optimizedDisplayList.value.length;
+
+    optimizedDisplayList.value.forEach(address => {
+        const upperCaseAddress = address.toUpperCase();
+        // 1. Añadimos 1.5 minutos base por cada parada.
+        totalStopTime += 1.5;
+
+        // 2. Si es un apartamento, añadimos 1.5 minutos extra.
+        if (upperCaseAddress.includes('APT') || upperCaseAddress.includes('UNIT') || upperCaseAddress.includes('#')) {
+            apartmentCount++;
+            totalStopTime += 1.5;
+        }
+    });
+
+    const totalEstimatedDuration = backendResponse.value.workDuration + totalStopTime;
+
+    return {
+        driveDuration: backendResponse.value.workDuration,
+        stopDuration: totalStopTime,
+        totalDuration: Math.round(totalEstimatedDuration),
+        stopCount: stopCount,
+        apartmentCount: apartmentCount
+    };
+});
+
+
+// --- FUNCIONES (sin cambios) ---
 function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
@@ -69,23 +103,19 @@ async function handleFileChange(event) {
     const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
     const addressesFromFile = parseAddresses(text); allParsedAddresses.push(...addressesFromFile);
   }
-  const uniqueAddresses = [...new Set(allParsedAddresses)]; extractedAddresses.value = uniqueAddresses;
+  const uniqueAddresses = [...new Set(allParsedAddresses)];
+  extractedAddresses.value = uniqueAddresses;
   isProcessing.value = false;
 }
-
-// --- FUNCIÓN sendToBackend (LA PARTE CORREGIDA) ---
 async function sendToBackend() {
   if (extractedAddresses.value.length === 0) return;
   const finalDestination = selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value;
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
   const fullRoute = [selectedWarehouse.value, ...extractedAddresses.value, finalDestination];
-  
-  // ¡AQUÍ ESTÁ LA MAGIA! Leemos la URL del backend desde las variables de entorno.
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-  
   backendResponse.value = { status: 'loading' }; 
   try {
-    const response = await fetch(`${backendUrl}/api/optimize-route`, { // Usamos la URL correcta
+    const response = await fetch(`${backendUrl}/api/optimize-route`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ addresses: fullRoute }),
@@ -93,7 +123,7 @@ async function sendToBackend() {
     const result = await response.json();
     backendResponse.value = result;
   } catch (error) {
-    console.error("Fetch error:", error); // Añadimos un log más detallado
+    console.error("Fetch error:", error);
     backendResponse.value = { error: 'Error: No se pudo conectar al servidor.' };
   }
 }
@@ -137,9 +167,19 @@ async function sendToBackend() {
                 <div v-if="backendResponse">
                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Optimizando ruta...</div>
                     <div v-else-if="backendResponse.workDistance" class="results-container">
+                        
                         <div class="result-block">
                             <h4>💼 Millas de Trabajo (Sin Peajes)</h4>
-                            <p>{{ backendResponse.workDistance }} mi / {{ backendResponse.workDuration }} min</p>
+                            <p class="main-metric">{{ backendResponse.workDistance }} mi</p>
+                            
+                            <div v-if="adjustedWorkTime" class="time-breakdown">
+                                <p>Tiempo de Conducción: <strong>{{ adjustedWorkTime.driveDuration }} min</strong></p>
+                                <p class="adjustment-calc">+ Tiempo en Paradas: <strong>{{ adjustedWorkTime.stopDuration }} min</strong>
+                                    <span class="calc-details">({{ adjustedWorkTime.stopCount }} paradas, {{ adjustedWorkTime.apartmentCount }} son aptos)</span>
+                                </p>
+                                <hr class="dotted-hr">
+                                <p class="total-time">Tiempo Estimado Total: <strong>{{ adjustedWorkTime.totalDuration }} min</strong></p>
+                            </div>
                         </div>
                         <hr>
                         <div class="result-block commute">
@@ -163,6 +203,61 @@ async function sendToBackend() {
 </template>
 
 <style scoped>
+    /* ... (Estilos anteriores) ... */
+    /* ¡NUEVOS ESTILOS Y ARREGLOS DE COLOR! */
+    .results-container {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f7f9fc; /* Un color de fondo ligeramente diferente */
+        border: 1px solid #e1e8ed;
+        border-radius: 8px;
+        color: #212529; /* Color de texto oscuro por defecto */
+    }
+    .result-block h4 {
+        margin: 0 0 10px 0;
+        color: #495057; /* Un gris más suave para los títulos */
+    }
+    .result-block p {
+        margin: 5px 0;
+        font-size: 1.1em;
+        color: #212529; /* Asegura que el texto principal sea oscuro */
+    }
+    .main-metric {
+        font-size: 1.4em !important;
+        font-weight: bold;
+    }
+    .time-breakdown {
+        margin-top: 15px;
+        padding-top: 10px;
+        border-top: 1px dashed #ced4da;
+    }
+    .adjustment-calc {
+        font-size: 1em !important;
+    }
+    .calc-details {
+        font-size: 0.85em;
+        color: #6c757d;
+        display: block;
+    }
+    .total-time {
+        font-size: 1.2em !important;
+        font-weight: bold;
+        color: #007bff; /* Un color de acento para el total */
+    }
+    .dotted-hr {
+        border: none;
+        border-top: 2px dotted #adb5bd;
+        margin: 8px 0;
+    }
+    .commute .option p {
+        color: #212529; /* Asegura que este texto también sea oscuro */
+    }
+    .cost {
+        font-size: 1em !important;
+        color: #495057; /* Color de costo arreglado */
+    }
+
+    /* Estilos base (sin cambios) */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
@@ -178,17 +273,12 @@ async function sendToBackend() {
     .button-map { display: block; width: 100%; padding: 15px; margin-top: 20px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
     .button-map:hover { background-color: #1565c0; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
-    .results-container { margin-top: 20px; padding: 15px; background-color: #fff; border: 1px solid #ddd; border-radius: 8px; }
-    .result-block { padding: 10px 0; }
-    .result-block h4 { margin: 0 0 10px 0; color: #333; }
-    .result-block p { margin: 5px 0; font-size: 1.2em; }
     .commute .option { padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 5px solid #eee; }
     .commute .option:first-of-type { border-left-color: #f44336; }
     .commute .option:last-of-type { border-left-color: #4caf50; }
     .toll-tag { font-weight: bold; padding: 3px 8px; border-radius: 12px; color: white; font-size: 0.8em; }
     .toll-tag.with-toll { background-color: #f44336; }
     .toll-tag.no-toll { background-color: #4caf50; }
-    .cost { font-size: 1em !important; color: #555; }
     hr { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
     .backend-status.error { background-color: #fdecea; color: #c51162; }
 </style>
