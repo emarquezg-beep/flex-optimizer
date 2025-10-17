@@ -5,7 +5,11 @@ const { Client } = require('@googlemaps/google-maps-services-js');
 
 const app = express();
 const PORT = 3000;
-app.use(cors());
+const corsOptions = {
+  origin: 'https://flex-optimizer.vercel.app/', // ¡Pon tu URL aquí!
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
