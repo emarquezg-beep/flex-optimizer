@@ -20,7 +20,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
-// --- Helper Functions (unchanged) ---
+// --- FUNCIONES ASISTENTES (sin cambios) ---
 function getDistance(p1, p2) {
     const R = 6371e3; const φ1 = p1.lat * Math.PI/180; const φ2 = p2.lat * Math.PI/180;
     const Δφ = (p2.lat-p1.lat) * Math.PI/180; const Δλ = (p2.lng-p1.lng) * Math.PI/180;
@@ -47,7 +47,7 @@ app.post('/api/optimize-route', async (req, res) => {
     const finalDestination = addresses[addresses.length - 1];
     let workStops = addresses.slice(1, -1);
     
-    // --- Geocoding with Quality Check ---
+    // --- PASO CERO: GEOCODIFICACIÓN CON LOGGING MEJORADO ---
     console.log(`Geocodificando ${workStops.length + 1} puntos de ruta...`);
     const geocodePromises = [originAddress, ...workStops].map(addr => 
         mapsClient.geocode({ params: { address: addr, key: process.env.GOOGLE_MAPS_API_KEY } })
@@ -58,28 +58,22 @@ app.post('/api/optimize-route', async (req, res) => {
     geocodeResults.forEach((result, i) => {
         const locationData = result.data.results[0];
         const currentAddress = [originAddress, ...workStops][i];
-        
-        // --- THIS IS THE NEW "SPY" LOGIC ---
-        // If the address is bad, we print it before discarding it.
-        if (!locationData || locationData.geometry.location_type === 'APPROXIMATE') {
-            console.warn(`🕵️  DIRECCIÓN SOSPECHOSA DESCARTADA: "${currentAddress}"`);
+        if (locationData && locationData.geometry.location_type !== 'APPROXIMATE') {
+            validLocations.push({ address: currentAddress, coords: locationData.geometry.location });
         } else {
-            validLocations.push({
-                address: currentAddress,
-                coords: locationData.geometry.location
-            });
+            // ¡LOGGING EXPLÍCITO DE LA DIRECCIÓN DESCARTADA!
+            console.log(`🕵️‍♂️ DIRECCIÓN DESCARTADA: "${currentAddress}" (Razón: No encontrada o imprecisa)`);
         }
     });
 
     const originLocation = validLocations.shift();
     if (!originLocation) { return res.status(400).json({ message: 'La dirección de origen no es válida.' }); }
     
-    // --- Pre-sorting with valid locations ---
+    // --- PASO UNO: PRE-CLASIFICACIÓN ---
     console.log(`Realizando pre-clasificación con ${validLocations.length} paradas válidas...`);
     const sortedStops = [];
     let currentLocation = originLocation;
     let unvisited = validLocations;
-
     while (unvisited.length > 0) {
         let nearestIndex = -1; let minDistance = Infinity;
         unvisited.forEach((stop, index) => {
@@ -92,7 +86,7 @@ app.post('/api/optimize-route', async (req, res) => {
     }
     workStops = sortedStops;
 
-    // --- Optimization in Chunks ---
+    // --- PASO DOS: OPTIMIZACIÓN POR SEGMENTOS (LÓGICA CORREGIDA) ---
     const MAX_WAYPOINTS = 25;
     let fullOptimizedAddressList = [];
     let totalWorkDistance = 0;
@@ -107,14 +101,24 @@ app.post('/api/optimize-route', async (req, res) => {
             const response = await mapsClient.directions({ params: { origin: lastStopOfPreviousChunk, destination: chunk[chunk.length - 1], waypoints: chunk.slice(0, -1), optimize: true, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } });
             const route = response.data.routes[0];
             if (!route) continue;
+            
+            // ¡LA CORRECCIÓN ESTÁ AQUÍ!
+            // 1. Reordenamos el segmento actual
             const orderedWaypoints = route.waypoint_order.map(i => chunk[i]);
-            fullOptimizedAddressList.push(...[...orderedWaypoints, chunk[chunk.length - 1]]);
-            route.legs.forEach(leg => { totalWorkDistance += leg.distance.value; totalWorkDuration += leg.duration.value; });
+            const orderedChunk = [...orderedWaypoints, chunk[chunk.length - 1]];
+            
+            // 2. Acumulamos los resultados en lugar de sobreescribirlos
+            fullOptimizedAddressList = fullOptimizedAddressList.concat(orderedChunk);
+            route.legs.forEach(leg => { 
+                totalWorkDistance += leg.distance.value; 
+                totalWorkDuration += leg.duration.value; 
+            });
+
             lastStopOfPreviousChunk = chunk[chunk.length - 1];
         }
     }
     
-    // --- Commute Calculation ---
+    // --- CÁLCULO DE COMMUTE ---
     const lastWorkStop = fullOptimizedAddressList.length > 0 ? fullOptimizedAddressList[fullOptimizedAddressList.length - 1] : originAddress;
     const commutePromises = [
         mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, key: process.env.GOOGLE_MAPS_API_KEY } }),
