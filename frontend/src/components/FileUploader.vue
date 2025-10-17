@@ -64,7 +64,6 @@ function addAddress() {
     extractedAddresses.value.push('');
 }
 
-
 // --- FUNCIONES DE PROCESAMIENTO ---
 function preprocessImage(file) {
   return new Promise((resolve) => {
@@ -125,29 +124,21 @@ async function handleFileChange(event) {
   isProcessing.value = false;
 }
 
-// --- ¡NUEVA FUNCIÓN DE LIMPIEZA! ---
+// --- FUNCIÓN DE LIMPIEZA ---
 function sanitizeAddress(address) {
     if (!address) return '';
-    // Elimina cualquier carácter que no sea letra, número, espacio o #.
-    // También reemplaza múltiples espacios con uno solo.
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 async function sendToBackend() {
-  // ¡AQUÍ APLICAMOS LA LIMPIEZA ANTES DE ENVIAR!
   const sanitizedAddresses = extractedAddresses.value.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
-
   if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
-  
   const finalDestination = selectedDestination.value === 'custom' 
     ? sanitizeAddress(customDestination.value) 
     : sanitizeAddress(selectedDestination.value);
-    
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
-  
   const fullRoute = [sanitizeAddress(selectedWarehouse.value), ...sanitizedAddresses, finalDestination];
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-  
   backendResponse.value = { status: 'loading' }; 
   try {
     const response = await fetch(`${backendUrl}/api/optimize-route`, {
