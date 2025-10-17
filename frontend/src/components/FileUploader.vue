@@ -23,15 +23,15 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- ¡NUEVAS PROPIEDADES COMPUTADAS PARA EL INFORME! ---
+// --- PROPIEDADES COMPUTADAS MEJORADAS ---
 const reportData = computed(() => {
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
 
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
     
-    let totalWorkMiles = parseFloat(toFirstStop.distance);
-    let totalWorkDuration = parseFloat(toFirstStop.duration);
-    
+    let totalBlockMiles = 0;
+    let totalBlockDriveDuration = 0;
+
     const processedSegments = segments.map(seg => {
         let stopTime = 0;
         let aptCount = 0;
@@ -42,28 +42,46 @@ const reportData = computed(() => {
                 stopTime += 1.5;
             }
         });
-        totalWorkMiles += parseFloat(seg.distance);
-        totalWorkDuration += parseFloat(seg.duration) + stopTime;
+        totalBlockMiles += parseFloat(seg.distance);
+        totalBlockDriveDuration += parseFloat(seg.duration);
         return { ...seg, stopTime, aptCount };
     });
+
+    const totalWorkMiles = parseFloat(toFirstStop.distance) + totalBlockMiles;
+    const totalWorkDuration = parseFloat(toFirstStop.duration) + totalBlockDriveDuration + segments.reduce((sum, seg) => sum + seg.stopTime, 0);
 
     const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance);
     const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration);
 
     // Cálculo de ruta inversa
-    const totalBlockMiles = segments.reduce((sum, seg) => sum + parseFloat(seg.distance), 0);
-    const totalInverseMiles = parseFloat(inverseRouteLegs.toLastStop.distance) + totalBlockMiles + parseFloat(inverseRouteLegs.fromFirstStop.distance);
+    const totalInverseWorkMiles = parseFloat(inverseRouteLegs.toLastStop.distance) + totalBlockMiles;
+    const totalInverseWorkDuration = parseFloat(inverseRouteLegs.toLastStop.duration) + totalBlockDriveDuration + segments.reduce((sum, seg) => sum + seg.stopTime, 0);
+    const totalInverseMiles = totalInverseWorkMiles + parseFloat(inverseRouteLegs.fromFirstStop.distance);
+    const totalInverseDuration = totalInverseWorkDuration + parseFloat(inverseRouteLegs.fromFirstStop.duration);
 
     return {
-        toFirstStop,
-        segments: processedSegments,
-        toFinalDestination,
-        totalWorkMiles: totalWorkMiles.toFixed(2),
-        totalWorkDuration: Math.round(totalWorkDuration),
-        totalNormalMiles: totalNormalMiles.toFixed(2),
-        totalNormalDuration: Math.round(totalNormalDuration),
-        totalInverseMiles: totalInverseMiles.toFixed(2),
-        savings: (totalNormalMiles - totalInverseMiles).toFixed(2)
+        // Datos para la tabla de comparación principal
+        savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
+        // Informe detallado de la ruta normal
+        normal: {
+            toStart: toFirstStop,
+            segments: processedSegments,
+            toEnd: toFinalDestination,
+            totalWorkMiles: totalWorkMiles.toFixed(2),
+            totalWorkDuration: Math.round(totalWorkDuration),
+            totalMiles: totalNormalMiles.toFixed(2),
+            totalDuration: Math.round(totalNormalDuration),
+        },
+        // Informe detallado de la ruta inversa
+        inverse: {
+            toStart: inverseRouteLegs.toLastStop,
+            segments: processedSegments,
+            toEnd: inverseRouteLegs.fromFirstStop,
+            totalWorkMiles: totalInverseWorkMiles.toFixed(2),
+            totalWorkDuration: Math.round(totalInverseWorkDuration),
+            totalMiles: totalInverseMiles.toFixed(2),
+            totalDuration: Math.round(totalInverseDuration),
+        }
     };
 });
 
@@ -191,13 +209,13 @@ async function sendToBackend() {
                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluando escenarios...</div>
                     <div v-else-if="reportData" class="results-container">
                         <div class="scenario-table">
-                            <h4>📊 Comparación de Escenarios</h4>
+                            <h4>📊 Comparación Final</h4>
                             <table>
                                 <tbody>
-                                    <tr><td>Ruta Normal (1 → Fin)</td><td>{{ reportData.totalNormalMiles }} mi</td><td>-</td></tr>
+                                    <tr><td>Ruta Normal (1 → Fin)</td><td>{{ reportData.normal.totalMiles }} mi</td><td>-</td></tr>
                                     <tr class="highlight">
                                         <td><strong>Ruta Inversa (Fin → 1)</strong></td>
-                                        <td><strong>{{ reportData.totalInverseMiles }} mi</strong></td>
+                                        <td><strong>{{ reportData.inverse.totalMiles }} mi</strong></td>
                                         <td><strong class="savings">{{ reportData.savings > 0 ? `-${reportData.savings}` : `+${Math.abs(reportData.savings)}` }} mi</strong></td>
                                     </tr>
                                 </tbody>
@@ -205,16 +223,29 @@ async function sendToBackend() {
                         </div>
                         <hr>
                         <div class="result-block">
-                            <h4> маршрут (Desglose Ruta Normal)</h4>
-                            <p>Hacia 1ra Parada: <strong>{{ reportData.toFirstStop.duration }} min - {{ reportData.toFirstStop.distance }} mi</strong></p>
-                            <div v-for="(segment, index) in reportData.segments" :key="index" class="segment-breakdown">
+                            <h4>➡️ Desglose Ruta Normal</h4>
+                            <p>Hacia 1ra Parada: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
+                            <div v-for="(segment, index) in reportData.normal.segments" :key="index" class="segment-breakdown">
                                 <p>Segmento {{ index + 1 }}: <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stops.length }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
                             </div>
                             <hr class="dotted-hr">
-                            <p class="total-time"><strong>Total Trabajo: {{ reportData.totalWorkDuration }} min - {{ reportData.totalWorkMiles }} mi</strong></p>
-                            <p>Hacia Destino Final: <strong>{{ reportData.toFinalDestination.duration }} min - {{ reportData.toFinalDestination.distance }} mi</strong></p>
+                            <p class="total-time"><strong>Total Trabajo: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
+                            <p>Hacia Destino Final: <strong>{{ reportData.normal.toEnd.duration }} min - {{ reportData.normal.toEnd.distance }} mi</strong></p>
                             <hr class="dotted-hr">
-                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.totalNormalDuration }} min - {{ reportData.totalNormalMiles }} mi</strong></p>
+                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
+                        </div>
+                        <hr>
+                        <div class="result-block inverse-block">
+                            <h4>⬅️ Desglose Ruta Inversa</h4>
+                            <p>Hacia Última Parada: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
+                            <div v-for="(segment, index) in reportData.inverse.segments" :key="index" class="segment-breakdown">
+                                <p>Segmento {{ index + 1 }} (inverso): <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stops.length }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
+                            </div>
+                            <hr class="dotted-hr">
+                            <p class="total-time"><strong>Total Trabajo: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
+                            <p>Desde 1ra Parada a Destino: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
+                            <hr class="dotted-hr">
+                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.inverse.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
                         </div>
                     </div>
                     <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
@@ -247,24 +278,21 @@ async function sendToBackend() {
     .button-map { display: block; width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
     .results-container { margin-top: 20px; padding: 15px; background-color: #f7f9fc; border: 1px solid #e1e8ed; border-radius: 8px; color: #212529; }
-    .result-block { padding: 10px 0; }
-    .result-block h4 { margin: 0 0 10px 0; color: #495057; }
+    .result-block { padding: 20px 0 10px 0; }
+    .result-block.inverse-block { background-color: #fff9e6; margin: 0 -15px -15px -15px; padding: 20px 15px 15px 15px; border-radius: 0 0 8px 8px;}
+    .result-block h4 { margin: 0 0 15px 0; color: #495057; }
     .result-block p { margin: 5px 0; font-size: 1.1em; color: #212529; }
-    .segment-breakdown { padding-left: 15px; border-left: 2px solid #dee2e6; margin-left: 5px; }
-    .main-metric { font-size: 1.4em !important; font-weight: bold; }
-    .time-breakdown { margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ced4da; }
-    .adjustment-calc { font-size: 1em !important; }
+    .segment-breakdown { padding-left: 15px; border-left: 2px solid #dee2e6; margin-left: 5px; margin-top: 10px; }
     .calc-details { font-size: 0.85em; color: #6c757d; display: inline; }
     .total-time { font-size: 1.1em !important; border-top: 1px solid #ced4da; padding-top: 8px; margin-top: 8px; }
     .grand-total { font-size: 1.25em !important; color: #007bff; }
-    .dotted-hr { border: none; border-top: 2px dotted #adb5bd; margin: 8px 0; }
+    .dotted-hr { border: none; border-top: 2px dotted #adb5bd; margin: 15px 0; }
     hr { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
     .backend-status.error { background-color: #fdecea; color: #c51162; }
     .scenario-table { padding: 10px 0; }
     .scenario-table h4 { margin: 0 0 10px 0; color: #495057; }
     .scenario-table table { width: 100%; border-collapse: collapse; }
     .scenario-table th, .scenario-table td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
-    .scenario-table th { font-size: 0.9em; color: #6c757d; }
     .scenario-table .highlight { background-color: #e7f5ff; }
     .savings { color: #28a745; }
 </style>
