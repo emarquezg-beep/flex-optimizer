@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES Y DATOS ---
+// --- VARIABLES Y DATOS (sin cambios) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,60 +23,54 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDADES COMPUTADAS ---
-const adjustedWorkTime = computed(() => {
-    if (!backendResponse.value || !backendResponse.value.scenarioData) { return null; }
-    let totalStopTime = 0; let apartmentCount = 0;
-    const stops = backendResponse.value.originalStops;
-    const stopCount = stops.length;
-    stops.forEach(address => {
-        const upperCaseAddress = address.toUpperCase();
-        totalStopTime += 1.5;
-        if (upperCaseAddress.includes('APT') || upperCaseAddress.includes('UNIT') || upperCaseAddress.includes('#')) {
-            apartmentCount++;
-            totalStopTime += 1.5;
-        }
+// --- ¡NUEVAS PROPIEDADES COMPUTADAS PARA EL INFORME! ---
+const reportData = computed(() => {
+    if (!backendResponse.value || !backendResponse.value.segments) { return null; }
+
+    const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
+    
+    let totalWorkMiles = parseFloat(toFirstStop.distance);
+    let totalWorkDuration = parseFloat(toFirstStop.duration);
+    
+    const processedSegments = segments.map(seg => {
+        let stopTime = 0;
+        let aptCount = 0;
+        seg.stops.forEach(addr => {
+            stopTime += 1.5;
+            if (addr.toUpperCase().match(/APT|UNIT|#/)) {
+                aptCount++;
+                stopTime += 1.5;
+            }
+        });
+        totalWorkMiles += parseFloat(seg.distance);
+        totalWorkDuration += parseFloat(seg.duration) + stopTime;
+        return { ...seg, stopTime, aptCount };
     });
-    const totalEstimatedDuration = backendResponse.value.scenarioData.tramoX.duration + totalStopTime;
+
+    const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance);
+    const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration);
+
+    // Cálculo de ruta inversa
+    const totalBlockMiles = segments.reduce((sum, seg) => sum + parseFloat(seg.distance), 0);
+    const totalInverseMiles = parseFloat(inverseRouteLegs.toLastStop.distance) + totalBlockMiles + parseFloat(inverseRouteLegs.fromFirstStop.distance);
+
     return {
-        driveDuration: backendResponse.value.scenarioData.tramoX.duration,
-        stopDuration: totalStopTime,
-        totalDuration: Math.round(totalEstimatedDuration),
-        stopCount: stopCount,
-        apartmentCount: apartmentCount
-    };
-});
-const scenarioResults = computed(() => {
-    if (!backendResponse.value || !backendResponse.value.scenarioData) { return null; }
-    const { tramoA, tramoB, tramoC, tramoD, tramoX } = backendResponse.value.scenarioData;
-    const A = parseFloat(tramoA.distance); const B = parseFloat(tramoB.distance);
-    const C = parseFloat(tramoC.distance); const D = parseFloat(tramoD.distance);
-    const X = parseFloat(tramoX.distance);
-    const normalTotal = A + X + B; const inverseTotal = C + X + D;
-    const savings = normalTotal - inverseTotal;
-    return {
-        normal: normalTotal.toFixed(2),
-        inverse: inverseTotal.toFixed(2),
-        savings: savings.toFixed(2),
-        blockMiles: X.toFixed(2),
+        toFirstStop,
+        segments: processedSegments,
+        toFinalDestination,
+        totalWorkMiles: totalWorkMiles.toFixed(2),
+        totalWorkDuration: Math.round(totalWorkDuration),
+        totalNormalMiles: totalNormalMiles.toFixed(2),
+        totalNormalDuration: Math.round(totalNormalDuration),
+        totalInverseMiles: totalInverseMiles.toFixed(2),
+        savings: (totalNormalMiles - totalInverseMiles).toFixed(2)
     };
 });
 
-// --- FUNCIONES PARA EDITAR LA LISTA ---
-function removeAddress(index) {
-    extractedAddresses.value.splice(index, 1);
-}
-// ¡NUEVA FUNCIÓN MEJORADA!
-function addAddress() {
-    // Añade un objeto con campos vacíos para número y dirección.
-    extractedAddresses.value.push({ number: null, address: '' });
-}
-// ¡NUEVA FUNCIÓN PARA REORDENAR!
-function reorderList() {
-    extractedAddresses.value.sort((a, b) => a.number - b.number);
-}
-
-// --- FUNCIONES DE PROCESAMIENTO ---
+// --- FUNCIONES (sin cambios) ---
+function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
+function addAddress() { extractedAddresses.value.push({ number: null, address: '' }); }
+function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
 function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
@@ -187,49 +181,40 @@ async function sendToBackend() {
                         <button @click="removeAddress(index)" class="button-delete">🗑️</button>
                     </li>
                 </ol>
-                
                 <div class="action-buttons">
                     <button @click="addAddress" class="button-add">➕ Añadir Parada</button>
                     <button @click="reorderList" class="button-reorder">🔄 Reordenar Lista</button>
                 </div>
-                
                 <button @click="sendToBackend" class="button-map">Evaluar Escenarios</button>
 
                 <div v-if="backendResponse">
                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluando escenarios...</div>
-                    <div v-else-if="scenarioResults" class="results-container">
+                    <div v-else-if="reportData" class="results-container">
                         <div class="scenario-table">
                             <h4>📊 Comparación de Escenarios</h4>
                             <table>
-                                <thead>
-                                    <tr><th>Escenario</th><th>Millas Totales</th><th>Ahorro</th></tr>
-                                </thead>
                                 <tbody>
-                                    <tr>
-                                        <td>Ruta Normal (1 → Fin)</td>
-                                        <td>{{ scenarioResults.normal }} mi</td>
-                                        <td>-</td>
-                                    </tr>
+                                    <tr><td>Ruta Normal (1 → Fin)</td><td>{{ reportData.totalNormalMiles }} mi</td><td>-</td></tr>
                                     <tr class="highlight">
                                         <td><strong>Ruta Inversa (Fin → 1)</strong></td>
-                                        <td><strong>{{ scenarioResults.inverse }} mi</strong></td>
-                                        <td><strong class="savings">{{ scenarioResults.savings > 0 ? `-${scenarioResults.savings}` : `+${Math.abs(scenarioResults.savings)}` }} mi</strong></td>
+                                        <td><strong>{{ reportData.totalInverseMiles }} mi</strong></td>
+                                        <td><strong class="savings">{{ reportData.savings > 0 ? `-${reportData.savings}` : `+${Math.abs(reportData.savings)}` }} mi</strong></td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                         <hr>
                         <div class="result-block">
-                            <h4>💼 Detalles del Bloque</h4>
-                            <p class="main-metric">{{ scenarioResults.blockMiles }} mi (trabajo)</p>
-                            <div v-if="adjustedWorkTime" class="time-breakdown">
-                                <p>Tiempo de Conducción: <strong>{{ adjustedWorkTime.driveDuration }} min</strong></p>
-                                <p class="adjustment-calc">+ Tiempo en Paradas: <strong>{{ adjustedWorkTime.stopDuration }} min</strong>
-                                    <span class="calc-details">({{ adjustedWorkTime.stopCount }} paradas, {{ adjustedWorkTime.apartmentCount }} son aptos)</span>
-                                </p>
-                                <hr class="dotted-hr">
-                                <p class="total-time">Tiempo Estimado Total: <strong>{{ adjustedWorkTime.totalDuration }} min</strong></p>
+                            <h4> маршрут (Desglose Ruta Normal)</h4>
+                            <p>Hacia 1ra Parada: <strong>{{ reportData.toFirstStop.duration }} min - {{ reportData.toFirstStop.distance }} mi</strong></p>
+                            <div v-for="(segment, index) in reportData.segments" :key="index" class="segment-breakdown">
+                                <p>Segmento {{ index + 1 }}: <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stops.length }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
                             </div>
+                            <hr class="dotted-hr">
+                            <p class="total-time"><strong>Total Trabajo: {{ reportData.totalWorkDuration }} min - {{ reportData.totalWorkMiles }} mi</strong></p>
+                            <p>Hacia Destino Final: <strong>{{ reportData.toFinalDestination.duration }} min - {{ reportData.toFinalDestination.distance }} mi</strong></p>
+                            <hr class="dotted-hr">
+                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.totalNormalDuration }} min - {{ reportData.totalNormalMiles }} mi</strong></p>
                         </div>
                     </div>
                     <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
@@ -250,41 +235,31 @@ async function sendToBackend() {
     .custom-input-container input { width: 100%; padding: 10px; font-size: 1em; border: 1px solid #ccc; border-radius: 5px; }
     .address-list { margin-top: 20px; padding: 20px; border: 1px solid #c8e6c9; border-radius: 8px; text-align: left; background-color: #f1f8e9; }
     .address-list h2 { margin-top: 0; color: #388e3c; }
-    
     .ordered-list { list-style-type: none; padding-left: 0; }
     li.editable-item { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: #333; }
     .editable-item { display: flex; align-items: center; gap: 10px; }
-    .stop-number-input {
-        width: 60px;
-        padding: 8px;
-        font-size: 1em;
-        text-align: center;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        font-weight: bold;
-    }
+    .stop-number-input { width: 60px; padding: 8px; font-size: 1em; text-align: center; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; }
     .address-input { flex-grow: 1; padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; }
     .button-delete { padding: 8px 12px; font-size: 1em; border: none; border-radius: 4px; cursor: pointer; background-color: #f8d7da; color: #721c24; }
-    
     .action-buttons { display: flex; gap: 10px; margin-bottom: 20px; }
     .button-add { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; padding: 10px; flex-grow: 1; cursor: pointer; border-radius: 5px; }
-    .button-reorder { background-color: #d1e7fd; color: #0c5460; border: 1px solid #bee5eb; padding: 10px; flex-grow: 1; cursor: pointer; border-radius: 5px; font-weight: bold;}
-    
+    .button-reorder { background-color: #d1e7fd; color: #0c5460; border: 1px solid #bee5eb; padding: 10px; flex-grow: 1; cursor: pointer; font-weight: bold; }
     .button-map { display: block; width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
     .results-container { margin-top: 20px; padding: 15px; background-color: #f7f9fc; border: 1px solid #e1e8ed; border-radius: 8px; color: #212529; }
     .result-block { padding: 10px 0; }
     .result-block h4 { margin: 0 0 10px 0; color: #495057; }
     .result-block p { margin: 5px 0; font-size: 1.1em; color: #212529; }
+    .segment-breakdown { padding-left: 15px; border-left: 2px solid #dee2e6; margin-left: 5px; }
     .main-metric { font-size: 1.4em !important; font-weight: bold; }
     .time-breakdown { margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ced4da; }
     .adjustment-calc { font-size: 1em !important; }
-    .calc-details { font-size: 0.85em; color: #6c757d; display: block; }
-    .total-time { font-size: 1.2em !important; font-weight: bold; color: #007bff; }
+    .calc-details { font-size: 0.85em; color: #6c757d; display: inline; }
+    .total-time { font-size: 1.1em !important; border-top: 1px solid #ced4da; padding-top: 8px; margin-top: 8px; }
+    .grand-total { font-size: 1.25em !important; color: #007bff; }
     .dotted-hr { border: none; border-top: 2px dotted #adb5bd; margin: 8px 0; }
     hr { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
     .backend-status.error { background-color: #fdecea; color: #c51162; }
-    
     .scenario-table { padding: 10px 0; }
     .scenario-table h4 { margin: 0 0 10px 0; color: #495057; }
     .scenario-table table { width: 100%; border-collapse: collapse; }

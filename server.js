@@ -6,7 +6,6 @@ const { Client } = require('@googlemaps/google-maps-services-js');
 const app = express();
 const PORT = 3000;
 
-// Configuración de CORS que ya funciona perfectamente
 const allowedOrigins = [ 'http://localhost:5173', 'https://flex-optimizer.vercel.app' ];
 const corsOptions = {
   origin: function (origin, callback) {
@@ -21,68 +20,105 @@ app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
-// Función asistente para extraer las métricas de forma segura
-function extractMetrics(response) {
-    const leg = response?.data?.routes[0]?.legs[0];
-    if (!leg) {
-        return { distance: 0, duration: 0 }; // Devuelve 0 si no se encuentra una ruta
+// --- FUNCIÓN ASISTENTE PARA CALCULAR UN TRAMO ---
+async function calculateLeg(origin, destination, waypoints = []) {
+    try {
+        const response = await mapsClient.directions({
+            params: {
+                origin,
+                destination,
+                waypoints,
+                avoid: ['tolls'],
+                key: process.env.GOOGLE_MAPS_API_KEY,
+            },
+        });
+        const leg = response.data.routes[0]?.legs[0];
+        if (!leg) return { distance: 0, duration: 0 };
+        
+        // Si hay waypoints, sumamos todos los tramos del segmento
+        let totalDistance = 0;
+        let totalDuration = 0;
+        response.data.routes[0].legs.forEach(l => {
+            totalDistance += l.distance.value;
+            totalDuration += l.duration.value;
+        });
+
+        return {
+            distance: (totalDistance / 1609.34).toFixed(2),
+            duration: Math.round(totalDuration / 60)
+        };
+    } catch (error) {
+        console.error(`Error calculando tramo de ${origin} a ${destination}:`, error.response?.data?.error_message || error.message);
+        return { distance: 0, duration: 0, error: true };
     }
-    return {
-        distance: (leg.distance.value / 1609.34).toFixed(2), // Convertido a millas
-        duration: Math.round(leg.duration.value / 60)       // Convertido a minutos
-    };
 }
 
 app.post('/api/optimize-route', async (req, res) => {
   let { addresses } = req.body;
   addresses = addresses.filter(addr => addr && addr.trim() !== '');
 
-  // Ahora necesitamos al menos 3 puntos: Origen, 1 parada, Destino final.
   if (!addresses || addresses.length < 3) {
     return res.status(400).json({ message: 'Se necesitan al menos Origen, una Parada y un Destino.' });
   }
 
   try {
-    // --- 1. DEFINIMOS LOS PUNTOS CLAVE PARA LOS CÁLCULOS ---
-    const origin = addresses[0];                                  // Warehouse
-    const firstStop = addresses[1];                               // Primera parada de la lista
-    const lastStop = addresses[addresses.length - 2];             // Última parada de la lista
-    const finalDestination = addresses[addresses.length - 1];   // Casa u otro destino
+    const origin = addresses[0];
+    const firstStop = addresses[1];
+    const lastStop = addresses[addresses.length - 2];
+    const finalDestination = addresses[addresses.length - 1];
+    const workStops = addresses.slice(1, -1);
 
-    console.log('✅ v1.0: Calculando escenarios...');
+    console.log('✅ v1.2: Calculando informe de ruta por segmentos...');
 
-    // --- 2. PREPARAMOS LAS 5 LLAMADAS A LA API DE GOOGLE ---
-    const promises = [
-        // Tramo A: Warehouse -> Primera Parada
-        mapsClient.directions({ params: { origin, destination: firstStop, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } }),
-        // Tramo B: Última Parada -> Casa
-        mapsClient.directions({ params: { origin: lastStop, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } }),
-        // Tramo C: Warehouse -> Última Parada
-        mapsClient.directions({ params: { origin, destination: lastStop, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } }),
-        // Tramo D: Primera Parada -> Casa
-        mapsClient.directions({ params: { origin: firstStop, destination: finalDestination, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } }),
-        // Tramo X (El Bloque): Primera Parada -> Última Parada (sin optimizar waypoints)
-        mapsClient.directions({ params: { origin: firstStop, destination: lastStop, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } })
-    ];
+    // --- CÁLCULOS DE LOS TRAMOS PRINCIPALES ---
+    const toFirstStopPromise = calculateLeg(origin, firstStop);
+    const toFinalDestinationPromise = calculateLeg(lastStop, finalDestination);
+    const toLastStopForInversePromise = calculateLeg(origin, lastStop);
+    const fromFirstStopToHomePromise = calculateLeg(firstStop, finalDestination);
 
-    // --- 3. EJECUTAMOS TODAS LAS LLAMADAS AL MISMO TIEMPO ---
-    const results = await Promise.all(promises);
+    // --- CÁLCULO DEL BLOQUE POR SEGMENTOS DE 9 ---
+    const STOPS_PER_SEGMENT = 9;
+    const workStopChunks = [];
+    for (let i = 0; i < workStops.length; i += STOPS_PER_SEGMENT) {
+        workStopChunks.push(workStops.slice(i, i + STOPS_PER_SEGMENT));
+    }
 
-    // --- 4. EXTRAEMOS LOS RESULTADOS Y LOS ENVIAMOS AL FRONTEND ---
-    const [tramoA, tramoB, tramoC, tramoD, tramoX] = results.map(extractMetrics);
+    const segmentPromises = workStopChunks.map(chunk => 
+        calculateLeg(chunk[0], chunk[chunk.length - 1], chunk.slice(1, -1))
+    );
+    
+    // Ejecutamos todo en paralelo
+    const [toFirstStop, toFinalDestination, toLastStopForInverse, fromFirstStopToHome, ...segmentResults] = await Promise.all([
+        toFirstStopPromise,
+        toFinalDestinationPromise,
+        toLastStopForInversePromise,
+        fromFirstStopToHomePromise,
+        ...segmentPromises
+    ]);
 
-    console.log('🎉 v1.0: Escenarios calculados con éxito!');
+    const segmentsWithStops = segmentResults.map((result, index) => ({
+        ...result,
+        stops: workStopChunks[index]
+    }));
+
+    console.log('🎉 v1.2: Informe calculado con éxito!');
     res.json({
-      scenarioData: { tramoA, tramoB, tramoC, tramoD, tramoX },
-      originalStops: addresses.slice(1, -1) // Enviamos las paradas originales para el cálculo de tiempo
+        toFirstStop,
+        segments: segmentsWithStops,
+        toFinalDestination,
+        // Datos para el cálculo de la ruta inversa
+        inverseRouteLegs: {
+            toLastStop: toLastStopForInverse,
+            fromFirstStop: fromFirstStopToHome
+        }
     });
 
   } catch (error) {
-    console.error("❌ Error en el cálculo de escenarios:", error.response?.data?.error_message || error.message);
+    console.error("❌ Error en el cálculo de escenarios:", error.message);
     res.status(500).json({ message: 'Error al calcular los escenarios.' });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend v1.0 corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor backend v1.2 corriendo en http://localhost:${PORT}`);
 });
