@@ -6,20 +6,18 @@ const { Client } = require('@googlemaps/google-maps-services-js');
 const app = express();
 const PORT = 3000;
 
-// --- CONFIGURACIÓN DE CORS A PRUEBA DE BALAS ---
+// --- CONFIGURACIÓN DE CORS DEFINITIVA ---
 // 1. Lista de los "invitados" que permitimos entrar.
 const allowedOrigins = [
   'http://localhost:5173', // Para tus pruebas locales
-  'https://flex-optimizer-git-main-emarquezg-beeps-projects.vercel.app' // ¡ASEGÚRATE DE QUE ESTA ES TU URL EXACTA DE VERCEL!
+  'https://flex-optimizer.vercel.app' // ¡LA URL CORRECTA DE TU APP EN VIVO!
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Si el origen de la petición está en nuestra lista, le damos paso.
     if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
       callback(null, true);
     } else {
-      // Si no, lo bloqueamos.
       callback(new Error('No permitido por CORS'));
     }
   }
