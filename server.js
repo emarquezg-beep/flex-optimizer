@@ -6,10 +6,12 @@ const { Client } = require('@googlemaps/google-maps-services-js');
 const app = express();
 const PORT = 3000;
 
+// --- CONFIGURACIÓN DE CORS DEFINITIVA ---
 const allowedOrigins = [
-  'http://localhost:5173',
-  'https://flex-optimizer.vercel.app'
+  'http://localhost:5173', // Para tus pruebas locales
+  'https://flex-optimizer.vercel.app' // ¡LA URL CORRECTA DE TU APP EN VIVO!
 ];
+
 const corsOptions = {
   origin: function (origin, callback) {
     if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
@@ -20,6 +22,8 @@ const corsOptions = {
   }
 };
 app.use(cors(corsOptions));
+// --- FIN DE LA CONFIGURACIÓN ---
+
 app.use(express.json());
 const mapsClient = new Client({});
 
@@ -33,11 +37,11 @@ app.post('/api/optimize-route', async (req, res) => {
     return res.status(400).json({ message: 'Se necesitan al menos un origen y un destino.' });
   }
 
-  console.log(`✅ Recibidas ${addresses.length} paradas. Optimizando...`);
+  console.log(`✅ Recibidas ${addresses.length} paradas. Optimizando ruta de trabajo (SIN PEAJES)...`);
   
   try {
-    const waypoints = addresses.slice(1, -2); // Las 13 paradas intermedias
-    const workDestination = addresses[addresses.length - 2]; // La parada 14
+    const waypoints = addresses.slice(1, -2);
+    const workDestination = addresses[addresses.length - 2];
 
     const workRouteResponse = await mapsClient.directions({
       params: {
@@ -53,12 +57,8 @@ app.post('/api/optimize-route', async (req, res) => {
     const workRoute = workRouteResponse.data.routes[0];
     if (!workRoute) { return res.status(500).json({ message: 'No se pudo encontrar una ruta de trabajo.' }); }
 
-    // --- ¡AQUÍ ESTÁ LA LÓGICA CORREGIDA! ---
-    // 1. Reordenamos los puntos intermedios según la respuesta de Google.
     const orderedWaypoints = workRoute.waypoint_order.map(index => waypoints[index]);
-    // 2. Creamos la lista final añadiendo el destino fijo al final.
     const fullOptimizedAddressList = [...orderedWaypoints, workDestination];
-    // --- FIN DE LA CORRECCIÓN ---
 
     let workDistance = 0; let workDuration = 0;
     workRoute.legs.forEach(leg => {
@@ -79,7 +79,6 @@ app.post('/api/optimize-route', async (req, res) => {
     res.json({
         workDistance: (workDistance / 1609.34).toFixed(2),
         workDuration: Math.round(workDuration / 60),
-        // Enviamos la lista completa y corregida al frontend.
         optimizedAddressList: fullOptimizedAddressList, 
         commute: {
             withTolls: { distance: (withTollsLeg.distance.value / 1609.34).toFixed(2), duration: Math.round(withTollsLeg.duration.value / 60), cost: tollCost },
