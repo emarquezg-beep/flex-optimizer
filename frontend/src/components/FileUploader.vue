@@ -2,8 +2,9 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- STATE & DATA (Unchanged) ---
-const extractedAddresses = ref([]);
+// --- VARIABLES Y DATOS ---
+// 'extractedAddresses' ahora guardará objetos { number, address }
+const extractedAddresses = ref([]); 
 const isProcessing = ref(false);
 const backendResponse = ref(null);
 const warehouses = [
@@ -23,42 +24,12 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- NEW COMPUTED PROPERTIES FOR v1.0 ---
-const scenarioResults = computed(() => {
-    if (!backendResponse.value || !backendResponse.value.scenarioData) {
-        return null;
-    }
-    const { tramoA, tramoB, tramoC, tramoD, tramoX } = backendResponse.value.scenarioData;
-    
-    // Convert all values to numbers for calculation
-    const A = parseFloat(tramoA.distance);
-    const B = parseFloat(tramoB.distance);
-    const C = parseFloat(tramoC.distance);
-    const D = parseFloat(tramoD.distance);
-    const X = parseFloat(tramoX.distance);
-
-    const normalTotal = A + X + B;
-    const inverseTotal = C + X + D;
-    const savings = normalTotal - inverseTotal;
-
-    return {
-        normal: normalTotal.toFixed(2),
-        inverse: inverseTotal.toFixed(2),
-        savings: savings.toFixed(2),
-        blockMiles: X.toFixed(2),
-        blockDuration: tramoX.duration,
-    };
-});
-
+// --- PROPIEDADES COMPUTADAS ---
 const adjustedWorkTime = computed(() => {
-    if (!scenarioResults.value) { return null; }
-
-    let totalStopTime = 0;
-    let apartmentCount = 0;
-    // Use the original stops list from the backend response
+    if (!backendResponse.value || !backendResponse.value.scenarioData) { return null; }
+    let totalStopTime = 0; let apartmentCount = 0;
     const stops = backendResponse.value.originalStops;
     const stopCount = stops.length;
-
     stops.forEach(address => {
         const upperCaseAddress = address.toUpperCase();
         totalStopTime += 1.5;
@@ -67,26 +38,40 @@ const adjustedWorkTime = computed(() => {
             totalStopTime += 1.5;
         }
     });
-
-    const totalEstimatedDuration = scenarioResults.value.blockDuration + totalStopTime;
-
+    const totalEstimatedDuration = backendResponse.value.scenarioData.tramoX.duration + totalStopTime;
     return {
-        driveDuration: scenarioResults.value.blockDuration,
+        driveDuration: backendResponse.value.scenarioData.tramoX.duration,
         stopDuration: totalStopTime,
         totalDuration: Math.round(totalEstimatedDuration),
         stopCount: stopCount,
         apartmentCount: apartmentCount
     };
 });
+const scenarioResults = computed(() => {
+    if (!backendResponse.value || !backendResponse.value.scenarioData) { return null; }
+    const { tramoA, tramoB, tramoC, tramoD, tramoX } = backendResponse.value.scenarioData;
+    const A = parseFloat(tramoA.distance); const B = parseFloat(tramoB.distance);
+    const C = parseFloat(tramoC.distance); const D = parseFloat(tramoD.distance);
+    const X = parseFloat(tramoX.distance);
+    const normalTotal = A + X + B; const inverseTotal = C + X + D;
+    const savings = normalTotal - inverseTotal;
+    return {
+        normal: normalTotal.toFixed(2),
+        inverse: inverseTotal.toFixed(2),
+        savings: savings.toFixed(2),
+        blockMiles: X.toFixed(2),
+    };
+});
 
 
-// --- EDITING & PROCESSING FUNCTIONS (Unchanged) ---
+// --- FUNCIONES PARA EDITAR LA LISTA ---
 function removeAddress(index) {
     extractedAddresses.value.splice(index, 1);
 }
-function addAddress() {
-    extractedAddresses.value.push('');
-}
+// La función de añadir una parada se elimina temporalmente para simplificar la lógica de ordenamiento.
+// La edición y eliminación son las funciones clave ahora.
+
+// --- FUNCIONES DE PROCESAMIENTO ---
 function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
@@ -101,45 +86,92 @@ function preprocessImage(file) {
     }; img.src = e.target.result; }; reader.readAsDataURL(file);
   });
 }
+
+// --- PARSER v1.1: EL PARSER QUE ENTIENDE EL ORDEN ---
 function parseAddresses(rawText) {
-  const finalAddresses = []; const lines = rawText.split('\n'); const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
-  for (let i = 0; i < lines.length; i++) {
-    let currentLine = lines[i]; const addressPattern = /(\d{3,5}\s[A-Z].*)/; const match = currentLine.match(addressPattern);
-    if (match) {
-      let street = match[1].trim(); let city = '';
-      if (i + 1 < lines.length) {
-        let nextLine = lines[i+1].trim();
-        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
-        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
+  const stops = [];
+  const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
+  let lastKnownCity = 'Orlando';
+
+  // Este patrón busca el número de parada y captura todo el texto hasta la siguiente parada.
+  const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
+  let match;
+
+  while ((match = pattern.exec(rawText)) !== null) {
+    const stopNumber = parseInt(match[1]);
+    const textBlock = match[2];
+    
+    // Ahora buscamos la dirección dentro de este bloque de texto específico.
+    const addressPattern = /(\d{3,5}\s[A-Z].*)/;
+    const addressMatch = textBlock.match(addressPattern);
+    
+    if (addressMatch) {
+      let street = addressMatch[1].trim();
+      let city = '';
+      
+      const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
+      if (lines.length > 1) {
+        let nextLine = lines[1].trim();
+        for (const word of stopWords) {
+          if (nextLine.includes(word)) {
+            nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim();
+          }
+        }
+        if (nextLine.length > 3) {
+          city = nextLine;
+          lastKnownCity = city;
+        }
       }
-      if (!city) { city = lastKnownCity; }
-      finalAddresses.push(`${street} ${city}`);
+
+      if (!city) {
+        city = lastKnownCity;
+      }
+      
+      stops.push({ number: stopNumber, address: `${street} ${city}` });
     }
   }
-  return finalAddresses;
+  return stops;
 }
+
 async function handleFileChange(event) {
   const files = event.target.files; if (!files.length) return;
-  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null; let allParsedAddresses = [];
+  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null; 
+  let allParsedStops = [];
+
   for (const file of files) {
     const processedImage = await preprocessImage(file);
     const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-    const addressesFromFile = parseAddresses(text); allParsedAddresses.push(...addressesFromFile);
+    const stopsFromFile = parseAddresses(text);
+    allParsedStops.push(...stopsFromFile);
   }
-  const uniqueAddresses = [...new Set(allParsedAddresses)];
-  extractedAddresses.value = uniqueAddresses; isProcessing.value = false;
+
+  // --- ¡LA MAGIA DEL ORDENAMIENTO! ---
+  // 1. Eliminamos duplicados quedándonos con la primera aparición de cada número de parada.
+  const uniqueStops = Array.from(new Map(allParsedStops.map(stop => [stop.number, stop])).values());
+  // 2. Ordenamos la lista numéricamente por el número de parada.
+  uniqueStops.sort((a, b) => a.number - b.number);
+
+  extractedAddresses.value = uniqueStops;
+  isProcessing.value = false;
 }
+
 function sanitizeAddress(address) {
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
+
 async function sendToBackend() {
-  const sanitizedAddresses = extractedAddresses.value.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
+  // Extraemos solo las direcciones de nuestro array de objetos.
+  const addressesToSend = extractedAddresses.value.map(stop => stop.address);
+  const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
+
   if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
   const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
+  
   const fullRoute = [sanitizeAddress(selectedWarehouse.value), ...sanitizedAddresses, finalDestination];
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+  
   backendResponse.value = { status: 'loading' }; 
   try {
     const response = await fetch(`${backendUrl}/api/optimize-route`, {
@@ -179,18 +211,17 @@ async function sendToBackend() {
 
             <div class="address-list">
                 <h2>📝 Revisa y Edita las Paradas ({{ extractedAddresses.length }})</h2>
-                <ol>
-                    <li v-for="(address, index) in extractedAddresses" :key="index" class="editable-item">
-                        <input type="text" v-model="extractedAddresses[index]" class="address-input">
+                <ol class="ordered-list">
+                    <li v-for="(stop, index) in extractedAddresses" :key="stop.number" class="editable-item">
+                        <span class="stop-number">{{ stop.number }}</span>
+                        <input type="text" v-model="stop.address" class="address-input">
                         <button @click="removeAddress(index)" class="button-delete">🗑️</button>
                     </li>
                 </ol>
-                <button @click="addAddress" class="button-add">➕ Añadir Parada</button>
                 <button @click="sendToBackend" class="button-map">Evaluar Escenarios</button>
 
                 <div v-if="backendResponse">
                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluando escenarios...</div>
-                    
                     <div v-else-if="scenarioResults" class="results-container">
                         <div class="scenario-table">
                             <h4>📊 Comparación de Escenarios</h4>
@@ -232,7 +263,6 @@ async function sendToBackend() {
                             </div>
                         </div>
                     </div>
-                    
                     <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
                 </div>
             </div>
@@ -241,7 +271,7 @@ async function sendToBackend() {
 </template>
 
 <style scoped>
-    /* Most styles are the same, with additions for the new table */
+    /* Estilos base sin cambios... */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
@@ -252,12 +282,22 @@ async function sendToBackend() {
     .custom-input-container input { width: 100%; padding: 10px; font-size: 1em; border: 1px solid #ccc; border-radius: 5px; }
     .address-list { margin-top: 20px; padding: 20px; border: 1px solid #c8e6c9; border-radius: 8px; text-align: left; background-color: #f1f8e9; }
     .address-list h2 { margin-top: 0; color: #388e3c; }
-    ol { padding-left: 25px; }
-    li { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: #333; }
+    
+    /* Pequeños ajustes a la lista */
+    .ordered-list { list-style-type: none; padding-left: 0; }
+    li.editable-item { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: #333; }
     .editable-item { display: flex; align-items: center; gap: 10px; }
+    .stop-number {
+        font-weight: bold;
+        background-color: #e9ecef;
+        padding: 8px 12px;
+        border-radius: 4px;
+        min-width: 40px;
+        text-align: center;
+    }
     .address-input { flex-grow: 1; padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; }
-    .button-delete, .button-add { padding: 8px 12px; font-size: 1em; border: none; border-radius: 4px; cursor: pointer; background-color: #f8d7da; color: #721c24; }
-    .button-add { background-color: #d4edda; color: #155724; display: block; width: 100%; margin-bottom: 20px; }
+    .button-delete { padding: 8px 12px; font-size: 1em; border: none; border-radius: 4px; cursor: pointer; background-color: #f8d7da; color: #721c24; }
+    
     .button-map { display: block; width: 100%; padding: 15px; margin-top: 20px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
     .button-map:hover { background-color: #1565c0; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
@@ -274,15 +314,10 @@ async function sendToBackend() {
     hr { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
     .backend-status.error { background-color: #fdecea; color: #c51162; }
     
-    /* NEW STYLES FOR SCENARIO TABLE */
     .scenario-table { padding: 10px 0; }
     .scenario-table h4 { margin: 0 0 10px 0; color: #495057; }
     .scenario-table table { width: 100%; border-collapse: collapse; }
-    .scenario-table th, .scenario-table td {
-        padding: 12px;
-        text-align: left;
-        border-bottom: 1px solid #dee2e6;
-    }
+    .scenario-table th, .scenario-table td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
     .scenario-table th { font-size: 0.9em; color: #6c757d; }
     .scenario-table .highlight { background-color: #e7f5ff; }
     .savings { color: #28a745; }
