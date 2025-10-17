@@ -50,7 +50,6 @@ app.post('/api/optimize-route', async (req, res) => {
     let workStops = addresses.slice(1, -1);
     
     // Geocodificación y Validación
-    console.log(`Geocodificando ${workStops.length + 1} puntos de ruta...`);
     const allPointsToGeocode = [originAddress, ...workStops];
     const geocodePromises = allPointsToGeocode.map(addr => 
         mapsClient.geocode({ params: { address: addr, key: process.env.GOOGLE_MAPS_API_KEY } })
@@ -64,7 +63,7 @@ app.post('/api/optimize-route', async (req, res) => {
         if (locationData && locationData.geometry.location_type !== 'APPROXIMATE') {
             validLocations.push({ address: currentAddress, coords: locationData.geometry.location });
         } else {
-            console.log(`\n\n🕵️‍♂️ ALERTA: DIRECCIÓN DESCARTADA 🕵️‍♂️\n   "${currentAddress}"\n   (Razón: No encontrada o imprecisa)\n\n`);
+            console.log(`\n\n🕵️‍♂️ ALERTA: DIRECCIÓN DESCARTADA: "${currentAddress}"\n\n`);
         }
     });
 
@@ -74,7 +73,6 @@ app.post('/api/optimize-route', async (req, res) => {
     const validWorkStops = validLocations.filter(loc => loc.address !== originAddress);
 
     // Pre-clasificación
-    console.log(`Realizando pre-clasificación con ${validWorkStops.length} paradas válidas...`);
     const sortedStops = [];
     let currentLocation = originLocation;
     let unvisited = [...validWorkStops];
@@ -102,37 +100,35 @@ app.post('/api/optimize-route', async (req, res) => {
 
     for (const [index, chunk] of workStopChunks.entries()) {
         if (chunk.length === 0) continue;
-
-        // ¡LA CORRECCIÓN ESTÁ AQUÍ! Le damos 5 segundos de respiro.
         if (index > 0) {
-            console.log('--- Tomando un respiro largo (5s) ---');
-            await delay(5000);
+            console.log('--- Tomando un respiro (2s) ---');
+            await delay(2000);
         }
 
-        console.log(`-- Optimizando segmento ${index + 1}/${workStopChunks.length}...`);
-        const response = await mapsClient.directions({ 
-            params: { 
-                origin: lastStopOfPreviousChunk, 
-                destination: chunk[chunk.length - 1], 
-                waypoints: chunk.slice(0, -1), 
-                optimize: true, 
-                avoid: ['tolls'], 
-                key: process.env.GOOGLE_MAPS_API_KEY 
-            } 
-        });
+        const destination = chunk[chunk.length - 1];
+        const waypoints = chunk.slice(0, -1);
+
+        const response = await mapsClient.directions({ params: { origin: lastStopOfPreviousChunk, destination, waypoints, optimize: true, avoid: ['tolls'], key: process.env.GOOGLE_MAPS_API_KEY } });
         const route = response.data.routes[0];
-        if (!route) continue;
+        
+        // --- ¡LA LÓGICA DE DEPURACIÓN FINAL ESTÁ AQUÍ! ---
+        if (!route) {
+            console.error(`\n\n🔥🔥🔥 FALLO CRÍTICO EN EL SEGMENTO ${index + 1} 🔥🔥🔥`);
+            console.error(`Google no pudo encontrar una ruta para este segmento. La dirección problemática probablemente es el DESTINO.`);
+            console.error(`   ORIGEN: ${lastStopOfPreviousChunk}`);
+            console.error(`   DESTINO: ${destination}`);
+            console.error(`   WAYPOINTS: ${waypoints.join(' | ')}`);
+            // Forzamos un error para detener todo y enviar una respuesta clara.
+            throw new Error(`Fallo al optimizar el segmento ${index + 1}. Verifica las direcciones.`);
+        }
         
         const orderedWaypoints = route.waypoint_order.map(i => chunk[i]);
-        const orderedChunk = [...orderedWaypoints, chunk[chunk.length - 1]];
+        const orderedChunk = [...orderedWaypoints, destination];
         fullOptimizedAddressList.push(...orderedChunk);
         
-        route.legs.forEach(leg => { 
-            totalWorkDistance += leg.distance.value; 
-            totalWorkDuration += leg.duration.value; 
-        });
+        route.legs.forEach(leg => { totalWorkDistance += leg.distance.value; totalWorkDuration += leg.duration.value; });
         console.log(`-- Segmento ${index + 1} completado. Total acumulado: ${fullOptimizedAddressList.length} paradas.`);
-        lastStopOfPreviousChunk = chunk[chunk.length - 1];
+        lastStopOfPreviousChunk = destination;
     }
     
     // Cálculo de Commute
@@ -158,8 +154,8 @@ app.post('/api/optimize-route', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Error con Google Maps:", error.response?.data?.error_message || error.message);
-    res.status(500).json({ message: 'Error al optimizar la ruta.' });
+    console.error("❌ Error en el proceso:", error.message);
+    res.status(500).json({ message: `Error al optimizar la ruta. ${error.message}` });
   }
 });
 
