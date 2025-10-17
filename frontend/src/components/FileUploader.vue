@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue'; // Importamos 'computed'
+import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES DE ESTADO Y DATOS (sin cambios) ---
+// --- VARIABLES Y DATOS (sin cambios) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,40 +23,27 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- ¡NUEVA PROPIEDAD COMPUTADA! ---
-// Esta función crea dinámicamente la lista de direcciones en el orden correcto.
+// --- PROPIEDAD COMPUTADA (sin cambios) ---
 const optimizedDisplayList = computed(() => {
-  // Si no hemos recibido una respuesta o el orden, mostramos la lista original.
   if (!backendResponse.value || !backendResponse.value.optimizedOrder) {
     return extractedAddresses.value;
   }
-  
-  // Si tenemos el orden, reordenamos la lista de direcciones.
-  // El .map() itera sobre el array de orden y coge la dirección correspondiente.
   return backendResponse.value.optimizedOrder.map(index => extractedAddresses.value[index]);
 });
 
-
-// --- FUNCIONES (sin cambios) ---
+// --- FUNCIONES DE PROCESAMIENTO (sin cambios) ---
 function preprocessImage(file) {
   return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
-        const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height); const data = imageData.data;
-        const contrast = 2.0; const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
-        for (let i = 0; i < data.length; i += 4) {
-          data[i] = factor * (data[i] - 128) + 128; data[i+1] = factor * (data[i+1] - 128) + 128; data[i+2] = factor * (data[i+2] - 128) + 128;
-          const avg = (data[i] + data[i+1] + data[i+2]) / 3; data[i] = avg; data[i+1] = avg; data[i+2] = avg;
-        }
-        ctx.putImageData(imageData, 0, 0); resolve(canvas.toDataURL('image/png'));
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+    const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
+    const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data; const contrast = 2.0; const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = factor * (data[i] - 128) + 128; data[i+1] = factor * (data[i+1] - 128) + 128; data[i+2] = factor * (data[i+2] - 128) + 128;
+      const avg = (data[i] + data[i+1] + data[i+2]) / 3; data[i] = avg; data[i+1] = avg; data[i+2] = avg;
+    }
+    ctx.putImageData(imageData, 0, 0); resolve(canvas.toDataURL('image/png'));
+    }; img.src = e.target.result; }; reader.readAsDataURL(file);
   });
 }
 function parseAddresses(rawText) {
@@ -80,21 +67,25 @@ async function handleFileChange(event) {
   for (const file of files) {
     const processedImage = await preprocessImage(file);
     const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-    const addressesFromFile = parseAddresses(text);
-    allParsedAddresses.push(...addressesFromFile);
+    const addressesFromFile = parseAddresses(text); allParsedAddresses.push(...addressesFromFile);
   }
-  const uniqueAddresses = [...new Set(allParsedAddresses)];
-  extractedAddresses.value = uniqueAddresses;
+  const uniqueAddresses = [...new Set(allParsedAddresses)]; extractedAddresses.value = uniqueAddresses;
   isProcessing.value = false;
 }
+
+// --- FUNCIÓN sendToBackend (LA PARTE CORREGIDA) ---
 async function sendToBackend() {
   if (extractedAddresses.value.length === 0) return;
   const finalDestination = selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value;
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
   const fullRoute = [selectedWarehouse.value, ...extractedAddresses.value, finalDestination];
+  
+  // ¡AQUÍ ESTÁ LA MAGIA! Leemos la URL del backend desde las variables de entorno.
+  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+  
   backendResponse.value = { status: 'loading' }; 
   try {
-    const response = await fetch('http://localhost:3000/api/optimize-route', {
+    const response = await fetch(`${backendUrl}/api/optimize-route`, { // Usamos la URL correcta
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ addresses: fullRoute }),
@@ -102,6 +93,7 @@ async function sendToBackend() {
     const result = await response.json();
     backendResponse.value = result;
   } catch (error) {
+    console.error("Fetch error:", error); // Añadimos un log más detallado
     backendResponse.value = { error: 'Error: No se pudo conectar al servidor.' };
   }
 }
@@ -171,7 +163,6 @@ async function sendToBackend() {
 </template>
 
 <style scoped>
-    /* (Estilos sin cambios) */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
