@@ -20,7 +20,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
-// --- FUNCIONES ASISTENTES (sin cambios) ---
+// --- Helper Functions (unchanged) ---
 function getDistance(p1, p2) {
     const R = 6371e3; const φ1 = p1.lat * Math.PI/180; const φ2 = p2.lat * Math.PI/180;
     const Δφ = (p2.lat-p1.lat) * Math.PI/180; const Δλ = (p2.lng-p1.lng) * Math.PI/180;
@@ -47,7 +47,7 @@ app.post('/api/optimize-route', async (req, res) => {
     const finalDestination = addresses[addresses.length - 1];
     let workStops = addresses.slice(1, -1);
     
-    // --- PASO CERO: GEOCODIFICACIÓN CON LOGGING MEJORADO ---
+    // --- Geocoding with explicit logging ---
     console.log(`Geocodificando ${workStops.length + 1} puntos de ruta...`);
     const geocodePromises = [originAddress, ...workStops].map(addr => 
         mapsClient.geocode({ params: { address: addr, key: process.env.GOOGLE_MAPS_API_KEY } })
@@ -55,25 +55,27 @@ app.post('/api/optimize-route', async (req, res) => {
     const geocodeResults = await Promise.all(geocodePromises);
     
     const validLocations = [];
+    const allLocations = [originAddress, ...workStops];
     geocodeResults.forEach((result, i) => {
         const locationData = result.data.results[0];
-        const currentAddress = [originAddress, ...workStops][i];
+        const currentAddress = allLocations[i];
         if (locationData && locationData.geometry.location_type !== 'APPROXIMATE') {
             validLocations.push({ address: currentAddress, coords: locationData.geometry.location });
         } else {
-            // ¡LOGGING EXPLÍCITO DE LA DIRECCIÓN DESCARTADA!
-            console.log(`🕵️‍♂️ DIRECCIÓN DESCARTADA: "${currentAddress}" (Razón: No encontrada o imprecisa)`);
+            console.log(`🕵️‍♂️ DIRECCIÓN DESCARTADA: "${currentAddress}"`);
         }
     });
 
-    const originLocation = validLocations.shift();
+    const originLocation = validLocations.find(loc => loc.address === originAddress);
     if (!originLocation) { return res.status(400).json({ message: 'La dirección de origen no es válida.' }); }
     
-    // --- PASO UNO: PRE-CLASIFICACIÓN ---
-    console.log(`Realizando pre-clasificación con ${validLocations.length} paradas válidas...`);
+    workStops = validLocations.filter(loc => loc.address !== originAddress);
+
+    // --- Pre-sorting ---
+    console.log(`Realizando pre-clasificación con ${workStops.length} paradas válidas...`);
     const sortedStops = [];
     let currentLocation = originLocation;
-    let unvisited = validLocations;
+    let unvisited = workStops;
     while (unvisited.length > 0) {
         let nearestIndex = -1; let minDistance = Infinity;
         unvisited.forEach((stop, index) => {
@@ -86,7 +88,7 @@ app.post('/api/optimize-route', async (req, res) => {
     }
     workStops = sortedStops;
 
-    // --- PASO DOS: OPTIMIZACIÓN POR SEGMENTOS (LÓGICA CORREGIDA) ---
+    // --- Optimization in Chunks (FINAL CORRECTED LOGIC) ---
     const MAX_WAYPOINTS = 25;
     let fullOptimizedAddressList = [];
     let totalWorkDistance = 0;
@@ -102,23 +104,20 @@ app.post('/api/optimize-route', async (req, res) => {
             const route = response.data.routes[0];
             if (!route) continue;
             
-            // ¡LA CORRECCIÓN ESTÁ AQUÍ!
-            // 1. Reordenamos el segmento actual
             const orderedWaypoints = route.waypoint_order.map(i => chunk[i]);
             const orderedChunk = [...orderedWaypoints, chunk[chunk.length - 1]];
             
-            // 2. Acumulamos los resultados en lugar de sobreescribirlos
             fullOptimizedAddressList = fullOptimizedAddressList.concat(orderedChunk);
+            
             route.legs.forEach(leg => { 
                 totalWorkDistance += leg.distance.value; 
                 totalWorkDuration += leg.duration.value; 
             });
-
             lastStopOfPreviousChunk = chunk[chunk.length - 1];
         }
     }
     
-    // --- CÁLCULO DE COMMUTE ---
+    // --- Commute Calculation ---
     const lastWorkStop = fullOptimizedAddressList.length > 0 ? fullOptimizedAddressList[fullOptimizedAddressList.length - 1] : originAddress;
     const commutePromises = [
         mapsClient.directions({ params: { origin: lastWorkStop, destination: finalDestination, key: process.env.GOOGLE_MAPS_API_KEY } }),
