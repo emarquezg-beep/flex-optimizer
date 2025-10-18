@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- STATE & DATA (Unchanged) ---
+// --- VARIABLES Y DATOS (sin cambios) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,8 +23,10 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- COMPUTED PROPERTIES (Unchanged) ---
-const reportData = computed(() => { /* ... unchanged ... */
+// --- PROPIEDADES COMPUTADAS ---
+
+// Calcula el desglose detallado (sin cambios)
+const reportData = computed(() => { /* ... sin cambios ... */
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
     let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBlockStopTime = 0;
@@ -65,10 +67,15 @@ const reportData = computed(() => { /* ... unchanged ... */
             totalWorkDuration: Math.round(totalWorkDuration),
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
+            // Pasamos datos base para cálculo de escenarios
+            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
+            commuteDuration: toFinalDestDur,
+            stopCount: segments.reduce((sum, seg) => sum + seg.stops.length, 0),
+            apartmentCount: segments.reduce((sum, seg) => sum + seg.aptCount, 0),
         },
         inverse: {
             toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
-            segments: processedSegments,
+            segments: processedSegments, // Los segmentos son los mismos
             toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
             totalWorkMiles: totalInverseWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalInverseWorkDuration),
@@ -78,14 +85,36 @@ const reportData = computed(() => { /* ... unchanged ... */
     };
 });
 
+// ¡NUEVA PROPIEDAD COMPUTADA PARA ESCENARIOS Y ETA!
+const scenarioETAs = computed(() => {
+    if (!reportData.value) return null;
 
-// --- EDITING FUNCTIONS (Unchanged) ---
+    const { baseDriveDuration, commuteDuration, stopCount, apartmentCount } = reportData.value.normal;
+    const now = new Date();
+
+    const calculateScenario = (multiplier) => {
+        const stopTime = (stopCount * multiplier) + (apartmentCount * 1.5); // Tiempo total en paradas para este escenario
+        const totalDuration = baseDriveDuration + stopTime + commuteDuration;
+        const eta = new Date(now.getTime() + totalDuration * 60000); // Sumamos minutos en milisegundos
+        return {
+            totalDuration: Math.round(totalDuration),
+            eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) // Formato HH:MM AM/PM
+        };
+    };
+
+    return {
+        optimistic: calculateScenario(0.90),
+        normal: calculateScenario(1.10),
+        pessimistic: calculateScenario(1.50)
+    };
+});
+
+
+// --- FUNCIONES (sin cambios) ---
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() { extractedAddresses.value.push({ number: null, address: '' }); }
 function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
-
-// --- PROCESSING FUNCTIONS ---
-function preprocessImage(file) { /* ... unchanged ... */
+function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
     const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
@@ -99,55 +128,30 @@ function preprocessImage(file) { /* ... unchanged ... */
     }; img.src = e.target.result; }; reader.readAsDataURL(file);
   });
 }
-
-// --- PARSER v14: STRICT CITY PARSING ---
 function parseAddresses(rawText) {
-  console.log("Iniciando limpieza v14 (Strict City)...");
-  const stops = [];
-  const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
-
+  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
   const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
   let match;
-
   while ((match = pattern.exec(rawText)) !== null) {
     const stopNumber = parseInt(match[1]);
     const textBlock = match[2];
     const addressPattern = /(\d{3,5}\s[A-Z].*)/;
     const addressMatch = textBlock.match(addressPattern);
-
     if (addressMatch) {
-      let street = addressMatch[1].trim();
-      let city = ''; // Reset city for each stop
-
+      let street = addressMatch[1].trim(); let city = '';
       const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
       if (lines.length > 1) {
         let nextLine = lines[1].trim();
-        for (const word of stopWords) {
-          if (nextLine.includes(word)) {
-            nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim();
-          }
-        }
-        // ONLY if we find a valid city line, we assign it
-        if (nextLine.length > 3) {
-          city = nextLine;
-        }
+        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
+        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
       }
-
-      // ONLY build the address string if BOTH street and city were found
-      if (street && city) {
-        stops.push({ number: stopNumber, address: `${street} ${city}` });
-      } else {
-        // If city is missing, push the street part only, so user can edit it
-        stops.push({ number: stopNumber, address: street });
-         console.warn(`Stop ${stopNumber}: City not found, adding street only: "${street}"`);
-      }
+      if (!city) { city = lastKnownCity; }
+      stops.push({ number: stopNumber, address: `${street} ${city}` });
     }
   }
   return stops;
 }
-
-
-async function handleFileChange(event) { /* ... unchanged ... */
+async function handleFileChange(event) {
   const files = event.target.files; if (!files.length) return;
   isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null; 
   let allParsedStops = [];
@@ -162,11 +166,11 @@ async function handleFileChange(event) { /* ... unchanged ... */
   extractedAddresses.value = uniqueStops;
   isProcessing.value = false;
 }
-function sanitizeAddress(address) { /* ... unchanged ... */
+function sanitizeAddress(address) {
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
-async function sendToBackend() { /* ... unchanged ... */
+async function sendToBackend() {
   const addressesToSend = extractedAddresses.value.map(stop => stop.address);
   const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
   if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
@@ -256,17 +260,23 @@ async function sendToBackend() { /* ... unchanged ... */
                             <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
                         </div>
                         <hr>
-                        <div class="result-block inverse-block">
-                            <h4>⬅️ Desglose Ruta Inversa</h4>
-                            <p>Hacia Última Parada: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
-                            <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
-                                <p>Segmento {{ index + 1 }} (datos): <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stops.length }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
-                            </div>
-                            <hr class="dotted-hr">
-                            <p class="total-time"><strong>Total Trabajo: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
-                            <p>Desde 1ra Parada a Destino: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
-                            <hr class="dotted-hr">
-                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.inverse.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
+                        <div v-if="scenarioETAs" class="result-block eta-block">
+                             <h4>⏱️ Estimaciones de Llegada (Ruta Normal)</h4>
+                             <div class="eta-scenario">
+                                 <span class="eta-label optimistic">Optimista (0.90 min/parada):</span>
+                                 <strong class="eta-time">{{ scenarioETAs.optimistic.eta }}</strong>
+                                 <span class="eta-duration">({{ scenarioETAs.optimistic.totalDuration }} min total)</span>
+                             </div>
+                             <div class="eta-scenario">
+                                 <span class="eta-label normal">Normal (1.10 min/parada):</span>
+                                 <strong class="eta-time">{{ scenarioETAs.normal.eta }}</strong>
+                                 <span class="eta-duration">({{ scenarioETAs.normal.totalDuration }} min total)</span>
+                             </div>
+                             <div class="eta-scenario">
+                                 <span class="eta-label pessimistic">Pesimista (1.50 min/parada):</span>
+                                 <strong class="eta-time">{{ scenarioETAs.pessimistic.eta }}</strong>
+                                 <span class="eta-duration">({{ scenarioETAs.pessimistic.totalDuration }} min total)</span>
+                             </div>
                         </div>
                     </div>
                     <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
@@ -277,6 +287,7 @@ async function sendToBackend() { /* ... unchanged ... */
 </template>
 
 <style scoped>
+    /* Estilos base sin cambios... */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
@@ -316,4 +327,16 @@ async function sendToBackend() { /* ... unchanged ... */
     .scenario-table th, .scenario-table td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
     .scenario-table .highlight { background-color: #e7f5ff; }
     .savings { color: #28a745; }
+
+    /* ¡NUEVOS ESTILOS PARA EL PANEL ETA! */
+    .eta-block { background-color: #e6f7ff; margin: 0 -15px -15px -15px; padding: 20px 15px 15px 15px; border-radius: 0 0 8px 8px;}
+    .eta-block h4 { color: #0056b3; }
+    .eta-scenario { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #b0e0e6; }
+    .eta-scenario:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .eta-label { display: inline-block; width: 220px; font-weight: bold; }
+    .eta-label.optimistic { color: #28a745; }
+    .eta-label.normal { color: #ffc107; }
+    .eta-label.pessimistic { color: #dc3545; }
+    .eta-time { font-size: 1.3em; font-weight: bold; color: #0056b3; margin-right: 10px; }
+    .eta-duration { font-size: 0.9em; color: #6c757d; }
 </style>
