@@ -2,9 +2,8 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES Y DATOS ---
-// Ahora guardamos objetos { number, address, isDowntown }
-const extractedAddresses = ref([]); 
+// --- VARIABLES Y DATOS (sin cambios) ---
+const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
 const warehouses = [
@@ -24,42 +23,59 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDADES COMPUTADAS (ACTUALIZADAS PARA REGLA DOWNTOWN) ---
+// --- PROPIEDADES COMPUTADAS (ACTUALIZADAS PARA REGLA DOWNTOWN v2) ---
 const reportData = computed(() => {
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
+
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
-    let totalBlockMiles = 0; let totalBlockDriveDuration = 0;
     
-    // Datos base para cálculo de tiempo con regla downtown
-    let baseTotalStopTime = 0;
+    let totalBlockMiles = 0;
+    let totalBlockDriveDuration = 0;
+    let totalBaseStopTime = 0; // Tiempo base (1.5 min * num paradas)
+    let totalExtraStopTime = 0; // Tiempo extra (1.5 apto normal, 4.5 apto DT)
     let totalApartmentCount = 0;
-    let totalDowntownCount = 0; // Contamos los DT
+    let totalDowntownCount = 0;
     let totalStopCount = 0;
 
     const processedSegments = segments.map(seg => {
-        let stopTime = 0; let aptCount = 0;
+        let segmentBaseStopTime = 0;
+        let segmentExtraStopTime = 0;
+        let aptCount = 0;
+        let downtownCount = 0;
         const currentStopCount = (seg.stops || []).length;
         totalStopCount += currentStopCount;
 
         (seg.stops || []).forEach(addr => {
-            const stopData = extractedAddresses.value.find(s => s.address === addr); // Encuentra el objeto stop original
+            const stopData = extractedAddresses.value.find(s => s.address === addr);
             const isDowntown = stopData ? stopData.isDowntown : false;
             const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
             
-            stopTime += 1.5; // Base time
+            segmentBaseStopTime += 1.5; // Siempre 1.5 base
+            
             if (isDowntown) {
-                totalDowntownCount++;
-                stopTime += 4.5; // Extra Downtown time (total 6 min)
+                downtownCount++;
+                segmentExtraStopTime += 4.5; // 4.5 extra por DT
             } else if (isApartment) {
-                totalApartmentCount++;
-                stopTime += 1.5; // Extra Regular Apartment time (total 3 min)
+                aptCount++;
+                segmentExtraStopTime += 1.5; // 1.5 extra por apto normal
             }
         });
         
-        baseTotalStopTime += stopTime; // Sumamos el tiempo base calculado por segmento
+        totalBaseStopTime += segmentBaseStopTime;
+        totalExtraStopTime += segmentExtraStopTime;
+        totalApartmentCount += aptCount + downtownCount; // Contamos todos los apartamentos
+        totalDowntownCount += downtownCount;
+
         totalBlockMiles += parseFloat(seg.distance || 0);
         totalBlockDriveDuration += parseFloat(seg.duration || 0);
-        return { ...seg, stopsCount: currentStopCount, aptCount: totalApartmentCount, downtownCount: totalDowntownCount }; // Incluye el conteo DT por si acaso
+        
+        return { 
+            distance: seg.distance, 
+            duration: seg.duration, 
+            stopsCount: currentStopCount, 
+            aptCount: aptCount, // Apartamentos normales en este segmento
+            downtownCount: downtownCount // Apartamentos DT en este segmento
+        };
     });
 
     const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
@@ -72,11 +88,12 @@ const reportData = computed(() => {
     const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
 
     const totalWorkMiles = toFirstStopDist + totalBlockMiles;
-    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + baseTotalStopTime; // Usamos el tiempo base calculado
+    // El tiempo total de trabajo incluye el drive + tiempo base + tiempo extra
+    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime; 
     const totalNormalMiles = totalWorkMiles + toFinalDestDist;
     const totalNormalDuration = totalWorkDuration + toFinalDestDur;
     const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
-    const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + baseTotalStopTime;
+    const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
     const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
     const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
 
@@ -84,13 +101,13 @@ const reportData = computed(() => {
         savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
         normal: {
             toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
-            segments: processedSegments, // Pasamos los segmentos procesados
+            segments: processedSegments, // Pasamos los segmentos con sus conteos individuales
             toEnd: { distance: toFinalDestDist.toFixed(2), duration: Math.round(toFinalDestDur) },
             totalWorkMiles: totalWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalWorkDuration),
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
-            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
+            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration, // Solo conducción
             commuteDuration: toFinalDestDur,
         },
         inverse: {
@@ -101,31 +118,30 @@ const reportData = computed(() => {
             totalWorkDuration: Math.round(totalInverseWorkDuration),
             totalMiles: totalInverseMiles.toFixed(2),
             totalDuration: Math.round(totalInverseDuration),
-            baseDriveDuration: toLastStopDur + totalBlockDriveDuration,
+            baseDriveDuration: toLastStopDur + totalBlockDriveDuration, // Solo conducción
             commuteDuration: fromFirstStopDur,
         },
+        // Conteos totales para ETA
         stopCount: totalStopCount,
-        apartmentCount: totalApartmentCount,
-        downtownCount: totalDowntownCount, // Pasamos el conteo DT
+        apartmentCount: totalApartmentCount, // Total aptos (normales + DT)
+        downtownCount: totalDowntownCount, // Solo DT
     };
 });
 
+// PROPIEDAD COMPUTADA PARA ESCENARIOS Y ETA (CORREGIDA)
 const scenarioETAs = computed(() => {
     if (!reportData.value?.normal) return null;
 
-    const baseDrive = Number(reportData.value.normal.baseDriveDuration) || 0;
-    const commute = Number(reportData.value.normal.commuteDuration) || 0;
     const stopCount = Number(reportData.value.stopCount) || 0;
-    const apartmentCount = Number(reportData.value.apartmentCount) || 0;
-    const downtownCount = Number(reportData.value.downtownCount) || 0; // Obtenemos el conteo DT
+    const apartmentCount = Number(reportData.value.apartmentCount) || 0; // Total Aptos
+    const downtownCount = Number(reportData.value.downtownCount) || 0; // Solo DT
+    const regularApartmentCount = apartmentCount - downtownCount; // Aptos normales
     const now = new Date();
 
-    const calculateScenario = (multiplier) => {
-        // Calculamos el tiempo extra diferenciando apartamentos normales y DT
-        const regularApartmentCount = apartmentCount - downtownCount;
-        const extraTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
-        const baseStopTime = stopCount * multiplier;
-        const totalDuration = baseDrive + baseStopTime + extraTime + commute;
+    const calculateScenario = (baseDrive, commute, multiplier) => {
+        const baseStopTime = stopCount * multiplier; // Tiempo base según escenario
+        const extraTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5); // Tiempo extra fijo por tipo apto
+        const totalDuration = (Number(baseDrive) || 0) + baseStopTime + extraTime + (Number(commute) || 0);
 
         if (isNaN(totalDuration)) { return { totalDuration: 'N/A', eta: 'Error' }; }
         const eta = new Date(now.getTime() + totalDuration * 60000);
@@ -135,29 +151,30 @@ const scenarioETAs = computed(() => {
         };
     };
 
+    const normalBaseDrive = reportData.value.normal.baseDriveDuration;
+    const normalCommute = reportData.value.normal.commuteDuration;
+    const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
+    const inverseCommute = reportData.value.inverse.commuteDuration;
+
     return {
         normal: {
-            optimistic: calculateScenario(0.90),
-            normal: calculateScenario(1.10),
-            pessimistic: calculateScenario(1.50)
+            optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
+            normal: calculateScenario(normalBaseDrive, normalCommute, 1.10),
+            pessimistic: calculateScenario(normalBaseDrive, normalCommute, 1.50)
         },
-        // ETA Inversa necesita sus propios cálculos base
         inverse: {
-            optimistic: calculateScenario(reportData.value.inverse.baseDriveDuration, reportData.value.inverse.commuteDuration, 0.90),
-            normal: calculateScenario(reportData.value.inverse.baseDriveDuration, reportData.value.inverse.commuteDuration, 1.10),
-            pessimistic: calculateScenario(reportData.value.inverse.baseDriveDuration, reportData.value.inverse.commuteDuration, 1.50)
+            optimistic: calculateScenario(inverseBaseDrive, inverseCommute, 0.90),
+            normal: calculateScenario(inverseBaseDrive, inverseCommute, 1.10),
+            pessimistic: calculateScenario(inverseBaseDrive, inverseCommute, 1.50)
         }
     };
 });
 
 
-// --- FUNCIONES PARA EDITAR LA LISTA ---
+// --- FUNCIONES (sin cambios) ---
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
-// ¡Ahora añadimos con el flag isDowntown!
 function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); } 
 function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
-
-// --- FUNCIONES DE PROCESAMIENTO ---
 function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
@@ -172,7 +189,6 @@ function preprocessImage(file) {
     }; img.src = e.target.result; }; reader.readAsDataURL(file);
   });
 }
-// ¡Parser ahora devuelve el flag isDowntown!
 function parseAddresses(rawText) {
   const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
   const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
@@ -191,7 +207,7 @@ function parseAddresses(rawText) {
         if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
       }
       if (!city) { city = lastKnownCity; }
-      stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false }); // Inicializa isDowntown
+      stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false });
     }
   }
   return stops;
@@ -266,7 +282,7 @@ async function sendToBackend() {
                     <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item">
                         <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#">
                         <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección de la parada">
-                        <label class="downtown-label">
+                        <label class="downtown-label" title="Marcar si es Downtown">
                             <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox"> DT
                         </label>
                         <button @click="removeAddress(index)" class="button-delete">🗑️</button>
@@ -299,7 +315,9 @@ async function sendToBackend() {
                             <h4>➡️ Desglose Ruta Normal</h4>
                             <p>Hacia 1ra Parada: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
                             <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
-                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong></p>
+                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong> 
+                                    <span class="calc-details">({{ segment.stopsCount }} paradas | {{ segment.aptCount }} aptos | {{ segment.downtownCount }} DT)</span>
+                                </p>
                             </div>
                             <hr class="dotted-hr">
                             <p class="total-time"><strong>Total Trabajo: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
@@ -318,7 +336,9 @@ async function sendToBackend() {
                             <h4>⬅️ Desglose Ruta Inversa</h4>
                             <p>Hacia Última Parada: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
                             <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
-                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong></p>
+                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
+                                     <span class="calc-details">({{ segment.stopsCount }} paradas | {{ segment.aptCount }} aptos | {{ segment.downtownCount }} DT)</span>
+                                </p>
                             </div>
                             <hr class="dotted-hr">
                             <p class="total-time"><strong>Total Trabajo: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
@@ -353,14 +373,12 @@ async function sendToBackend() {
     .address-list h2 { margin-top: 0; color: #388e3c; }
     .ordered-list { list-style-type: none; padding-left: 0; }
     li.editable-item { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: #333; }
-    .editable-item { display: flex; align-items: center; gap: 5px; /* Reduced gap */ } 
-    .stop-number-input { width: 50px; /* Smaller width */ padding: 8px; font-size: 1em; text-align: center; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; }
+    .editable-item { display: flex; align-items: center; gap: 5px; } 
+    .stop-number-input { width: 50px; padding: 8px; font-size: 1em; text-align: center; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; }
     .address-input { flex-grow: 1; padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; }
-    /* Checkbox Styles */
-    .downtown-label { display: flex; align-items: center; cursor: pointer; font-size: 0.9em; color: #6c757d; }
+    .downtown-label { display: flex; align-items: center; cursor: pointer; font-size: 0.9em; color: #6c757d; padding: 0 5px; }
     .downtown-checkbox { margin-right: 3px; width: 18px; height: 18px; cursor: pointer;}
-
-    .button-delete { padding: 8px 10px; /* Slightly smaller padding */ font-size: 0.9em; border: none; border-radius: 4px; cursor: pointer; background-color: #f8d7da; color: #721c24; }
+    .button-delete { padding: 8px 10px; font-size: 0.9em; border: none; border-radius: 4px; cursor: pointer; background-color: #f8d7da; color: #721c24; }
     .action-buttons { display: flex; gap: 10px; margin-bottom: 20px; }
     .button-add { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; padding: 10px; flex-grow: 1; cursor: pointer; border-radius: 5px; }
     .button-reorder { background-color: #d1e7fd; color: #0c5460; border: 1px solid #bee5eb; padding: 10px; flex-grow: 1; cursor: pointer; font-weight: bold; }
