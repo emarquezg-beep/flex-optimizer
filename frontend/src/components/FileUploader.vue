@@ -33,7 +33,106 @@ function addAddress() { extractedAddresses.value.push({ number: null, address: '
 function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
 
 // --- FUNCIONES DE PROCESAMIENTO ---
-function preprocessImage(file) { /* ... unchanged ... */ }
+// --- SIMPLER Grayscale Preprocessing ---
+function preprocessImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw the original image
+        ctx.drawImage(img, 0, 0);
+        
+        // Get image data
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // Convert to grayscale
+        for (let i = 0; i < data.length; i += 4) {
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          data[i] = avg;     // Red
+          data[i + 1] = avg; // Green
+          data[i + 2] = avg; // Blue
+          // Alpha (data[i+3]) remains unchanged
+        }
+        ctx.putImageData(imageData, 0, 0);
+        
+        // Resolve with the grayscale image data URL
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// --- handleFileChange (Re-enable preprocessing) ---
+async function handleFileChange(event) {
+  console.log("handleFileChange triggered!"); 
+  const files = event.target.files;
+  if (!files || files.length === 0) {
+      console.log("No files selected.");
+      return;
+  }
+  console.log(`Files selected: ${files.length}`);
+
+  try {
+      isProcessing.value = true;
+      console.log("isProcessing set to true");
+      extractedAddresses.value = [];
+      backendResponse.value = null;
+      let allParsedStops = [];
+
+      console.log("Starting file processing loop...");
+      for (const [index, file] of Array.from(files).entries()) {
+          console.log(`Processing file ${index + 1}/${files.length}: ${file.name}`); 
+          
+          // --- Re-enable preprocessing ---
+          const processedImage = await preprocessImage(file); 
+          console.log(`File ${index + 1} preprocessed (grayscale).`); 
+          const { data: { text } } = await Tesseract.recognize(processedImage, 'eng'); // Use processedImage again
+          // --- End re-enable ---
+
+          console.log(`File ${index + 1} OCR complete.`); 
+          const stopsFromFile = parseAddresses(text);
+          allParsedStops.push(...stopsFromFile);
+          console.log(`File ${index + 1} parsed.`); 
+      }
+      console.log("File processing loop finished."); 
+
+      // Gap filling logic...
+      const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+      let maxStopNumber = 0;
+      uniqueStopsMap.forEach(stop => {
+          if (stop.number > maxStopNumber) maxStopNumber = stop.number;
+      });
+      const fullListWithGaps = [];
+      for (let i = 1; i <= maxStopNumber; i++) {
+          if (uniqueStopsMap.has(i)) {
+              fullListWithGaps.push(uniqueStopsMap.get(i));
+          } else {
+              fullListWithGaps.push({ number: i, address: '', isDowntown: false });
+          }
+      }
+      console.log("Gap filling complete.");
+
+      extractedAddresses.value = fullListWithGaps;
+      console.log("extractedAddresses updated.");
+
+  } catch (error) {
+      console.error("Error during handleFileChange:", error);
+  } finally {
+      isProcessing.value = false;
+      console.log("isProcessing set to false.");
+  }
+}
+
+// ... (Rest of the script and template/style remain the same) ...
 function parseAddresses(rawText) { /* ... unchanged v13 ... */ }
 
 // --- handleFileChange CON LOGGING ---
@@ -56,9 +155,9 @@ async function handleFileChange(event) {
       console.log("Starting file processing loop..."); // Log 5
       for (const [index, file] of Array.from(files).entries()) {
       console.log(`Processing file ${index + 1}/${files.length}: ${file.name}`); // Log 6
-      // const processedImage = await preprocessImage(file); // <--- TEMPORARILY DISABLED
-      // console.log(`File ${index + 1} preprocessed.`); // Log 7
-      const { data: { text } } = await Tesseract.recognize(file, 'eng'); // <--- Tesseract uses ORIGINAL file
+      const processedImage = await preprocessImage(file); // <--- We process here
+      console.log(`File ${index + 1} preprocessed.`); // Log 7
+      const { data: { text } } = await Tesseract.recognize(processedImage, 'eng'); // <--- Tesseract uses processed
       console.log(`File ${index + 1} OCR complete.`); // Log 8
       // ... rest of the loop
       }
