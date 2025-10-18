@@ -55,14 +55,12 @@ async function handleFileChange(event) {
 
       console.log("Starting file processing loop..."); // Log 5
       for (const [index, file] of Array.from(files).entries()) {
-          console.log(`Processing file ${index + 1}/${files.length}: ${file.name}`); // Log 6
-          const processedImage = await preprocessImage(file);
-          console.log(`File ${index + 1} preprocessed.`); // Log 7
-          const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-          console.log(`File ${index + 1} OCR complete.`); // Log 8
-          const stopsFromFile = parseAddresses(text);
-          allParsedStops.push(...stopsFromFile);
-          console.log(`File ${index + 1} parsed.`); // Log 9
+      console.log(`Processing file ${index + 1}/${files.length}: ${file.name}`); // Log 6
+      // const processedImage = await preprocessImage(file); // <--- TEMPORARILY DISABLED
+      // console.log(`File ${index + 1} preprocessed.`); // Log 7
+      const { data: { text } } = await Tesseract.recognize(file, 'eng'); // <--- Tesseract uses ORIGINAL file
+      console.log(`File ${index + 1} OCR complete.`); // Log 8
+      // ... rest of the loop
       }
       console.log("File processing loop finished."); // Log 10
 
