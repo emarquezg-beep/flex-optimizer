@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
 // --- STATE & DATA (Unchanged) ---
-const extractedAddresses = ref([]);
+const extractedAddresses = ref([]); // Holds objects { number, address, isDowntown }
 const isProcessing = ref(false);
 const backendResponse = ref(null);
 const warehouses = [
@@ -23,84 +23,60 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- COMPUTED PROPERTIES (Unchanged) ---
+// --- COMPUTED PROPERTIES ---
+
+// *** THE CORRECTION IS HERE ***
+const optimizedDisplayList = computed(() => {
+  // If no backend response yet, return the original editable list of objects
+  if (!backendResponse.value || !backendResponse.value.optimizedAddressList) {
+    return extractedAddresses.value; // Array of objects
+  }
+
+  // If backend response exists, map the optimized address strings back to objects
+  // matching the structure needed for the template's v-model bindings.
+  const optimizedStrings = backendResponse.value.optimizedAddressList; // Array of strings
+  
+  // Create a quick lookup map from the original addresses (before sending to backend)
+  // to preserve their number and isDowntown status if possible.
+  const originalStopsMap = new Map();
+  extractedAddresses.value.forEach(stop => {
+      // Use sanitized address as key for better matching after potential edits
+      originalStopsMap.set(sanitizeAddress(stop.address), stop); 
+  });
+
+  return optimizedStrings.map((addrString, index) => {
+      // Find the original stop object using the sanitized string
+      const originalStop = originalStopsMap.get(sanitizeAddress(addrString));
+      return {
+          // Use original number if found, otherwise just use index + 1 for display order
+          number: originalStop ? originalStop.number : index + 1, 
+          address: addrString, 
+          // Preserve original downtown status if found, default to false
+          isDowntown: originalStop ? originalStop.isDowntown : false 
+      };
+  });
+});
+
+
 const reportData = computed(() => { /* ... unchanged ... */ });
 const scenarioETAs = computed(() => { /* ... unchanged ... */ });
-
 
 // --- EDITING FUNCTIONS (Unchanged) ---
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); }
 function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
 
-// --- PROCESSING FUNCTIONS ---
+// --- PROCESSING FUNCTIONS (Unchanged) ---
 function preprocessImage(file) { /* ... unchanged ... */ }
-
-function parseAddresses(rawText) { /* ... unchanged v13 ... */
-  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
-  const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
-  let match;
-  while ((match = pattern.exec(rawText)) !== null) {
-    const stopNumber = parseInt(match[1]);
-    const textBlock = match[2];
-    const addressPattern = /(\d{3,5}\s[A-Z].*)/;
-    const addressMatch = textBlock.match(addressPattern);
-    if (addressMatch) {
-      let street = addressMatch[1].trim(); let city = '';
-      const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
-      if (lines.length > 1) {
-        let nextLine = lines[1].trim();
-        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
-        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
-      }
-      if (!city) { city = lastKnownCity; }
-      stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false });
-    }
-  }
-  return stops;
+function parseAddresses(rawText) { /* ... unchanged v13 ... */ }
+async function handleFileChange(event) { /* ... unchanged ... */ }
+function sanitizeAddress(address) {
+    if (!address) return '';
+    // Keep comma for addresses like "Street, City, ZIP"
+    return address.replace(/[^a-zA-Z0-9\s#,\-]/g, '').replace(/\s+/g, ' ').trim(); 
 }
-
-// --- UPDATED handleFileChange ---
-async function handleFileChange(event) {
-  const files = event.target.files; if (!files.length) return;
-  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null;
-  let allParsedStops = [];
-
-  for (const file of files) {
-    const processedImage = await preprocessImage(file);
-    const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-    const stopsFromFile = parseAddresses(text);
-    allParsedStops.push(...stopsFromFile);
-  }
-
-  // 1. Remove duplicates based on stop number
-  const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
-
-  // 2. Find the highest stop number
-  let maxStopNumber = 0;
-  uniqueStopsMap.forEach(stop => {
-      if (stop.number > maxStopNumber) {
-          maxStopNumber = stop.number;
-      }
-  });
-
-  // 3. Create the final list with gaps
-  const fullListWithGaps = [];
-  for (let i = 1; i <= maxStopNumber; i++) {
-      if (uniqueStopsMap.has(i)) {
-          fullListWithGaps.push(uniqueStopsMap.get(i));
-      } else {
-          // Add a placeholder for the missing stop
-          fullListWithGaps.push({ number: i, address: '', isDowntown: false });
-      }
-  }
-
-  extractedAddresses.value = fullListWithGaps;
-  isProcessing.value = false;
-}
-
-function sanitizeAddress(address) { /* ... unchanged ... */ }
 async function sendToBackend() { /* ... unchanged ... */ }
+
 </script>
 
 <template>
@@ -110,45 +86,110 @@ async function sendToBackend() { /* ... unchanged ... */ }
 
         <div v-if="extractedAddresses.length > 0 && !isProcessing">
             <div class="controls-container">
-                 </div>
+                 <div class="control-group">
+                    <label for="warehouse-select">Punto de Partida</label>
+                    <select id="warehouse-select" v-model="selectedWarehouse">
+                        <option v-for="wh in warehouses" :key="wh.code" :value="wh.address">{{ wh.code }}</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="destination-select">Destino Final</label>
+                    <select id="destination-select" v-model="selectedDestination">
+                        <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
+                    </select>
+                </div>
+            </div>
             <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-                 </div>
+                 <input type="text" v-model="customDestination" placeholder="Escribe la dirección de destino aquí">
+            </div>
 
             <div class="address-list">
-                <h2>📝 Revisa y Edita las Paradas ({{ extractedAddresses.length }})</h2>
+                 <h2 v-if="!backendResponse">📝 Revisa y Edita las Paradas ({{ extractedAddresses.length }})</h2>
+                <h2 v-else>🗺️ Ruta Calculada ({{ optimizedDisplayList.length }} paradas)</h2>
+
                 <ol class="ordered-list">
-                    <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item" :class="{ 'missing-stop': !stop.address }">
-                        <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#" :disabled="!!stop.address"> <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección faltante...">
-                        <label class="downtown-label" title="Marcar si es Downtown">
-                            <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox"> DT
-                        </label>
-                        <button @click="removeAddress(index)" class="button-delete">🗑️</button>
+                     <li v-for="(stop, index) in optimizedDisplayList" :key="index" class="editable-item" :class="{ 'missing-stop': !stop.address }">
+                        <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#" :disabled="!!backendResponse"> <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección..." :disabled="!!backendResponse"> <label class="downtown-label" title="Marcar si es Downtown">
+                            <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox" :disabled="!!backendResponse"> DT </label>
+                        <button v-if="!backendResponse" @click="removeAddress(index)" class="button-delete">🗑️</button>
                     </li>
                 </ol>
-                <div class="action-buttons">
+                <div v-if="!backendResponse" class="action-buttons">
                     <button @click="addAddress" class="button-add">➕ Añadir Parada Manual</button>
                     <button @click="reorderList" class="button-reorder">🔄 Reordenar Lista</button>
                 </div>
-                <button @click="sendToBackend" class="button-map">Evaluar Escenarios</button>
+                 <button @click="sendToBackend" class="button-map" :disabled="!!backendResponse && backendResponse.status !== 'loading'">
+                     {{ (!backendResponse || backendResponse.status === 'loading') ? 'Evaluar Escenarios' : 'Resultados Calculados' }}
+                 </button>
 
                 <div v-if="backendResponse">
-                     </div>
+                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluando escenarios...</div>
+                    <div v-else-if="reportData" class="results-container">
+                        <div class="scenario-table">
+                            <h4>📊 Comparación Final</h4>
+                            <table>
+                                <tbody>
+                                    <tr><td>Ruta Normal (1 → Fin)</td><td>{{ reportData.normal.totalMiles }} mi</td><td>-</td></tr>
+                                    <tr class="highlight">
+                                        <td><strong>Ruta Inversa (Fin → 1)</strong></td>
+                                        <td><strong>{{ reportData.inverse.totalMiles }} mi</strong></td>
+                                        <td><strong class="savings">{{ reportData.savings > 0 ? `-${reportData.savings}` : `+${Math.abs(reportData.savings)}` }} mi</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <hr>
+                        <div class="result-block">
+                            <h4>➡️ Desglose Ruta Normal</h4>
+                            <p>Hacia 1ra Parada: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
+                            <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
+                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
+                                    <span class="calc-details">({{ segment.stopsCount }} paradas | {{ segment.aptCount }} aptos | {{ segment.downtownCount }} DT)</span>
+                                </p>
+                            </div>
+                            <hr class="dotted-hr">
+                            <p class="total-time"><strong>Total Trabajo: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
+                            <p>Hacia Destino Final: <strong>{{ reportData.normal.toEnd.duration }} min - {{ reportData.normal.toEnd.distance }} mi</strong></p>
+                            <hr class="dotted-hr">
+                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
+                        </div>
+                         <div v-if="scenarioETAs?.normal" class="result-block eta-block">
+                             <h4>⏱️ Estimaciones Llegada (Ruta Normal)</h4>
+                             <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.normal.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.optimistic.totalDuration }} min)</span></div>
+                             <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.normal.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.normal.totalDuration }} min)</span></div>
+                             <div class="eta-scenario"><span class="eta-label pessimistic">Pesimista:</span><strong class="eta-time">{{ scenarioETAs.normal.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.pessimistic.totalDuration }} min)</span></div>
+                        </div>
+                        <hr>
+                         <div class="result-block inverse-block">
+                            <h4>⬅️ Desglose Ruta Inversa</h4>
+                            <p>Hacia Última Parada: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
+                            <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
+                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
+                                     <span class="calc-details">({{ segment.stopsCount }} paradas | {{ segment.aptCount }} aptos | {{ segment.downtownCount }} DT)</span>
+                                </p>
+                            </div>
+                            <hr class="dotted-hr">
+                            <p class="total-time"><strong>Total Trabajo: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
+                            <p>Desde 1ra Parada a Destino: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
+                            <hr class="dotted-hr">
+                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.inverse.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
+                        </div>
+                         <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
+                             <h4>⏱️ Estimaciones Llegada (Ruta Inversa)</h4>
+                             <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.optimistic.totalDuration }} min)</span></div>
+                             <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.inverse.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.normal.totalDuration }} min)</span></div>
+                             <div class="eta-scenario"><span class="eta-label pessimistic">Pesimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
+                        </div>
+                    </div>
+                    <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <style scoped>
-    /* Add style for missing stops */
-    .missing-stop .address-input {
-        border-color: #f8d7da; /* Light red border */
-        background-color: #fff3f4; /* Lighter red background */
-    }
-    .missing-stop .stop-number-input {
-        border-color: #f8d7da;
-         background-color: #fff3f4;
-    }
-    /* Rest of the styles remain exactly the same */
+    /* Styles remain unchanged */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
@@ -162,6 +203,7 @@ async function sendToBackend() { /* ... unchanged ... */ }
     .ordered-list { list-style-type: none; padding-left: 0; }
     li.editable-item { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: #333; }
     .editable-item { display: flex; align-items: center; gap: 5px; }
+    .missing-stop .address-input, .missing-stop .stop-number-input { border-color: #f8d7da; background-color: #fff3f4; }
     .stop-number-input { width: 50px; padding: 8px; font-size: 1em; text-align: center; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; }
     .address-input { flex-grow: 1; padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; }
     .downtown-label { display: flex; align-items: center; cursor: pointer; font-size: 0.9em; color: #6c757d; padding: 0 5px; }
@@ -171,6 +213,7 @@ async function sendToBackend() { /* ... unchanged ... */ }
     .button-add { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; padding: 10px; flex-grow: 1; cursor: pointer; border-radius: 5px; }
     .button-reorder { background-color: #d1e7fd; color: #0c5460; border: 1px solid #bee5eb; padding: 10px; flex-grow: 1; cursor: pointer; font-weight: bold; }
     .button-map { display: block; width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; }
+    .button-map:disabled { background-color: #6c757d; cursor: not-allowed; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
     .results-container { margin-top: 20px; padding: 15px; background-color: #f7f9fc; border: 1px solid #e1e8ed; border-radius: 8px; color: #212529; }
     .result-block { padding: 20px 0 10px 0; }
