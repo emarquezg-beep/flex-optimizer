@@ -24,22 +24,20 @@ const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
 // --- PROPIEDADES COMPUTADAS ---
-
-// Calcula el desglose detallado (sin cambios)
-const reportData = computed(() => { /* ... sin cambios ... */
+const reportData = computed(() => {
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
     let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBlockStopTime = 0;
     const processedSegments = segments.map(seg => {
         let stopTime = 0; let aptCount = 0;
-        seg.stops.forEach(addr => {
+        (seg.stops || []).forEach(addr => { // Added || [] for safety
             stopTime += 1.5;
-            if (addr.toUpperCase().match(/APT|UNIT|#/)) { aptCount++; stopTime += 1.5; }
+            if (addr && addr.toUpperCase().match(/APT|UNIT|#/)) { aptCount++; stopTime += 1.5; }
         });
         totalBlockMiles += parseFloat(seg.distance || 0);
         totalBlockDriveDuration += parseFloat(seg.duration || 0);
         totalBlockStopTime += stopTime;
-        return { ...seg, stopTime, aptCount };
+        return { ...seg, stopTime, aptCount, stopsCount: (seg.stops || []).length }; // Added stopsCount
     });
     const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
     const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
@@ -57,6 +55,13 @@ const reportData = computed(() => { /* ... sin cambios ... */
     const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBlockStopTime;
     const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
     const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
+
+    // Base data for ETA calculation
+    const baseDriveDuration = toFirstStopDur + totalBlockDriveDuration;
+    const commuteDuration = toFinalDestDur;
+    const stopCount = processedSegments.reduce((sum, seg) => sum + seg.stopsCount, 0);
+    const apartmentCount = processedSegments.reduce((sum, seg) => sum + seg.aptCount, 0);
+
     return {
         savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
         normal: {
@@ -67,15 +72,11 @@ const reportData = computed(() => { /* ... sin cambios ... */
             totalWorkDuration: Math.round(totalWorkDuration),
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
-            // Pasamos datos base para cálculo de escenarios
-            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
-            commuteDuration: toFinalDestDur,
-            stopCount: segments.reduce((sum, seg) => sum + seg.stops.length, 0),
-            apartmentCount: segments.reduce((sum, seg) => sum + seg.aptCount, 0),
+            baseDriveDuration, commuteDuration, stopCount, apartmentCount // Pass base data
         },
         inverse: {
             toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
-            segments: processedSegments, // Los segmentos son los mismos
+            segments: processedSegments,
             toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
             totalWorkMiles: totalInverseWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalInverseWorkDuration),
@@ -85,20 +86,29 @@ const reportData = computed(() => { /* ... sin cambios ... */
     };
 });
 
-// ¡NUEVA PROPIEDAD COMPUTADA PARA ESCENARIOS Y ETA!
+// ¡PROPIEDAD COMPUTADA PARA ESCENARIOS Y ETA (CORREGIDA)!
 const scenarioETAs = computed(() => {
-    if (!reportData.value) return null;
+    if (!reportData.value?.normal) return null; // Check if normal route data exists
 
-    const { baseDriveDuration, commuteDuration, stopCount, apartmentCount } = reportData.value.normal;
+    // Ensure all base durations are valid numbers, default to 0 otherwise
+    const baseDrive = Number(reportData.value.normal.baseDriveDuration) || 0;
+    const commute = Number(reportData.value.normal.commuteDuration) || 0;
+    const stopCount = Number(reportData.value.normal.stopCount) || 0;
+    const apartmentCount = Number(reportData.value.normal.apartmentCount) || 0;
     const now = new Date();
 
     const calculateScenario = (multiplier) => {
-        const stopTime = (stopCount * multiplier) + (apartmentCount * 1.5); // Tiempo total en paradas para este escenario
-        const totalDuration = baseDriveDuration + stopTime + commuteDuration;
-        const eta = new Date(now.getTime() + totalDuration * 60000); // Sumamos minutos en milisegundos
+        const stopTime = (stopCount * multiplier) + (apartmentCount * 1.5);
+        // Ensure totalDuration is a number before creating Date
+        const totalDuration = baseDrive + stopTime + commute;
+        if (isNaN(totalDuration)) {
+             console.error("Failed ETA calculation: totalDuration is NaN", {baseDrive, stopTime, commute});
+             return { totalDuration: 'N/A', eta: 'Error' };
+        }
+        const eta = new Date(now.getTime() + totalDuration * 60000);
         return {
             totalDuration: Math.round(totalDuration),
-            eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) // Formato HH:MM AM/PM
+            eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
     };
 
@@ -251,7 +261,7 @@ async function sendToBackend() {
                             <h4>➡️ Desglose Ruta Normal</h4>
                             <p>Hacia 1ra Parada: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
                             <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
-                                <p>Segmento {{ index + 1 }}: <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stops.length }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
+                                <p>Segmento {{ index + 1 }}: <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stopsCount }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
                             </div>
                             <hr class="dotted-hr">
                             <p class="total-time"><strong>Total Trabajo: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
@@ -263,19 +273,19 @@ async function sendToBackend() {
                         <div v-if="scenarioETAs" class="result-block eta-block">
                              <h4>⏱️ Estimaciones de Llegada (Ruta Normal)</h4>
                              <div class="eta-scenario">
-                                 <span class="eta-label optimistic">Optimista (0.90 min/parada):</span>
+                                 <span class="eta-label optimistic">Optimista (0.90):</span>
                                  <strong class="eta-time">{{ scenarioETAs.optimistic.eta }}</strong>
-                                 <span class="eta-duration">({{ scenarioETAs.optimistic.totalDuration }} min total)</span>
+                                 <span class="eta-duration">({{ scenarioETAs.optimistic.totalDuration }} min)</span>
                              </div>
                              <div class="eta-scenario">
-                                 <span class="eta-label normal">Normal (1.10 min/parada):</span>
+                                 <span class="eta-label normal">Normal (1.10):</span>
                                  <strong class="eta-time">{{ scenarioETAs.normal.eta }}</strong>
-                                 <span class="eta-duration">({{ scenarioETAs.normal.totalDuration }} min total)</span>
+                                 <span class="eta-duration">({{ scenarioETAs.normal.totalDuration }} min)</span>
                              </div>
                              <div class="eta-scenario">
-                                 <span class="eta-label pessimistic">Pesimista (1.50 min/parada):</span>
+                                 <span class="eta-label pessimistic">Pesimista (1.50):</span>
                                  <strong class="eta-time">{{ scenarioETAs.pessimistic.eta }}</strong>
-                                 <span class="eta-duration">({{ scenarioETAs.pessimistic.totalDuration }} min total)</span>
+                                 <span class="eta-duration">({{ scenarioETAs.pessimistic.totalDuration }} min)</span>
                              </div>
                         </div>
                     </div>
@@ -287,7 +297,6 @@ async function sendToBackend() {
 </template>
 
 <style scoped>
-    /* Estilos base sin cambios... */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
@@ -327,13 +336,11 @@ async function sendToBackend() {
     .scenario-table th, .scenario-table td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
     .scenario-table .highlight { background-color: #e7f5ff; }
     .savings { color: #28a745; }
-
-    /* ¡NUEVOS ESTILOS PARA EL PANEL ETA! */
     .eta-block { background-color: #e6f7ff; margin: 0 -15px -15px -15px; padding: 20px 15px 15px 15px; border-radius: 0 0 8px 8px;}
     .eta-block h4 { color: #0056b3; }
     .eta-scenario { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #b0e0e6; }
     .eta-scenario:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    .eta-label { display: inline-block; width: 220px; font-weight: bold; }
+    .eta-label { display: inline-block; width: 150px; /* Ajustado para que quepa mejor */ font-weight: bold; }
     .eta-label.optimistic { color: #28a745; }
     .eta-label.normal { color: #ffc107; }
     .eta-label.pessimistic { color: #dc3545; }
