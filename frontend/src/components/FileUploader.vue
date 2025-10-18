@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES Y DATOS (sin cambios) ---
+// --- STATE & DATA (Unchanged) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,34 +23,22 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDADES COMPUTADAS CORREGIDAS ---
-const reportData = computed(() => {
+// --- COMPUTED PROPERTIES (Unchanged) ---
+const reportData = computed(() => { /* ... unchanged ... */
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
-
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
-
-    let totalBlockMiles = 0;
-    let totalBlockDriveDuration = 0;
-    let totalBlockStopTime = 0; // Added to calculate total stop time correctly
-
+    let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBlockStopTime = 0;
     const processedSegments = segments.map(seg => {
-        let stopTime = 0;
-        let aptCount = 0;
+        let stopTime = 0; let aptCount = 0;
         seg.stops.forEach(addr => {
             stopTime += 1.5;
-            if (addr.toUpperCase().match(/APT|UNIT|#/)) {
-                aptCount++;
-                stopTime += 1.5;
-            }
+            if (addr.toUpperCase().match(/APT|UNIT|#/)) { aptCount++; stopTime += 1.5; }
         });
-        // Ensure values are numbers before adding
         totalBlockMiles += parseFloat(seg.distance || 0);
         totalBlockDriveDuration += parseFloat(seg.duration || 0);
-        totalBlockStopTime += stopTime; // Sum stop times here
+        totalBlockStopTime += stopTime;
         return { ...seg, stopTime, aptCount };
     });
-
-    // Ensure initial leg values are numbers
     const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
     const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
     const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
@@ -59,25 +47,16 @@ const reportData = computed(() => {
     const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
     const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
     const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
-
-
-    // Normal Route Calculations
     const totalWorkMiles = toFirstStopDist + totalBlockMiles;
-    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBlockStopTime; // Add stop time here
+    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBlockStopTime;
     const totalNormalMiles = totalWorkMiles + toFinalDestDist;
     const totalNormalDuration = totalWorkDuration + toFinalDestDur;
-
-    // Inverse Route Calculations
     const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
-    const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBlockStopTime; // Add stop time here
+    const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBlockStopTime;
     const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
     const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
-
-
     return {
-        // Comparison data
         savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
-        // Normal route report
         normal: {
             toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
             segments: processedSegments,
@@ -87,10 +66,9 @@ const reportData = computed(() => {
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
         },
-        // Inverse route report
         inverse: {
             toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
-            segments: processedSegments, // Segments are the same for calculation
+            segments: processedSegments,
             toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
             totalWorkMiles: totalInverseWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalInverseWorkDuration),
@@ -100,11 +78,14 @@ const reportData = computed(() => {
     };
 });
 
-// --- FUNCIONES (sin cambios) ---
+
+// --- EDITING FUNCTIONS (Unchanged) ---
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() { extractedAddresses.value.push({ number: null, address: '' }); }
 function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
-function preprocessImage(file) {
+
+// --- PROCESSING FUNCTIONS ---
+function preprocessImage(file) { /* ... unchanged ... */
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
     const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
@@ -118,30 +99,55 @@ function preprocessImage(file) {
     }; img.src = e.target.result; }; reader.readAsDataURL(file);
   });
 }
+
+// --- PARSER v14: STRICT CITY PARSING ---
 function parseAddresses(rawText) {
-  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
+  console.log("Iniciando limpieza v14 (Strict City)...");
+  const stops = [];
+  const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
+
   const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
   let match;
+
   while ((match = pattern.exec(rawText)) !== null) {
     const stopNumber = parseInt(match[1]);
     const textBlock = match[2];
     const addressPattern = /(\d{3,5}\s[A-Z].*)/;
     const addressMatch = textBlock.match(addressPattern);
+
     if (addressMatch) {
-      let street = addressMatch[1].trim(); let city = '';
+      let street = addressMatch[1].trim();
+      let city = ''; // Reset city for each stop
+
       const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
       if (lines.length > 1) {
         let nextLine = lines[1].trim();
-        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
-        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
+        for (const word of stopWords) {
+          if (nextLine.includes(word)) {
+            nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim();
+          }
+        }
+        // ONLY if we find a valid city line, we assign it
+        if (nextLine.length > 3) {
+          city = nextLine;
+        }
       }
-      if (!city) { city = lastKnownCity; }
-      stops.push({ number: stopNumber, address: `${street} ${city}` });
+
+      // ONLY build the address string if BOTH street and city were found
+      if (street && city) {
+        stops.push({ number: stopNumber, address: `${street} ${city}` });
+      } else {
+        // If city is missing, push the street part only, so user can edit it
+        stops.push({ number: stopNumber, address: street });
+         console.warn(`Stop ${stopNumber}: City not found, adding street only: "${street}"`);
+      }
     }
   }
   return stops;
 }
-async function handleFileChange(event) {
+
+
+async function handleFileChange(event) { /* ... unchanged ... */
   const files = event.target.files; if (!files.length) return;
   isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null; 
   let allParsedStops = [];
@@ -156,11 +162,11 @@ async function handleFileChange(event) {
   extractedAddresses.value = uniqueStops;
   isProcessing.value = false;
 }
-function sanitizeAddress(address) {
+function sanitizeAddress(address) { /* ... unchanged ... */
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
-async function sendToBackend() {
+async function sendToBackend() { /* ... unchanged ... */
   const addressesToSend = extractedAddresses.value.map(stop => stop.address);
   const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
   if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
