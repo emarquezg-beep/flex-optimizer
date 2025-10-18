@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES Y DATOS (sin cambios) ---
+// --- STATE & DATA (Unchanged) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,22 +23,39 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDADES COMPUTADAS ---
+// --- COMPUTED PROPERTIES (Updated to expose inverse base data) ---
 const reportData = computed(() => {
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
+
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
-    let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBlockStopTime = 0;
+    
+    let totalBlockMiles = 0;
+    let totalBlockDriveDuration = 0;
+    let totalBlockStopTime = 0;
+    let totalApartmentCount = 0;
+    let totalStopCount = 0;
+
     const processedSegments = segments.map(seg => {
-        let stopTime = 0; let aptCount = 0;
-        (seg.stops || []).forEach(addr => { // Added || [] for safety
+        let stopTime = 0;
+        let aptCount = 0;
+        const currentStopCount = (seg.stops || []).length;
+        totalStopCount += currentStopCount;
+
+        (seg.stops || []).forEach(addr => {
             stopTime += 1.5;
-            if (addr && addr.toUpperCase().match(/APT|UNIT|#/)) { aptCount++; stopTime += 1.5; }
+            if (addr && addr.toUpperCase().match(/APT|UNIT|#/)) {
+                aptCount++;
+                stopTime += 1.5;
+            }
         });
+        totalApartmentCount += aptCount;
         totalBlockMiles += parseFloat(seg.distance || 0);
         totalBlockDriveDuration += parseFloat(seg.duration || 0);
         totalBlockStopTime += stopTime;
-        return { ...seg, stopTime, aptCount, stopsCount: (seg.stops || []).length }; // Added stopsCount
+        return { ...seg, stopTime, aptCount, stopsCount: currentStopCount };
     });
+
+    // Ensure initial leg values are numbers
     const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
     const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
     const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
@@ -47,20 +64,18 @@ const reportData = computed(() => {
     const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
     const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
     const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
+
+    // Normal Route Calculations
     const totalWorkMiles = toFirstStopDist + totalBlockMiles;
     const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBlockStopTime;
     const totalNormalMiles = totalWorkMiles + toFinalDestDist;
     const totalNormalDuration = totalWorkDuration + toFinalDestDur;
+
+    // Inverse Route Calculations
     const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
     const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBlockStopTime;
     const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
     const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
-
-    // Base data for ETA calculation
-    const baseDriveDuration = toFirstStopDur + totalBlockDriveDuration;
-    const commuteDuration = toFinalDestDur;
-    const stopCount = processedSegments.reduce((sum, seg) => sum + seg.stopsCount, 0);
-    const apartmentCount = processedSegments.reduce((sum, seg) => sum + seg.aptCount, 0);
 
     return {
         savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
@@ -72,7 +87,9 @@ const reportData = computed(() => {
             totalWorkDuration: Math.round(totalWorkDuration),
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
-            baseDriveDuration, commuteDuration, stopCount, apartmentCount // Pass base data
+            // Base data for ETA
+            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
+            commuteDuration: toFinalDestDur,
         },
         inverse: {
             toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
@@ -82,27 +99,28 @@ const reportData = computed(() => {
             totalWorkDuration: Math.round(totalInverseWorkDuration),
             totalMiles: totalInverseMiles.toFixed(2),
             totalDuration: Math.round(totalInverseDuration),
-        }
+            // Base data for ETA
+            baseDriveDuration: toLastStopDur + totalBlockDriveDuration,
+            commuteDuration: fromFirstStopDur,
+        },
+        // Common data for ETA
+        stopCount: totalStopCount,
+        apartmentCount: totalApartmentCount,
     };
 });
 
-// ¡PROPIEDAD COMPUTADA PARA ESCENARIOS Y ETA (CORREGIDA)!
+// UPDATED: Calculates ETA for BOTH scenarios
 const scenarioETAs = computed(() => {
-    if (!reportData.value?.normal) return null; // Check if normal route data exists
+    if (!reportData.value?.normal || !reportData.value?.inverse) return null;
 
-    // Ensure all base durations are valid numbers, default to 0 otherwise
-    const baseDrive = Number(reportData.value.normal.baseDriveDuration) || 0;
-    const commute = Number(reportData.value.normal.commuteDuration) || 0;
-    const stopCount = Number(reportData.value.normal.stopCount) || 0;
-    const apartmentCount = Number(reportData.value.normal.apartmentCount) || 0;
+    const stopCount = Number(reportData.value.stopCount) || 0;
+    const apartmentCount = Number(reportData.value.apartmentCount) || 0;
     const now = new Date();
 
-    const calculateScenario = (multiplier) => {
+    const calculateScenario = (baseDrive, commute, multiplier) => {
         const stopTime = (stopCount * multiplier) + (apartmentCount * 1.5);
-        // Ensure totalDuration is a number before creating Date
-        const totalDuration = baseDrive + stopTime + commute;
+        const totalDuration = (Number(baseDrive) || 0) + stopTime + (Number(commute) || 0);
         if (isNaN(totalDuration)) {
-             console.error("Failed ETA calculation: totalDuration is NaN", {baseDrive, stopTime, commute});
              return { totalDuration: 'N/A', eta: 'Error' };
         }
         const eta = new Date(now.getTime() + totalDuration * 60000);
@@ -112,15 +130,27 @@ const scenarioETAs = computed(() => {
         };
     };
 
+    const normalBaseDrive = reportData.value.normal.baseDriveDuration;
+    const normalCommute = reportData.value.normal.commuteDuration;
+    const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
+    const inverseCommute = reportData.value.inverse.commuteDuration;
+
     return {
-        optimistic: calculateScenario(0.90),
-        normal: calculateScenario(1.10),
-        pessimistic: calculateScenario(1.50)
+        normal: {
+            optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
+            normal: calculateScenario(normalBaseDrive, normalCommute, 1.10),
+            pessimistic: calculateScenario(normalBaseDrive, normalCommute, 1.50)
+        },
+        inverse: {
+            optimistic: calculateScenario(inverseBaseDrive, inverseCommute, 0.90),
+            normal: calculateScenario(inverseBaseDrive, inverseCommute, 1.10),
+            pessimistic: calculateScenario(inverseBaseDrive, inverseCommute, 1.50)
+        }
     };
 });
 
 
-// --- FUNCIONES (sin cambios) ---
+// --- FUNCTIONS (Unchanged) ---
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() { extractedAddresses.value.push({ number: null, address: '' }); }
 function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
@@ -269,24 +299,30 @@ async function sendToBackend() {
                             <hr class="dotted-hr">
                             <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
                         </div>
+                         <div v-if="scenarioETAs?.normal" class="result-block eta-block">
+                             <h4>⏱️ Estimaciones Llegada (Ruta Normal)</h4>
+                             <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.normal.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.optimistic.totalDuration }} min)</span></div>
+                             <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.normal.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.normal.totalDuration }} min)</span></div>
+                             <div class="eta-scenario"><span class="eta-label pessimistic">Pesimista:</span><strong class="eta-time">{{ scenarioETAs.normal.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.pessimistic.totalDuration }} min)</span></div>
+                        </div>
                         <hr>
-                        <div v-if="scenarioETAs" class="result-block eta-block">
-                             <h4>⏱️ Estimaciones de Llegada (Ruta Normal)</h4>
-                             <div class="eta-scenario">
-                                 <span class="eta-label optimistic">Optimista (0.90):</span>
-                                 <strong class="eta-time">{{ scenarioETAs.optimistic.eta }}</strong>
-                                 <span class="eta-duration">({{ scenarioETAs.optimistic.totalDuration }} min)</span>
-                             </div>
-                             <div class="eta-scenario">
-                                 <span class="eta-label normal">Normal (1.10):</span>
-                                 <strong class="eta-time">{{ scenarioETAs.normal.eta }}</strong>
-                                 <span class="eta-duration">({{ scenarioETAs.normal.totalDuration }} min)</span>
-                             </div>
-                             <div class="eta-scenario">
-                                 <span class="eta-label pessimistic">Pesimista (1.50):</span>
-                                 <strong class="eta-time">{{ scenarioETAs.pessimistic.eta }}</strong>
-                                 <span class="eta-duration">({{ scenarioETAs.pessimistic.totalDuration }} min)</span>
-                             </div>
+                         <div class="result-block inverse-block">
+                            <h4>⬅️ Desglose Ruta Inversa</h4>
+                            <p>Hacia Última Parada: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
+                            <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
+                                <p>Segmento {{ index + 1 }} (datos): <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stopsCount }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
+                            </div>
+                            <hr class="dotted-hr">
+                            <p class="total-time"><strong>Total Trabajo: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
+                            <p>Desde 1ra Parada a Destino: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
+                            <hr class="dotted-hr">
+                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.inverse.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
+                        </div>
+                         <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
+                             <h4>⏱️ Estimaciones Llegada (Ruta Inversa)</h4>
+                             <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.optimistic.totalDuration }} min)</span></div>
+                             <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.inverse.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.normal.totalDuration }} min)</span></div>
+                             <div class="eta-scenario"><span class="eta-label pessimistic">Pesimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
                         </div>
                     </div>
                     <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
@@ -320,7 +356,7 @@ async function sendToBackend() {
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
     .results-container { margin-top: 20px; padding: 15px; background-color: #f7f9fc; border: 1px solid #e1e8ed; border-radius: 8px; color: #212529; }
     .result-block { padding: 20px 0 10px 0; }
-    .result-block.inverse-block { background-color: #fff9e6; margin: 0 -15px -15px -15px; padding: 20px 15px 15px 15px; border-radius: 0 0 8px 8px;}
+    .result-block.inverse-block { background-color: #fffaf0; margin: 0 -15px -15px -15px; padding: 20px 15px 0px 15px; border-radius: 0 0 8px 8px;} /* Adjusted padding */
     .result-block h4 { margin: 0 0 15px 0; color: #495057; }
     .result-block p { margin: 5px 0; font-size: 1.1em; color: #212529; }
     .segment-breakdown { padding-left: 15px; border-left: 2px solid #dee2e6; margin-left: 5px; margin-top: 10px; }
@@ -336,11 +372,12 @@ async function sendToBackend() {
     .scenario-table th, .scenario-table td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
     .scenario-table .highlight { background-color: #e7f5ff; }
     .savings { color: #28a745; }
-    .eta-block { background-color: #e6f7ff; margin: 0 -15px -15px -15px; padding: 20px 15px 15px 15px; border-radius: 0 0 8px 8px;}
+    .eta-block { background-color: #e6f7ff; margin: 0 -15px -15px -15px; padding: 20px 15px 15px 15px; border-radius: 0 0 8px 8px; border-top: 1px solid #ddd;}
+    .eta-block.inverse-eta { background-color: #fffaf0; } /* Slightly different background for inverse */
     .eta-block h4 { color: #0056b3; }
     .eta-scenario { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #b0e0e6; }
     .eta-scenario:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    .eta-label { display: inline-block; width: 150px; /* Ajustado para que quepa mejor */ font-weight: bold; }
+    .eta-label { display: inline-block; width: 100px; /* Adjusted width */ font-weight: bold; }
     .eta-label.optimistic { color: #28a745; }
     .eta-label.normal { color: #ffc107; }
     .eta-label.pessimistic { color: #dc3545; }
