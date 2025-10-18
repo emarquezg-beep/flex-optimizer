@@ -23,14 +23,15 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDADES COMPUTADAS MEJORADAS ---
+// --- PROPIEDADES COMPUTADAS CORREGIDAS ---
 const reportData = computed(() => {
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
 
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
-    
+
     let totalBlockMiles = 0;
     let totalBlockDriveDuration = 0;
+    let totalBlockStopTime = 0; // Added to calculate total stop time correctly
 
     const processedSegments = segments.map(seg => {
         let stopTime = 0;
@@ -42,41 +43,55 @@ const reportData = computed(() => {
                 stopTime += 1.5;
             }
         });
-        totalBlockMiles += parseFloat(seg.distance);
-        totalBlockDriveDuration += parseFloat(seg.duration);
+        // Ensure values are numbers before adding
+        totalBlockMiles += parseFloat(seg.distance || 0);
+        totalBlockDriveDuration += parseFloat(seg.duration || 0);
+        totalBlockStopTime += stopTime; // Sum stop times here
         return { ...seg, stopTime, aptCount };
     });
 
-    const totalWorkMiles = parseFloat(toFirstStop.distance) + totalBlockMiles;
-    const totalWorkDuration = parseFloat(toFirstStop.duration) + totalBlockDriveDuration + segments.reduce((sum, seg) => sum + seg.stopTime, 0);
+    // Ensure initial leg values are numbers
+    const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
+    const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
+    const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
+    const toFinalDestDur = parseFloat(toFinalDestination.duration || 0);
+    const toLastStopDist = parseFloat(inverseRouteLegs.toLastStop.distance || 0);
+    const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
+    const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
+    const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
 
-    const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance);
-    const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration);
 
-    // Cálculo de ruta inversa
-    const totalInverseWorkMiles = parseFloat(inverseRouteLegs.toLastStop.distance) + totalBlockMiles;
-    const totalInverseWorkDuration = parseFloat(inverseRouteLegs.toLastStop.duration) + totalBlockDriveDuration + segments.reduce((sum, seg) => sum + seg.stopTime, 0);
-    const totalInverseMiles = totalInverseWorkMiles + parseFloat(inverseRouteLegs.fromFirstStop.distance);
-    const totalInverseDuration = totalInverseWorkDuration + parseFloat(inverseRouteLegs.fromFirstStop.duration);
+    // Normal Route Calculations
+    const totalWorkMiles = toFirstStopDist + totalBlockMiles;
+    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBlockStopTime; // Add stop time here
+    const totalNormalMiles = totalWorkMiles + toFinalDestDist;
+    const totalNormalDuration = totalWorkDuration + toFinalDestDur;
+
+    // Inverse Route Calculations
+    const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
+    const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBlockStopTime; // Add stop time here
+    const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
+    const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
+
 
     return {
-        // Datos para la tabla de comparación principal
+        // Comparison data
         savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
-        // Informe detallado de la ruta normal
+        // Normal route report
         normal: {
-            toStart: toFirstStop,
+            toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
             segments: processedSegments,
-            toEnd: toFinalDestination,
+            toEnd: { distance: toFinalDestDist.toFixed(2), duration: Math.round(toFinalDestDur) },
             totalWorkMiles: totalWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalWorkDuration),
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
         },
-        // Informe detallado de la ruta inversa
+        // Inverse route report
         inverse: {
-            toStart: inverseRouteLegs.toLastStop,
-            segments: processedSegments,
-            toEnd: inverseRouteLegs.fromFirstStop,
+            toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
+            segments: processedSegments, // Segments are the same for calculation
+            toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
             totalWorkMiles: totalInverseWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalInverseWorkDuration),
             totalMiles: totalInverseMiles.toFixed(2),
@@ -225,7 +240,7 @@ async function sendToBackend() {
                         <div class="result-block">
                             <h4>➡️ Desglose Ruta Normal</h4>
                             <p>Hacia 1ra Parada: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
-                            <div v-for="(segment, index) in reportData.normal.segments" :key="index" class="segment-breakdown">
+                            <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
                                 <p>Segmento {{ index + 1 }}: <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stops.length }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
                             </div>
                             <hr class="dotted-hr">
@@ -238,8 +253,8 @@ async function sendToBackend() {
                         <div class="result-block inverse-block">
                             <h4>⬅️ Desglose Ruta Inversa</h4>
                             <p>Hacia Última Parada: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
-                            <div v-for="(segment, index) in reportData.inverse.segments" :key="index" class="segment-breakdown">
-                                <p>Segmento {{ index + 1 }} (inverso): <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stops.length }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
+                            <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
+                                <p>Segmento {{ index + 1 }} (datos): <strong>{{ segment.duration }} min</strong> + {{ segment.stopTime }} min <span class="calc-details">({{ segment.stops.length }} paradas, {{ segment.aptCount }} aptos)</span> - <strong>{{ segment.distance }} mi</strong></p>
                             </div>
                             <hr class="dotted-hr">
                             <p class="total-time"><strong>Total Trabajo: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
