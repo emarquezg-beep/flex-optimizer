@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
 // --- STATE & DATA ---
-const extractedAddresses = ref([]);
+const extractedAddresses = ref([]); // Holds objects { number, address, isDowntown }
 const isProcessing = ref(false);
 const backendResponse = ref(null);
 const warehouses = [
@@ -25,45 +25,86 @@ const customDestination = ref('');
 
 // --- COMPUTED PROPERTIES ---
 const reportData = computed(() => {
-    if (!backendResponse.value || !backendResponse.value.segments) { return null; }
-    const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
-    let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBlockStopTime = 0;
-    let totalApartmentCount = 0; let totalDowntownCount = 0; let totalStopCount = 0;
-    const processedSegments = segments.map(seg => {
-        let stopTime = 0; let aptCount = 0; let downtownCount = 0;
-        const currentStopCount = (seg.stops || []).length;
+    // Safety check for backend response and necessary data
+    if (!backendResponse.value?.scenarioData?.segments ||
+        !backendResponse.value?.scenarioData?.toFirstStop ||
+        !backendResponse.value?.scenarioData?.toFinalDestination ||
+        !backendResponse.value?.scenarioData?.inverseRouteLegs) {
+        return null;
+    }
+
+    const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value.scenarioData;
+
+    let totalBlockMiles = 0;
+    let totalBlockDriveDuration = 0;
+    let totalBlockStopTime = 0;
+    let totalApartmentCount = 0;
+    let totalDowntownCount = 0;
+    let totalStopCount = 0;
+
+    const processedSegments = (segments || []).map(seg => {
+        let stopTime = 0;
+        let aptCount = 0;
+        let downtownCount = 0;
+        const currentStops = seg?.stops || [];
+        const currentStopCount = currentStops.length;
         totalStopCount += currentStopCount;
-        (seg.stops || []).forEach(addr => {
+
+        currentStops.forEach(addr => {
+            // Find the original stop object from the editable list
             const stopData = extractedAddresses.value.find(s => s.address === addr);
             const isDowntown = stopData ? stopData.isDowntown : false;
+            // Check original address string for apt markers, even if edited
             const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
-            stopTime += 1.5;
-            if (isDowntown) { downtownCount++; stopTime += 4.5; }
-            else if (isApartment) { aptCount++; stopTime += 1.5; }
+
+            stopTime += 1.5; // Base stop time
+            if (isDowntown) {
+                downtownCount++;
+                stopTime += 4.5; // Extra Downtown time
+            } else if (isApartment) {
+                aptCount++;
+                stopTime += 1.5; // Extra Regular Apartment time
+            }
         });
-        totalApartmentCount += aptCount + downtownCount;
+
+        totalApartmentCount += aptCount + downtownCount; // Total apts = regular + DT
         totalDowntownCount += downtownCount;
-        totalBlockMiles += parseFloat(seg.distance || 0);
-        totalBlockDriveDuration += parseFloat(seg.duration || 0);
-        totalBlockStopTime += stopTime;
-        return { ...seg, stopTime, aptCount, downtownCount, stopsCount: currentStopCount };
+        totalBlockMiles += parseFloat(seg?.distance || 0);
+        totalBlockDriveDuration += parseFloat(seg?.duration || 0);
+        totalBlockStopTime += stopTime; // Accumulate calculated stop time
+
+        return {
+            distance: seg?.distance || '0.00',
+            duration: seg?.duration || 0,
+            stopTime: stopTime, // Store calculated stop time for this segment if needed later
+            aptCount: aptCount,
+            downtownCount: downtownCount,
+            stopsCount: currentStopCount
+        };
     });
-    const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
-    const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
-    const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
-    const toFinalDestDur = parseFloat(toFinalDestination.duration || 0);
-    const toLastStopDist = parseFloat(inverseRouteLegs.toLastStop.distance || 0);
-    const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
-    const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
-    const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
+
+    // Safely parse numbers, default to 0 if invalid
+    const toFirstStopDist = parseFloat(toFirstStop?.distance || 0);
+    const toFirstStopDur = parseFloat(toFirstStop?.duration || 0);
+    const toFinalDestDist = parseFloat(toFinalDestination?.distance || 0);
+    const toFinalDestDur = parseFloat(toFinalDestination?.duration || 0);
+    const toLastStopDist = parseFloat(inverseRouteLegs?.toLastStop?.distance || 0);
+    const toLastStopDur = parseFloat(inverseRouteLegs?.toLastStop?.duration || 0);
+    const fromFirstStopDist = parseFloat(inverseRouteLegs?.fromFirstStop?.distance || 0);
+    const fromFirstStopDur = parseFloat(inverseRouteLegs?.fromFirstStop?.duration || 0);
+
+    // Normal Route Calculations using accumulated values
     const totalWorkMiles = toFirstStopDist + totalBlockMiles;
     const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBlockStopTime;
     const totalNormalMiles = totalWorkMiles + toFinalDestDist;
     const totalNormalDuration = totalWorkDuration + toFinalDestDur;
+
+    // Inverse Route Calculations using accumulated values
     const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
     const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBlockStopTime;
     const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
     const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
+
     return {
         savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
         normal: {
@@ -74,8 +115,8 @@ const reportData = computed(() => {
             totalWorkDuration: Math.round(totalWorkDuration),
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
-            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
-            commuteDuration: toFinalDestDur,
+            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration, // For ETA
+            commuteDuration: toFinalDestDur, // For ETA
         },
         inverse: {
             toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
@@ -85,19 +126,22 @@ const reportData = computed(() => {
             totalWorkDuration: Math.round(totalInverseWorkDuration),
             totalMiles: totalInverseMiles.toFixed(2),
             totalDuration: Math.round(totalInverseDuration),
-            baseDriveDuration: toLastStopDur + totalBlockDriveDuration,
-            commuteDuration: fromFirstStopDur,
+            baseDriveDuration: toLastStopDur + totalBlockDriveDuration, // For ETA
+            commuteDuration: fromFirstStopDur, // For ETA
         },
         stopCount: totalStopCount,
-        apartmentCount: totalApartmentCount,
-        downtownCount: totalDowntownCount,
+        apartmentCount: totalApartmentCount, // Use total calculated apt count
+        downtownCount: totalDowntownCount, // Use total calculated DT count
     };
 });
+
 const scenarioETAs = computed(() => {
-    if (!reportData.value?.normal) return null;
+    if (!reportData.value?.normal?.baseDriveDuration || !reportData.value?.inverse?.baseDriveDuration) {
+         return null;
+    }
     const stopCount = Number(reportData.value.stopCount) || 0;
-    const apartmentCount = Number(reportData.value.apartmentCount) || 0;
-    const downtownCount = Number(reportData.value.downtownCount) || 0;
+    const apartmentCount = Number(reportData.value.apartmentCount) || 0; // Total Aptos
+    const downtownCount = Number(reportData.value.downtownCount) || 0; // Solo DT
     const regularApartmentCount = apartmentCount - downtownCount;
     const now = new Date();
     const calculateScenario = (baseDrive, commute, multiplier) => {
@@ -111,10 +155,10 @@ const scenarioETAs = computed(() => {
             eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
     };
-    const normalBaseDrive = reportData.value.normal.baseDriveDuration;
-    const normalCommute = reportData.value.normal.commuteDuration;
-    const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
-    const inverseCommute = reportData.value.inverse.commuteDuration;
+    const normalBaseDrive = Number(reportData.value.normal.baseDriveDuration) || 0;
+    const normalCommute = Number(reportData.value.normal.commuteDuration) || 0;
+    const inverseBaseDrive = Number(reportData.value.inverse.baseDriveDuration) || 0;
+    const inverseCommute = Number(reportData.value.inverse.commuteDuration) || 0;
     return {
         normal: {
             optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
@@ -129,10 +173,12 @@ const scenarioETAs = computed(() => {
     };
 });
 
+
 // --- EDITING FUNCTIONS ---
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); }
-function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
+function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); } // Handle null numbers
+
 
 // --- PROCESSING FUNCTIONS ---
 function preprocessImage(file) {
@@ -172,71 +218,47 @@ function parseAddresses(rawText) {
   }
   return stops;
 }
-
-// THIS IS THE SINGLE, CORRECT handleFileChange function
 async function handleFileChange(event) {
-  console.log("handleFileChange triggered!");
-  const files = event.target.files;
-  if (!files || files.length === 0) {
-      console.log("No files selected.");
-      return;
+  const files = event.target.files; if (!files.length) return;
+  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null;
+  let allParsedStops = [];
+  for (const file of files) {
+    const processedImage = await preprocessImage(file);
+    const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
+    const stopsFromFile = parseAddresses(text);
+    allParsedStops.push(...stopsFromFile);
   }
-  console.log(`Files selected: ${files.length}`);
-
-  try {
-      isProcessing.value = true;
-      console.log("isProcessing set to true");
-      extractedAddresses.value = [];
-      backendResponse.value = null;
-      let allParsedStops = [];
-
-      console.log("Starting file processing loop...");
-      for (const [index, file] of Array.from(files).entries()) {
-          console.log(`Processing file ${index + 1}/${files.length}: ${file.name}`);
-          const processedImage = await preprocessImage(file);
-          console.log(`File ${index + 1} preprocessed (grayscale).`);
-          const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-          console.log(`File ${index + 1} OCR complete.`);
-          const stopsFromFile = parseAddresses(text);
-          allParsedStops.push(...stopsFromFile);
-          console.log(`File ${index + 1} parsed.`);
+  const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+  let maxStopNumber = 0;
+  uniqueStopsMap.forEach(stop => {
+      if (stop.number > maxStopNumber) maxStopNumber = stop.number;
+  });
+  const fullListWithGaps = [];
+  for (let i = 1; i <= maxStopNumber; i++) {
+      if (uniqueStopsMap.has(i)) {
+          fullListWithGaps.push(uniqueStopsMap.get(i));
+      } else {
+          fullListWithGaps.push({ number: i, address: '', isDowntown: false });
       }
-      console.log("File processing loop finished.");
-
-      // Gap filling logic
-      const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
-      let maxStopNumber = 0;
-      uniqueStopsMap.forEach(stop => {
-          if (stop.number > maxStopNumber) maxStopNumber = stop.number;
-      });
-      const fullListWithGaps = [];
-      for (let i = 1; i <= maxStopNumber; i++) {
-          if (uniqueStopsMap.has(i)) {
-              fullListWithGaps.push(uniqueStopsMap.get(i));
-          } else {
-              fullListWithGaps.push({ number: i, address: '', isDowntown: false });
-          }
-      }
-      console.log("Gap filling complete.");
-
-      extractedAddresses.value = fullListWithGaps;
-      console.log("extractedAddresses updated.");
-
-  } catch (error) {
-      console.error("Error during handleFileChange:", error);
-  } finally {
-      isProcessing.value = false;
-      console.log("isProcessing set to false.");
   }
+  extractedAddresses.value = fullListWithGaps;
+  isProcessing.value = false;
 }
-
 function sanitizeAddress(address) {
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#,\-]/g, '').replace(/\s+/g, ' ').trim();
 }
 async function sendToBackend() {
+  // --- VALIDATION ADDED HERE ---
+  const invalidStop = extractedAddresses.value.find(stop => !stop.address || stop.address.trim() === '');
+  if (invalidStop) {
+      alert(`¡Epa! Parece que te falta completar la dirección para la parada #${invalidStop.number}. Por favor, revísala.`);
+      return; // Stop if any address is empty
+  }
+  // --- END VALIDATION ---
+
   const addressesToSend = extractedAddresses.value.map(stop => stop.address);
-  const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
+  const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr);
   if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
   const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
@@ -281,11 +303,11 @@ async function sendToBackend() {
 
             <div class="address-list">
                 <h2 v-if="!backendResponse">📝 Revisa y Edita las Paradas ({{ extractedAddresses.length }})</h2>
-                <h2 v-else>🗺️ Ruta Calculada ({{ optimizedDisplayList.length }} paradas)</h2>
+                <h2 v-else>🗺️ Ruta Calculada ({{ extractedAddresses.length }})</h2>
                 <ol class="ordered-list">
                     <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item" :class="{ 'missing-stop': !stop.address }">
-                        <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#" :disabled="!!stop.address">
-                        <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección faltante...">
+                        <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#" :disabled="!!stop.address && stop.address !== ''">
+                        <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección faltante..." :disabled="!!backendResponse">
                         <label class="downtown-label" title="Marcar si es Downtown">
                             <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox" :disabled="!!backendResponse"> DT
                         </label>
