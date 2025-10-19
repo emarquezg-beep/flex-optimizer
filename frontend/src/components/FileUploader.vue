@@ -275,6 +275,17 @@ async function sendToBackend() {
     backendResponse.value = { error: 'Error: No se pudo conectar al servidor.' };
   }
 }
+// --- ¡NUEVA FUNCIÓN DE RESET! ---
+function resetApp() {
+    extractedAddresses.value = [];
+    backendResponse.value = null;
+    customDestination.value = '';
+    // Increment the key forces Vue to re-render the file input, clearing it
+    fileInputKey.value += 1;
+    // Reset dropdowns to default if needed
+    // selectedWarehouse.value = warehouses[0].address;
+    // selectedDestination.value = destinations.value[0].address;
+}
 </script>
 
 <template>
