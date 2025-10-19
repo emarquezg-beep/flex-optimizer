@@ -173,8 +173,8 @@ const scenarioETAs = computed(() => {
 
 // --- FUNCIONES (sin cambios) ---
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
-function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); } 
-function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
+function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); }
+function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); }
 function preprocessImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
@@ -212,20 +212,35 @@ function parseAddresses(rawText) {
   }
   return stops;
 }
+// --- handleFileChange CON LÓGICA DE GAPS ---
 async function handleFileChange(event) {
   const files = event.target.files; if (!files.length) return;
-  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null; 
+  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null;
   let allParsedStops = [];
-  for (const file of files) {
-    const processedImage = await preprocessImage(file);
-    const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-    const stopsFromFile = parseAddresses(text);
-    allParsedStops.push(...stopsFromFile);
+  try {
+      for (const file of files) {
+        const processedImage = await preprocessImage(file);
+        const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
+        const stopsFromFile = parseAddresses(text);
+        allParsedStops.push(...stopsFromFile);
+      }
+      const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+      let maxStopNumber = 0;
+      uniqueStopsMap.forEach(stop => { if (stop.number > maxStopNumber) maxStopNumber = stop.number; });
+
+      // Crea la lista final con gaps, empezando desde el #2
+      const fullListWithGaps = [];
+      for (let i = 2; i <= maxStopNumber; i++) { // Bucle empieza en 2
+          if (uniqueStopsMap.has(i)) { fullListWithGaps.push(uniqueStopsMap.get(i)); }
+          else { fullListWithGaps.push({ number: i, address: '', isDowntown: false }); }
+      }
+      extractedAddresses.value = fullListWithGaps;
+  } catch(error) {
+      console.error("Error processing files:", error);
+      alert("Hubo un error procesando las imágenes. Revisa la consola.");
+  } finally {
+      isProcessing.value = false;
   }
-  const uniqueStops = Array.from(new Map(allParsedStops.map(stop => [stop.number, stop])).values());
-  uniqueStops.sort((a, b) => a.number - b.number);
-  extractedAddresses.value = uniqueStops;
-  isProcessing.value = false;
 }
 function sanitizeAddress(address) {
     if (!address) return '';
