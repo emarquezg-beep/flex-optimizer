@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- STATE & DATA (Unchanged) ---
+// --- VARIABLES Y DATOS (sin cambios) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -23,119 +23,126 @@ const selectedWarehouse = ref(warehouses[0].address);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- COMPUTED PROPERTIES (CORRECTED DATA ACCESS) ---
+// --- PROPIEDADES COMPUTADAS (ACTUALIZADAS PARA REGLA DOWNTOWN v2) ---
 const reportData = computed(() => {
-    // Check if backend response has the scenario data AND original stops
-    if (!backendResponse.value?.scenarioData || !backendResponse.value?.originalStops) {
-        return null;
-    }
+    if (!backendResponse.value || !backendResponse.value.segments) { return null; }
 
-    const { tramoA, tramoB, tramoC, tramoD, tramoX } = backendResponse.value.scenarioData;
-    const originalStops = backendResponse.value.originalStops || []; // Get the original stops list
-
-    let totalBlockStopTime = 0;
+    const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
+    
+    let totalBlockMiles = 0;
+    let totalBlockDriveDuration = 0;
+    let totalBaseStopTime = 0; // Tiempo base (1.5 min * num paradas)
+    let totalExtraStopTime = 0; // Tiempo extra (1.5 apto normal, 4.5 apto DT)
     let totalApartmentCount = 0;
     let totalDowntownCount = 0;
-    const totalStopCount = originalStops.length;
+    let totalStopCount = 0;
 
-    // Calculate stop times based on the ORIGINAL stops list
-    originalStops.forEach(addr => {
-        const stopData = extractedAddresses.value.find(s => s.address === addr); // Find data from editable list
-        const isDowntown = stopData ? stopData.isDowntown : false;
-        const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
+    const processedSegments = segments.map(seg => {
+        let segmentBaseStopTime = 0;
+        let segmentExtraStopTime = 0;
+        let aptCount = 0;
+        let downtownCount = 0;
+        const currentStopCount = (seg.stops || []).length;
+        totalStopCount += currentStopCount;
 
-        totalBlockStopTime += 1.5; // Base stop time
-        if (isDowntown) {
-            totalDowntownCount++;
-            totalBlockStopTime += 4.5; // Extra Downtown time
-        } else if (isApartment) {
-            totalApartmentCount++;
-            totalBlockStopTime += 1.5; // Extra Regular Apartment time
-        }
+        (seg.stops || []).forEach(addr => {
+            const stopData = extractedAddresses.value.find(s => s.address === addr);
+            const isDowntown = stopData ? stopData.isDowntown : false;
+            const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
+            
+            segmentBaseStopTime += 1.5; // Siempre 1.5 base
+            
+            if (isDowntown) {
+                downtownCount++;
+                segmentExtraStopTime += 4.5; // 4.5 extra por DT
+            } else if (isApartment) {
+                aptCount++;
+                segmentExtraStopTime += 1.5; // 1.5 extra por apto normal
+            }
+        });
+        
+        totalBaseStopTime += segmentBaseStopTime;
+        totalExtraStopTime += segmentExtraStopTime;
+        totalApartmentCount += aptCount + downtownCount; // Contamos todos los apartamentos
+        totalDowntownCount += downtownCount;
+
+        totalBlockMiles += parseFloat(seg.distance || 0);
+        totalBlockDriveDuration += parseFloat(seg.duration || 0);
+        
+        return { 
+            distance: seg.distance, 
+            duration: seg.duration, 
+            stopsCount: currentStopCount, 
+            aptCount: aptCount, // Apartamentos normales en este segmento
+            downtownCount: downtownCount // Apartamentos DT en este segmento
+        };
     });
 
-    // Safely parse numbers from tramos
-    const distA = parseFloat(tramoA?.distance || 0);
-    const durA = parseFloat(tramoA?.duration || 0);
-    const distB = parseFloat(tramoB?.distance || 0);
-    const durB = parseFloat(tramoB?.duration || 0);
-    const distC = parseFloat(tramoC?.distance || 0);
-    const durC = parseFloat(tramoC?.duration || 0);
-    const distD = parseFloat(tramoD?.distance || 0);
-    const durD = parseFloat(tramoD?.duration || 0);
-    const distX = parseFloat(tramoX?.distance || 0);
-    const durX = parseFloat(tramoX?.duration || 0); // This is BLOCK DRIVE DURATION
+    const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
+    const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
+    const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
+    const toFinalDestDur = parseFloat(toFinalDestination.duration || 0);
+    const toLastStopDist = parseFloat(inverseRouteLegs.toLastStop.distance || 0);
+    const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
+    const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
+    const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
 
-    // Normal Route Calculations
-    const totalWorkMiles = distA + distX;
-    const totalWorkDuration = durA + durX + totalBlockStopTime; // Add calculated stop time
-    const totalNormalMiles = totalWorkMiles + distB;
-    const totalNormalDuration = totalWorkDuration + durB;
-
-    // Inverse Route Calculations
-    const totalInverseWorkMiles = distC + distX;
-    const totalInverseWorkDuration = durC + durX + totalBlockStopTime; // Add calculated stop time
-    const totalInverseMiles = totalInverseWorkMiles + distD;
-    const totalInverseDuration = totalInverseWorkDuration + durD;
-
-    // Prepare dummy segments structure for display (using block time only)
-    // This part is simplified as the backend doesn't return segments anymore.
-    // We display total block drive time and total stop time separately.
-    const dummySegments = [{
-        distance: distX.toFixed(2),
-        duration: Math.round(durX),
-        stopTime: totalBlockStopTime,
-        aptCount: totalApartmentCount - totalDowntownCount,
-        downtownCount: totalDowntownCount,
-        stopsCount: totalStopCount
-     }];
-
+    const totalWorkMiles = toFirstStopDist + totalBlockMiles;
+    // El tiempo total de trabajo incluye el drive + tiempo base + tiempo extra
+    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime; 
+    const totalNormalMiles = totalWorkMiles + toFinalDestDist;
+    const totalNormalDuration = totalWorkDuration + toFinalDestDur;
+    const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
+    const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
+    const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
+    const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
 
     return {
         savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
         normal: {
-            toStart: { distance: distA.toFixed(2), duration: Math.round(durA) },
-            // Use dummy segment data for display consistency
-            segments: dummySegments,
-            toEnd: { distance: distB.toFixed(2), duration: Math.round(durB) },
+            toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
+            segments: processedSegments, // Pasamos los segmentos con sus conteos individuales
+            toEnd: { distance: toFinalDestDist.toFixed(2), duration: Math.round(toFinalDestDur) },
             totalWorkMiles: totalWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalWorkDuration),
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
-            baseDriveDuration: durA + durX, // For ETA
-            commuteDuration: durB, // For ETA
+            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration, // Solo conducción
+            commuteDuration: toFinalDestDur,
         },
         inverse: {
-            toStart: { distance: distC.toFixed(2), duration: Math.round(durC) },
-            segments: dummySegments, // Use dummy segment data
-            toEnd: { distance: distD.toFixed(2), duration: Math.round(durD) },
+            toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
+            segments: processedSegments,
+            toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
             totalWorkMiles: totalInverseWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalInverseWorkDuration),
             totalMiles: totalInverseMiles.toFixed(2),
             totalDuration: Math.round(totalInverseDuration),
-            baseDriveDuration: durC + durX, // For ETA
-            commuteDuration: durD, // For ETA
+            baseDriveDuration: toLastStopDur + totalBlockDriveDuration, // Solo conducción
+            commuteDuration: fromFirstStopDur,
         },
+        // Conteos totales para ETA
         stopCount: totalStopCount,
-        apartmentCount: totalApartmentCount,
-        downtownCount: totalDowntownCount,
+        apartmentCount: totalApartmentCount, // Total aptos (normales + DT)
+        downtownCount: totalDowntownCount, // Solo DT
     };
 });
 
-// scenarioETAs now correctly accesses data via reportData
+// PROPIEDAD COMPUTADA PARA ESCENARIOS Y ETA (CORREGIDA)
 const scenarioETAs = computed(() => {
-    if (!reportData.value?.normal?.baseDriveDuration || !reportData.value?.inverse?.baseDriveDuration) {
-         return null;
-    }
+    if (!reportData.value?.normal) return null;
+
     const stopCount = Number(reportData.value.stopCount) || 0;
-    const apartmentCount = Number(reportData.value.apartmentCount) || 0;
-    const downtownCount = Number(reportData.value.downtownCount) || 0;
-    const regularApartmentCount = apartmentCount - downtownCount;
+    const apartmentCount = Number(reportData.value.apartmentCount) || 0; // Total Aptos
+    const downtownCount = Number(reportData.value.downtownCount) || 0; // Solo DT
+    const regularApartmentCount = apartmentCount - downtownCount; // Aptos normales
     const now = new Date();
+
     const calculateScenario = (baseDrive, commute, multiplier) => {
-        const baseStopTime = stopCount * multiplier;
-        const extraTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
+        const baseStopTime = stopCount * multiplier; // Tiempo base según escenario
+        const extraTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5); // Tiempo extra fijo por tipo apto
         const totalDuration = (Number(baseDrive) || 0) + baseStopTime + extraTime + (Number(commute) || 0);
+
         if (isNaN(totalDuration)) { return { totalDuration: 'N/A', eta: 'Error' }; }
         const eta = new Date(now.getTime() + totalDuration * 60000);
         return {
@@ -143,10 +150,12 @@ const scenarioETAs = computed(() => {
             eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
     };
-    const normalBaseDrive = Number(reportData.value.normal.baseDriveDuration) || 0;
-    const normalCommute = Number(reportData.value.normal.commuteDuration) || 0;
-    const inverseBaseDrive = Number(reportData.value.inverse.baseDriveDuration) || 0;
-    const inverseCommute = Number(reportData.value.inverse.commuteDuration) || 0;
+
+    const normalBaseDrive = reportData.value.normal.baseDriveDuration;
+    const normalCommute = reportData.value.normal.commuteDuration;
+    const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
+    const inverseCommute = reportData.value.inverse.commuteDuration;
+
     return {
         normal: {
             optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
@@ -162,94 +171,128 @@ const scenarioETAs = computed(() => {
 });
 
 
-// --- EDITING FUNCTIONS (Unchanged) ---
+// --- FUNCIONES (sin cambios) ---
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
-function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); }
-function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); }
-
-// --- PROCESSING FUNCTIONS (Unchanged) ---
-function preprocessImage(file) { /* ... unchanged ... */ }
-function parseAddresses(rawText) { /* ... unchanged ... */ }
-async function handleFileChange(event) { /* ... unchanged ... */ }
-function sanitizeAddress(address) { /* ... unchanged ... */ }
-async function sendToBackend() {
-  const invalidStop = extractedAddresses.value.find(stop => !stop.address || stop.address.trim() === '');
-  if (invalidStop) {
-      alert(`¡Epa! Parece que te falta completar la dirección para la parada #${invalidStop.number}. Por favor, revísala.`);
-      return;
+function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); } 
+function reorderList() { extractedAddresses.value.sort((a, b) => a.number - b.number); }
+function preprocessImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
+    const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data; const contrast = 2.0; const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = factor * (data[i] - 128) + 128; data[i+1] = factor * (data[i+1] - 128) + 128; data[i+2] = factor * (data[i+2] - 128) + 128;
+      const avg = (data[i] + data[i+1] + data[i+2]) / 3; data[i] = avg; data[i+1] = avg; data[i+2] = avg;
+    }
+    ctx.putImageData(imageData, 0, 0); resolve(canvas.toDataURL('image/png'));
+    }; img.src = e.target.result; }; reader.readAsDataURL(file);
+  });
+}
+function parseAddresses(rawText) {
+  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
+  const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
+  let match;
+  while ((match = pattern.exec(rawText)) !== null) {
+    const stopNumber = parseInt(match[1]);
+    const textBlock = match[2];
+    const addressPattern = /(\d{3,5}\s[A-Z].*)/;
+    const addressMatch = textBlock.match(addressPattern);
+    if (addressMatch) {
+      let street = addressMatch[1].trim(); let city = '';
+      const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
+      if (lines.length > 1) {
+        let nextLine = lines[1].trim();
+        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
+        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
+      }
+      if (!city) { city = lastKnownCity; }
+      stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false });
+    }
   }
+  return stops;
+}
+async function handleFileChange(event) {
+  const files = event.target.files; if (!files.length) return;
+  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null; 
+  let allParsedStops = [];
+  for (const file of files) {
+    const processedImage = await preprocessImage(file);
+    const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
+    const stopsFromFile = parseAddresses(text);
+    allParsedStops.push(...stopsFromFile);
+  }
+  const uniqueStops = Array.from(new Map(allParsedStops.map(stop => [stop.number, stop])).values());
+  uniqueStops.sort((a, b) => a.number - b.number);
+  extractedAddresses.value = uniqueStops;
+  isProcessing.value = false;
+}
+function sanitizeAddress(address) {
+    if (!address) return '';
+    return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
+}
+async function sendToBackend() {
   const addressesToSend = extractedAddresses.value.map(stop => stop.address);
-  const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr);
+  const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
   if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
   const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
   const fullRoute = [sanitizeAddress(selectedWarehouse.value), ...sanitizedAddresses, finalDestination];
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-  backendResponse.value = { status: 'loading' };
+  backendResponse.value = { status: 'loading' }; 
   try {
     const response = await fetch(`${backendUrl}/api/optimize-route`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addresses: fullRoute }),
     });
     const result = await response.json();
-     if (!response.ok) {
-        throw new Error(result.message || `HTTP error! status: ${response.status}`);
-     }
     backendResponse.value = result;
   } catch (error) {
-    console.error("Fetch error:", error);
-    backendResponse.value = { error: `Error: ${error.message || 'No se pudo conectar al servidor.'}` };
+    backendResponse.value = { error: 'Error: No se pudo conectar al servidor.' };
   }
 }
 </script>
 
 <template>
     <div class="uploader-container">
-        <input type="file" multiple accept="image/*" @change="handleFileChange" id="file-input" :key="fileInputKey" :disabled="isProcessing || !!backendResponse">
+        <input type="file" multiple accept="image/*" @change="handleFileChange" id="file-input" :disabled="isProcessing">
         <div v-if="isProcessing" class="status"><h3>Procesando imágenes...</h3></div>
-
-         <button v-if="backendResponse && backendResponse.status !== 'loading'" @click="resetApp" class="button-reset">
-             🔄 Nueva Ruta
-         </button>
-
+        
         <div v-if="extractedAddresses.length > 0 && !isProcessing">
             <div class="controls-container">
-                 <div class="control-group">
+                <div class="control-group">
                     <label for="warehouse-select">Punto de Partida</label>
-                    <select id="warehouse-select" v-model="selectedWarehouse" :disabled="!!backendResponse">
+                    <select id="warehouse-select" v-model="selectedWarehouse">
                         <option v-for="wh in warehouses" :key="wh.code" :value="wh.address">{{ wh.code }}</option>
                     </select>
                 </div>
                 <div class="control-group">
                     <label for="destination-select">Destino Final</label>
-                    <select id="destination-select" v-model="selectedDestination" :disabled="!!backendResponse">
+                    <select id="destination-select" v-model="selectedDestination">
                         <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
                     </select>
                 </div>
             </div>
             <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-                 <input type="text" v-model="customDestination" placeholder="Escribe la dirección de destino aquí" :disabled="!!backendResponse">
+                <input type="text" v-model="customDestination" placeholder="Escribe la dirección de destino aquí">
             </div>
 
             <div class="address-list">
-                <h2 v-if="!backendResponse">📝 Revisa y Edita las Paradas ({{ extractedAddresses.length }})</h2>
-                <h2 v-else>🗺️ Ruta Calculada ({{ extractedAddresses.length }})</h2>
+                <h2>📝 Revisa y Edita las Paradas ({{ extractedAddresses.length }})</h2>
                 <ol class="ordered-list">
-                    <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item" :class="{ 'missing-stop': !stop.address }">
-                        <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#" :disabled="!!stop.address && stop.address !== '' || !!backendResponse">
-                        <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección faltante..." :disabled="!!backendResponse">
+                    <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item">
+                        <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#">
+                        <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección de la parada">
                         <label class="downtown-label" title="Marcar si es Downtown">
-                            <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox" :disabled="!!backendResponse"> DT
+                            <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox"> DT
                         </label>
-                        <button v-if="!backendResponse" @click="removeAddress(index)" class="button-delete">🗑️</button>
+                        <button @click="removeAddress(index)" class="button-delete">🗑️</button>
                     </li>
                 </ol>
-                <div v-if="!backendResponse" class="action-buttons">
-                    <button @click="addAddress" class="button-add">➕ Añadir Parada Manual</button>
+                <div class="action-buttons">
+                    <button @click="addAddress" class="button-add">➕ Añadir Parada</button>
                     <button @click="reorderList" class="button-reorder">🔄 Reordenar Lista</button>
                 </div>
-                 <button v-if="!backendResponse || backendResponse.status === 'loading'" @click="sendToBackend" class="button-map" :disabled="backendResponse?.status === 'loading'">
-                     {{ backendResponse?.status === 'loading' ? 'Calculando...' : 'Evaluar Escenarios' }}
-                 </button>
+                <button @click="sendToBackend" class="button-map">Evaluar Escenarios</button>
 
                 <div v-if="backendResponse">
                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluando escenarios...</div>
@@ -271,9 +314,10 @@ async function sendToBackend() {
                         <div class="result-block">
                             <h4>➡️ Desglose Ruta Normal</h4>
                             <p>Hacia 1ra Parada: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
-                            <div class="segment-breakdown">
-                                <p>Bloque (Drive): <strong>{{ reportData.normal.segments[0].duration }} min - {{ reportData.normal.segments[0].distance }} mi</strong></p>
-                                <p class="calc-details">Tiempo Paradas: +{{ reportData.normal.segments[0].stopTime }} min ({{ reportData.normal.stopCount }} paradas | {{ reportData.normal.apartmentCount - reportData.normal.downtownCount }} aptos | {{ reportData.normal.downtownCount }} DT)</p>
+                            <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
+                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong> 
+                                    <span class="calc-details">({{ segment.stopsCount }} paradas | {{ segment.aptCount }} aptos | {{ segment.downtownCount }} DT)</span>
+                                </p>
                             </div>
                             <hr class="dotted-hr">
                             <p class="total-time"><strong>Total Trabajo: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
@@ -291,10 +335,11 @@ async function sendToBackend() {
                          <div class="result-block inverse-block">
                             <h4>⬅️ Desglose Ruta Inversa</h4>
                             <p>Hacia Última Parada: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
-                            <div class="segment-breakdown">
-                                <p>Bloque (Drive): <strong>{{ reportData.inverse.segments[0].duration }} min - {{ reportData.inverse.segments[0].distance }} mi</strong></p>
-                                <p class="calc-details">Tiempo Paradas: +{{ reportData.inverse.segments[0].stopTime }} min ({{ reportData.stopCount }} paradas | {{ reportData.apartmentCount - reportData.downtownCount }} aptos | {{ reportData.downtownCount }} DT)</p>
-                             </div>
+                            <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
+                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
+                                     <span class="calc-details">({{ segment.stopsCount }} paradas | {{ segment.aptCount }} aptos | {{ segment.downtownCount }} DT)</span>
+                                </p>
+                            </div>
                             <hr class="dotted-hr">
                             <p class="total-time"><strong>Total Trabajo: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
                             <p>Desde 1ra Parada a Destino: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
@@ -316,11 +361,8 @@ async function sendToBackend() {
 </template>
 
 <style scoped>
-    /* Styles remain unchanged */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .status { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-left: 5px solid #2196f3; color: #333; }
-    .button-reset { display: block; width: calc(100% - 40px); margin: 20px auto 0 auto; padding: 10px; font-size: 1.1em; font-weight: bold; color: white; background-color: #6c757d; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
-    .button-reset:hover { background-color: #5a6268; }
     .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: #f5f5f5; border-radius: 8px; }
     .control-group { flex: 1; display: flex; flex-direction: column; }
     .control-group label { margin-bottom: 8px; font-weight: bold; color: #333; }
@@ -331,8 +373,7 @@ async function sendToBackend() {
     .address-list h2 { margin-top: 0; color: #388e3c; }
     .ordered-list { list-style-type: none; padding-left: 0; }
     li.editable-item { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: #333; }
-    .editable-item { display: flex; align-items: center; gap: 5px; }
-    .missing-stop .address-input, .missing-stop .stop-number-input { border-color: #f8d7da; background-color: #fff3f4; }
+    .editable-item { display: flex; align-items: center; gap: 5px; } 
     .stop-number-input { width: 50px; padding: 8px; font-size: 1em; text-align: center; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; }
     .address-input { flex-grow: 1; padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; }
     .downtown-label { display: flex; align-items: center; cursor: pointer; font-size: 0.9em; color: #6c757d; padding: 0 5px; }
@@ -342,11 +383,10 @@ async function sendToBackend() {
     .button-add { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; padding: 10px; flex-grow: 1; cursor: pointer; border-radius: 5px; }
     .button-reorder { background-color: #d1e7fd; color: #0c5460; border: 1px solid #bee5eb; padding: 10px; flex-grow: 1; cursor: pointer; font-weight: bold; }
     .button-map { display: block; width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; }
-    .button-map:disabled { background-color: #6c757d; cursor: not-allowed; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
     .results-container { margin-top: 20px; padding: 15px; background-color: #f7f9fc; border: 1px solid #e1e8ed; border-radius: 8px; color: #212529; }
     .result-block { padding: 20px 0 10px 0; }
-    .result-block.inverse-block { background-color: #fffaf0; margin: 0 -15px -15px -15px; padding: 20px 15px 0px 15px; border-radius: 0 0 8px 8px;}
+    .result-block.inverse-block { background-color: #fffaf0; margin: 0 -15px -15px -15px; padding: 20px 15px 0px 15px; border-radius: 0 0 8px 8px;} 
     .result-block h4 { margin: 0 0 15px 0; color: #495057; }
     .result-block p { margin: 5px 0; font-size: 1.1em; color: #212529; }
     .segment-breakdown { padding-left: 15px; border-left: 2px solid #dee2e6; margin-left: 5px; margin-top: 10px; }
@@ -363,7 +403,7 @@ async function sendToBackend() {
     .scenario-table .highlight { background-color: #e7f5ff; }
     .savings { color: #28a745; }
     .eta-block { background-color: #e6f7ff; margin: 0 -15px -15px -15px; padding: 20px 15px 15px 15px; border-radius: 0 0 8px 8px; border-top: 1px solid #ddd;}
-    .eta-block.inverse-eta { background-color: #fffaf0; }
+    .eta-block.inverse-eta { background-color: #fffaf0; } 
     .eta-block h4 { color: #0056b3; }
     .eta-scenario { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #b0e0e6; }
     .eta-scenario:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
