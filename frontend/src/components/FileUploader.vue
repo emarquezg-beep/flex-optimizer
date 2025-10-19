@@ -234,7 +234,7 @@ async function handleFileChange(event) {
       if (stop.number > maxStopNumber) maxStopNumber = stop.number;
   });
   const fullListWithGaps = [];
-  for (let i = 1; i <= maxStopNumber; i++) {
+  for (let i = 2; i <= maxStopNumber; i++) {
       if (uniqueStopsMap.has(i)) {
           fullListWithGaps.push(uniqueStopsMap.get(i));
       } else {
