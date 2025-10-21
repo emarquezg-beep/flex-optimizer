@@ -315,8 +315,10 @@ async function saveToLogbook() {
             <div class="controls-container">
                 <div class="control-group">
                     <label for="warehouse-select">Punto de Partida</label>
-                    <select id="warehouse-select" v-model="selectedWarehouse">
-                        <option v-for="wh in warehouses" :key="wh.code" :value="wh.address">{{ wh.code }}</option>
+                    <select id="warehouse-select" v-model="selectedWarehouseCode">
+                        <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
+                            {{ wh.code }} ({{ wh.commuteMiles }} mi)
+                        </option>
                     </select>
                 </div>
                 <div class="control-group">
@@ -348,21 +350,11 @@ async function saveToLogbook() {
                 </div>
                 <button @click="sendToBackend" class="button-map">Evaluar Escenarios</button>
 
-                <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
-                        {{ isSaving ? 'Guardando...' : '💾 Guardar en Bitácora' }}
-                    </button>
-                    
-                    <div v-if="saveStatus" 
-                         :class="['save-status', saveStatus.success ? 'success' : 'error']">
-                        {{ saveStatus.message }}
-                    </div>
-                </div>
-
-            </div>
-
                 <div v-if="backendResponse">
                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluando escenarios...</div>
-                    <div v-else-if="reportData" class="results-container">
+                    
+                    <div v-else-if="reportData && calculatedLogEntry" class="results-container">
+                        
                         <div class="scenario-table">
                             <h4>📊 Comparación Final</h4>
                             <table>
@@ -420,11 +412,87 @@ async function saveToLogbook() {
                         </div>
                     </div>
                     <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
+
+                    <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
+                        <h3>📓 Datos del Bloque para Bitácora</h3>
+                        
+                        <div class="logbook-scenario-selector">
+                            <strong>Usar datos del escenario:</strong>
+                            <label>
+                                <input type="radio" v-model="selectedScenarioForLog" value="normal"> Normal
+                            </label>
+                            <label>
+                                <input type="radio" v-model="selectedScenarioForLog" value="inverse"> Inverso
+                            </label>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Fecha</label>
+                                <input type="date" v-model="blockData.fecha">
+                            </div>
+                            <div class="form-group">
+                                <label>Hora Inicio (24h)</label>
+                                <input type="time" v-model="blockData.hora">
+                            </div>
+                            <div class="form-group">
+                                <label>Vehículo</label>
+                                <select v-model="blockData.vehiculo">
+                                    <option v-for="v in VEHICULO_OPTIONS" :key="v" :value="v">{{ v }}</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Duración (Horas)</label>
+                                <select v-model.number="blockData.duracion_horas">
+                                    <option v-for="d in DURACION_OPTIONS" :key="d" :value="d">{{ d }} hrs</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Pago ($)</label>
+                                <input type="number" v-model.number="blockData.pago" placeholder="Ej: 70.50">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Antes del Bloque (min)</label>
+                                <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
+                            </div>
+                            <div class="form-group">
+                                <label>Conmute 1 (Millas)</label>
+                                <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
+                            </div>
+                        </div>
+                        
+                        <div class="logbook-summary">
+                            <h4>Resumen Calculado (para Guardar)</h4>
+                            <p><strong>Pago/Hora Base:</strong> ${{ calculatedLogEntry.pago_por_hora }}</p>
+                            <p><strong>Millas de Trabajo:</strong> {{ calculatedLogEntry.millas_de_trabajo }} mi</p>
+                            <p><strong>Conmute 2 (API):</strong> {{ calculatedLogEntry.commute_2 }} mi</p>
+                            <p><strong>Millas Totales:</strong> {{ calculatedLogEntry.millas_totales }} mi</p>
+                            <hr>
+                            <p><strong>Tiempo "Después Bloque":</strong> {{ calculatedLogEntry.despues_del_bloque }} hrs</p>
+                            <p><strong>Tiempo Total Invertido:</strong> {{ calculatedLogEntry.tiempo_total }} hrs</p>
+                            <p><strong>PAGO REAL POR HORA:</strong> ${{ calculatedLogEntry.pago_real_por_hora }}</p>
+                            <hr>
+                            <p><strong>Gasto Gasolina:</strong> -${{ calculatedLogEntry.gasto_de_gasolina }}</p>
+                            <p><strong>Desgaste Vehículo:</strong> -${{ calculatedLogEntry.desgaste_vehiculo }}</p>
+                            <p><strong>Impuestos (Tax):</strong> -${{ calculatedLogEntry.tax }}</p>
+                            <p><strong>Claim por Milla:</strong> +${{ calculatedLogEntry.claim_por_milla }}</p>
+                        </div>
+
+                        <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
+                            {{ isSaving ? 'Guardando...' : '💾 Guardar en Bitácora' }}
+                        </button>
+                        
+                        <div v-if="saveStatus" 
+                             :class="['save-status', saveStatus.success ? 'success' : 'error']">
+                            {{ saveStatus.message }}
+                        </div>
+                    </div> </div> </div> </div> </div> </template>
 
 <style scoped>
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
