@@ -2,85 +2,88 @@
 import { ref, computed, watch } from 'vue';
 import Tesseract from 'tesseract.js';
 
-// --- VARIABLES Y DATOS (sin cambios) ---
+// --- VARIABLES Y DATOS (v1.5) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
-const isSaving = ref(false); // <-- NUEVO: Para feedback del botón
-const saveStatus = ref(null); // <-- NUEVO: Para mensajes de éxito/error
-const warehouses = [
-  { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL' },
-  { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL' },
-  { code: 'DMO3', address: '1216 S Orange Blossom Trl Orlando, FL' },
-  { code: 'DFL4', address: '4401 Seaboard Rd Orlando, FL' },
-  { code: 'DFL8', address: '7453 Republic Dr Groveland, FL' },
-  { code: 'DMO4', address: '2400 Mason Ave Daytona Beach, FL' },
-  { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL' },
-];
+const isSaving = ref(false);
+const saveStatus = ref(null);
+
+// VAMOS A USAR ESTOS VALORES
+const VEHICULO_OPTIONS = ['Toyota Corolla', 'Honda Civic', 'Mi Otro Carro'];
+const DURACION_OPTIONS = [3, 3.5, 4, 4.5, 5];
+
+// (1) WAREHOUSES ACTUALIZADOS con commuteMiles
+const warehouses = ref([
+  { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL', commuteMiles: 24 },
+  { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL', commuteMiles: 18 },
+  { code: 'DMO3', address: '1216 S Orange Blossom Trl Orlando, FL', commuteMiles: 20 },
+  { code: 'DFL4', address: '4401 Seaboard Rd Orlando, FL', commuteMiles: 22 },
+  { code: 'DFL8', address: '7453 Republic Dr Groveland, FL', commuteMiles: 35 },
+  { code: 'DMO4', address: '2400 Mason Ave Daytona Beach, FL', commuteMiles: 55 },
+  { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL', commuteMiles: 15 }, // Añadí DFL5 y un commute
+]);
+
 const destinations = ref([
   { code: 'Casa', address: '513 Alafaya Woods Blvd Oviedo, FL' },
-  ...warehouses,
+  ...warehouses.value, // Usamos .value porque warehouses ahora es un ref
   { code: 'Otro (especificar abajo)', address: 'custom' }
 ]);
-const selectedWarehouse = ref(warehouses[0].address);
+
+// (2) VARIABLES DE v1.5 (Estas te faltaban)
+const selectedWarehouseCode = ref(warehouses.value[0].code); 
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// --- PROPIEDADES COMPUTADAS (ACTUALIZADAS PARA REGLA DOWNTOWN v2) ---
+// (3) REFS para el formulario de bitácora (Estos te faltaban)
+const selectedScenarioForLog = ref('normal');
+const blockData = ref({
+  fecha: new Date().toISOString().split('T')[0],
+  vehiculo: VEHICULO_OPTIONS[0],
+  hora: '07:00',
+  duracion_horas: DURACION_OPTIONS[1],
+  pago: 0,
+  antes_del_bloque: 30,
+  commute_1_manual: warehouses.value[0].commuteMiles
+});
+
+// (4) WATCHER para actualizar Conmute_1 (Este te faltaba)
+watch(selectedWarehouseCode, (newCode) => {
+  const warehouse = warehouses.value.find(w => w.code === newCode);
+  if (warehouse) {
+    blockData.value.commute_1_manual = warehouse.commuteMiles;
+  }
+});
+
+// --- PROPIEDADES COMPUTADAS (v1.5) ---
+// (Tu lógica de reportData v1.2-con-downtown-v2. Está perfecta, la mantengo)
 const reportData = computed(() => {
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
-
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
-    
-    let totalBlockMiles = 0;
-    let totalBlockDriveDuration = 0;
-    let totalBaseStopTime = 0; // Tiempo base (1.5 min * num paradas)
-    let totalExtraStopTime = 0; // Tiempo extra (1.5 apto normal, 4.5 apto DT)
-    let totalApartmentCount = 0;
-    let totalDowntownCount = 0;
+    let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBaseStopTime = 0;
+    let totalExtraStopTime = 0; let totalApartmentCount = 0; let totalDowntownCount = 0;
     let totalStopCount = 0;
-
     const processedSegments = segments.map(seg => {
-        let segmentBaseStopTime = 0;
-        let segmentExtraStopTime = 0;
-        let aptCount = 0;
-        let downtownCount = 0;
-        const currentStopCount = (seg.stops || []).length;
+        let segmentBaseStopTime = 0; let segmentExtraStopTime = 0; let aptCount = 0;
+        let downtownCount = 0; const currentStopCount = (seg.stops || []).length;
         totalStopCount += currentStopCount;
-
         (seg.stops || []).forEach(addr => {
             const stopData = extractedAddresses.value.find(s => s.address === addr);
             const isDowntown = stopData ? stopData.isDowntown : false;
             const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
-            
-            segmentBaseStopTime += 1.5; // Siempre 1.5 base
-            
-            if (isDowntown) {
-                downtownCount++;
-                segmentExtraStopTime += 4.5; // 4.5 extra por DT
-            } else if (isApartment) {
-                aptCount++;
-                segmentExtraStopTime += 1.5; // 1.5 extra por apto normal
-            }
+            segmentBaseStopTime += 1.5;
+            if (isDowntown) { downtownCount++; segmentExtraStopTime += 4.5; }
+            else if (isApartment) { aptCount++; segmentExtraStopTime += 1.5; }
         });
-        
-        totalBaseStopTime += segmentBaseStopTime;
-        totalExtraStopTime += segmentExtraStopTime;
-        totalApartmentCount += aptCount + downtownCount; // Contamos todos los apartamentos
-        totalDowntownCount += downtownCount;
-
+        totalBaseStopTime += segmentBaseStopTime; totalExtraStopTime += segmentExtraStopTime;
+        totalApartmentCount += aptCount + downtownCount; totalDowntownCount += downtownCount;
         totalBlockMiles += parseFloat(seg.distance || 0);
         totalBlockDriveDuration += parseFloat(seg.duration || 0);
-        
         return { 
-            distance: seg.distance, 
-            duration: seg.duration, 
-            stopsCount: currentStopCount, 
-            aptCount: aptCount, // Apartamentos normales en este segmento
-            downtownCount: downtownCount // Apartamentos DT en este segmento
+            distance: seg.distance, duration: seg.duration, stopsCount: currentStopCount, 
+            aptCount: aptCount, downtownCount: downtownCount 
         };
     });
-
     const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
     const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
     const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
@@ -89,9 +92,7 @@ const reportData = computed(() => {
     const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
     const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
     const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
-
     const totalWorkMiles = toFirstStopDist + totalBlockMiles;
-    // El tiempo total de trabajo incluye el drive + tiempo base + tiempo extra
     const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime; 
     const totalNormalMiles = totalWorkMiles + toFinalDestDist;
     const totalNormalDuration = totalWorkDuration + toFinalDestDur;
@@ -99,18 +100,17 @@ const reportData = computed(() => {
     const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
     const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
     const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
-
     return {
         savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
         normal: {
             toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
-            segments: processedSegments, // Pasamos los segmentos con sus conteos individuales
+            segments: processedSegments,
             toEnd: { distance: toFinalDestDist.toFixed(2), duration: Math.round(toFinalDestDur) },
             totalWorkMiles: totalWorkMiles.toFixed(2),
             totalWorkDuration: Math.round(totalWorkDuration),
             totalMiles: totalNormalMiles.toFixed(2),
             totalDuration: Math.round(totalNormalDuration),
-            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration, // Solo conducción
+            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
             commuteDuration: toFinalDestDur,
         },
         inverse: {
@@ -121,31 +121,27 @@ const reportData = computed(() => {
             totalWorkDuration: Math.round(totalInverseWorkDuration),
             totalMiles: totalInverseMiles.toFixed(2),
             totalDuration: Math.round(totalInverseDuration),
-            baseDriveDuration: toLastStopDur + totalBlockDriveDuration, // Solo conducción
+            baseDriveDuration: toLastStopDist + totalBlockDriveDuration,
             commuteDuration: fromFirstStopDur,
         },
-        // Conteos totales para ETA
         stopCount: totalStopCount,
-        apartmentCount: totalApartmentCount, // Total aptos (normales + DT)
-        downtownCount: totalDowntownCount, // Solo DT
+        apartmentCount: totalApartmentCount,
+        downtownCount: totalDowntownCount,
     };
 });
 
-// PROPIEDAD COMPUTADA PARA ESCENARIOS Y ETA (CORREGIDA)
+// (Tu lógica de scenarioETAs está perfecta, la mantengo)
 const scenarioETAs = computed(() => {
     if (!reportData.value?.normal) return null;
-
     const stopCount = Number(reportData.value.stopCount) || 0;
-    const apartmentCount = Number(reportData.value.apartmentCount) || 0; // Total Aptos
-    const downtownCount = Number(reportData.value.downtownCount) || 0; // Solo DT
-    const regularApartmentCount = apartmentCount - downtownCount; // Aptos normales
+    const apartmentCount = Number(reportData.value.apartmentCount) || 0;
+    const downtownCount = Number(reportData.value.downtownCount) || 0;
+    const regularApartmentCount = apartmentCount - downtownCount;
     const now = new Date();
-
     const calculateScenario = (baseDrive, commute, multiplier) => {
-        const baseStopTime = stopCount * multiplier; // Tiempo base según escenario
-        const extraTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5); // Tiempo extra fijo por tipo apto
+        const baseStopTime = stopCount * multiplier;
+        const extraTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
         const totalDuration = (Number(baseDrive) || 0) + baseStopTime + extraTime + (Number(commute) || 0);
-
         if (isNaN(totalDuration)) { return { totalDuration: 'N/A', eta: 'Error' }; }
         const eta = new Date(now.getTime() + totalDuration * 60000);
         return {
@@ -153,12 +149,10 @@ const scenarioETAs = computed(() => {
             eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
     };
-
     const normalBaseDrive = reportData.value.normal.baseDriveDuration;
     const normalCommute = reportData.value.normal.commuteDuration;
     const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
     const inverseCommute = reportData.value.inverse.commuteDuration;
-
     return {
         normal: {
             optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
@@ -173,8 +167,100 @@ const scenarioETAs = computed(() => {
     };
 });
 
+// (5) --- PROPIEDAD COMPUTADA QUE FALTABA ---
+// Aquí es donde ocurre la magia de tus cálculos
+const calculatedLogEntry = computed(() => {
+    if (!reportData.value || !scenarioETAs.value) return null;
 
-// --- FUNCIONES (sin cambios) ---
+    // --- A. Variables Base ---
+    const data = blockData.value;
+    const pago = Number(data.pago) || 0;
+    const duracion_horas = Number(data.duracion_horas) || 0;
+    
+    // Elige el reporte (Normal o Inverso) basado en la selección
+    const scenarioKey = selectedScenarioForLog.value; // 'normal' o 'inverse'
+    const chosenReport = reportData.value[scenarioKey];
+    const chosenETA = scenarioETAs.value[scenarioKey].normal; // Usamos la ETA "Normal" del escenario elegido
+
+    // --- B. Métricas de Tiempo ---
+    const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
+
+    // Cálculo complejo de "Despues_del_bloque"
+    let despues_del_bloque_hrs = 0;
+    try {
+        const [startHours, startMinutes] = data.hora.split(':').map(Number);
+        const blockStart = new Date();
+        blockStart.setHours(startHours, startMinutes, 0, 0);
+
+        const durationMs = duracion_horas * 3600 * 1000;
+        const blockEnd = new Date(blockStart.getTime() + durationMs);
+
+        // Parsear la ETA (ej: "10:15 AM")
+        const etaString = chosenETA.eta;
+        const [time, ampm] = etaString.split(' ');
+        let [etaHours, etaMinutes] = time.split(':').map(Number);
+        if (ampm.toUpperCase() === 'PM' && etaHours !== 12) etaHours += 12;
+        if (ampm.toUpperCase() === 'AM' && etaHours === 12) etaHours = 0; // medianoche
+
+        const etaTime = new Date();
+        etaTime.setHours(etaHours, etaMinutes, 0, 0);
+
+        const diffMs = etaTime.getTime() - blockEnd.getTime();
+        despues_del_bloque_hrs = diffMs / (3600 * 1000); // Diferencia en horas decimales
+
+    } catch (e) {
+        console.error("Error parsing time for logbook:", e);
+    }
+    
+    const tiempo_total = antes_del_bloque_hrs + duracion_horas + despues_del_bloque_hrs;
+
+    // --- C. Métricas de Distancia ---
+    const commute_1 = Number(data.commute_1_manual) || 0;
+    const commute_2 = Number(chosenReport.toEnd.distance) || 0;
+    const millas_de_trabajo = Number(chosenReport.totalWorkMiles) || 0;
+    const millas_totales = commute_1 + millas_de_trabajo + commute_2;
+
+    // --- D. Métricas Financieras ---
+    const pago_por_hora = duracion_horas > 0 ? pago / duracion_horas : 0;
+    const pago_real_por_hora = tiempo_total > 0 ? pago / tiempo_total : 0;
+    const millas_por_hora = duracion_horas > 0 ? millas_de_trabajo / duracion_horas : 0;
+    
+    // Tus valores hardcoded
+    const gasto_de_gasolina = (millas_totales / 35) * 3.00;
+    const desgaste_vehiculo = millas_totales * 0.25;
+    const tax = pago * 0.153; // 15.3%
+    const claim_por_milla = millas_de_trabajo * 0.70;
+
+    return {
+        // Datos de Input (para guardar)
+        fecha: data.fecha,
+        vehiculo: data.vehiculo,
+        warehouse: selectedWarehouseCode.value,
+        hora: data.hora,
+        duracion_horas: duracion_horas,
+        pago: pago,
+        antes_del_bloque: antes_del_bloque_hrs.toFixed(2), // Guardamos en horas decimales
+        
+        // Datos Calculados (para guardar)
+        pago_por_hora: pago_por_hora.toFixed(2),
+        despues_del_bloque: despues_del_bloque_hrs.toFixed(2),
+        tiempo_total: tiempo_total.toFixed(2),
+        pago_real_por_hora: pago_real_por_hora.toFixed(2),
+        commute_1: commute_1.toFixed(2),
+        commute_2: commute_2.toFixed(2),
+        millas_de_trabajo: millas_de_trabajo.toFixed(2),
+        millas_totales: millas_totales.toFixed(2),
+        millas_por_hora: millas_por_hora.toFixed(2),
+        gasto_de_gasolina: gasto_de_gasolina.toFixed(2),
+        desgaste_vehiculo: desgaste_vehiculo.toFixed(2),
+        tax: tax.toFixed(2),
+        claim_por_milla: claim_por_milla.toFixed(2)
+    };
+});
+
+
+// --- FUNCIONES ---
+// (Tus funciones de OCR y parseo están bien, las mantengo)
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); }
 function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); }
@@ -215,7 +301,6 @@ function parseAddresses(rawText) {
   }
   return stops;
 }
-// --- handleFileChange CON LÓGICA DE GAPS ---
 async function handleFileChange(event) {
   const files = event.target.files; if (!files.length) return;
   isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null;
@@ -230,10 +315,8 @@ async function handleFileChange(event) {
       const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
       let maxStopNumber = 0;
       uniqueStopsMap.forEach(stop => { if (stop.number > maxStopNumber) maxStopNumber = stop.number; });
-
-      // Crea la lista final con gaps, empezando desde el #2
       const fullListWithGaps = [];
-      for (let i = 2; i <= maxStopNumber; i++) { // Bucle empieza en 2
+      for (let i = 2; i <= maxStopNumber; i++) {
           if (uniqueStopsMap.has(i)) { fullListWithGaps.push(uniqueStopsMap.get(i)); }
           else { fullListWithGaps.push({ number: i, address: '', isDowntown: false }); }
       }
@@ -249,13 +332,28 @@ function sanitizeAddress(address) {
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
+
+// (6) sendToBackend (ACTUALIZADO para v1.5)
 async function sendToBackend() {
   const addressesToSend = extractedAddresses.value.map(stop => stop.address);
   const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
   if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
+  
+  // --- ESTA PARTE CAMBIÓ ---
+  // Encuentra la dirección del warehouse a partir del CÓDIGO seleccionado
+  const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+  if (!warehouse) {
+      alert('Error: Warehouse no encontrado.'); return;
+  }
+  const warehouseAddress = sanitizeAddress(warehouse.address);
+  // --- FIN DEL CAMBIO ---
+
   const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
   if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
-  const fullRoute = [sanitizeAddress(selectedWarehouse.value), ...sanitizedAddresses, finalDestination];
+  
+  // Usamos la dirección encontrada
+  const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
+  
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
   backendResponse.value = { status: 'loading' }; 
   try {
@@ -269,7 +367,7 @@ async function sendToBackend() {
   }
 }
 
-// --- (7) FUNCIÓN 'saveToLogbook' (ACTUALIZADA) ---
+// (7) saveToLogbook (Tu función v1.5 está perfecta, la mantengo)
 async function saveToLogbook() {
     if (!calculatedLogEntry.value) {
         alert("No hay datos calculados para guardar.");
@@ -277,14 +375,14 @@ async function saveToLogbook() {
     }
     
     isSaving.value = true;
-    saveStatus.value = null; // Resetea el estado
+    saveStatus.value = null;
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
     try {
         const response = await fetch(`${backendUrl}/api/log-route`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(calculatedLogEntry.value) // Envía el objeto calculado
+            body: JSON.stringify(calculatedLogEntry.value)
         });
 
         const result = await response.json();
@@ -292,7 +390,6 @@ async function saveToLogbook() {
         if (response.ok && result.success) {
             console.log("Respuesta del servidor:", result);
             saveStatus.value = { success: true, message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` };
-            // Opcional: resetear formulario o dar más feedback
         } else {
             throw new Error(result.message || 'Error desconocido del servidor.');
         }
