@@ -408,7 +408,7 @@ async function saveToLogbook() {
 </script>
 
 <template>
-    <div class="uploader-container">
+    <div class="view-container"></div><div class="uploader-container">
         <input type="file" multiple accept="image/*" @change="handleFileChange" id="file-input" :disabled="isProcessing">
         <div v-if="isProcessing" class="status"><h3>Procesando imágenes...</h3></div>
         
@@ -593,7 +593,7 @@ async function saveToLogbook() {
                              :class="['save-status', saveStatus.success ? 'success' : 'error']">
                             {{ saveStatus.message }}
                         </div>
-                    </div> </div> </div> </div> </div> </template>
+                    </div> </div> </div> </div> </div> </div></template>
 
 <style scoped>
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
