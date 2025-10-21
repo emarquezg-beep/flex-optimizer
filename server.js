@@ -12,9 +12,8 @@ const PORT = 3000;
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
-  'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app/upload' // <-- ¡ESTA ES LA URL CORRECTA!
+  'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app', // (Podrías borrar esta)
+  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app' // ¡La URL de tu rama v2.0!
 ];
 
 // 2. LA FUNCIÓN MEJORADA (que limpia el slash)
@@ -29,11 +28,11 @@ const corsOptions = {
 
     // Ahora comparamos el origen "limpio" con nuestra lista "limpia"
     if (allowedOrigins.indexOf(originToTest) !== -1 || !origin) {
-      callback(null, true);
+      callback(null, true); // Permitido
     } else {
       // Si falla, imprime en Render exactamente qué URL fue rechazada
       console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
-      callback(new Error('No permitido por CORS'));
+      callback(new Error('No permitido por CORS')); // Rechazado
     }
   }
 };
