@@ -10,7 +10,7 @@ const isSaving = ref(false);
 const saveStatus = ref(null);
 
 // VAMOS A USAR ESTOS VALORES
-const VEHICULO_OPTIONS = ['Toyota Corolla', 'Honda Civic', 'Mi Otro Carro'];
+const VEHICULO_OPTIONS = ['Pontiac', 'Trax', 'Kia', 'Otro Carro'];
 const DURACION_OPTIONS = [3, 3.5, 4, 4.5, 5];
 
 // (1) WAREHOUSES ACTUALIZADOS con commuteMiles
@@ -132,18 +132,22 @@ const reportData = computed(() => {
 
 // (Tu lógica de scenarioETAs está perfecta, la mantengo)
 const scenarioETAs = computed(() => {
-    if (!reportData.value?.normal) return null;
+    if (!reportData.value?.normal || !blockData.value?.hora) return null;
     const stopCount = Number(reportData.value.stopCount) || 0;
     const apartmentCount = Number(reportData.value.apartmentCount) || 0;
     const downtownCount = Number(reportData.value.downtownCount) || 0;
     const regularApartmentCount = apartmentCount - downtownCount;
-    const now = new Date();
+    //const now = new Date();
+    const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
+    const startTime = new Date(); // Crea una fecha de "hoy"
+    startTime.setHours(startHours, startMinutes, 0, 0); // La ajusta a la hora de inicio del bloque
     const calculateScenario = (baseDrive, commute, multiplier) => {
         const baseStopTime = stopCount * multiplier;
         const extraTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
         const totalDuration = (Number(baseDrive) || 0) + baseStopTime + extraTime + (Number(commute) || 0);
         if (isNaN(totalDuration)) { return { totalDuration: 'N/A', eta: 'Error' }; }
-        const eta = new Date(now.getTime() + totalDuration * 60000);
+        //const eta = new Date(now.getTime() + totalDuration * 60000);
+        const eta = new Date(startTime.getTime() + totalDuration * 60000);
         return {
             totalDuration: Math.round(totalDuration),
             eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
