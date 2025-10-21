@@ -408,7 +408,7 @@ async function saveToLogbook() {
 </script>
 
 <template>
-    <div class="view-container"><div class="uploader-container">
+    <div class="view-container"><div class="uploader-container"></div>
         <input type="file" multiple accept="image/*" @change="handleFileChange" id="file-input" :disabled="isProcessing">
         <div v-if="isProcessing" class="status"><h3>Procesando imágenes...</h3></div>
         
