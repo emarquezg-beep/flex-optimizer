@@ -13,7 +13,8 @@ const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
   'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app' // <-- ¡ESTA ES LA URL CORRECTA!
+  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app/upload' // <-- ¡ESTA ES LA URL CORRECTA!
 ];
 
 // 2. LA FUNCIÓN MEJORADA (que limpia el slash)
