@@ -1,11 +1,13 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import Tesseract from 'tesseract.js';
 
 // --- VARIABLES Y DATOS (sin cambios) ---
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
+const isSaving = ref(false); // <-- NUEVO: Para feedback del botón
+const saveStatus = ref(null); // <-- NUEVO: Para mensajes de éxito/error
 const warehouses = [
   { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL' },
   { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL' },
@@ -13,6 +15,7 @@ const warehouses = [
   { code: 'DFL4', address: '4401 Seaboard Rd Orlando, FL' },
   { code: 'DFL8', address: '7453 Republic Dr Groveland, FL' },
   { code: 'DMO4', address: '2400 Mason Ave Daytona Beach, FL' },
+  { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL' },
 ];
 const destinations = ref([
   { code: 'Casa', address: '513 Alafaya Woods Blvd Oviedo, FL' },
@@ -265,6 +268,42 @@ async function sendToBackend() {
     backendResponse.value = { error: 'Error: No se pudo conectar al servidor.' };
   }
 }
+
+// --- (7) FUNCIÓN 'saveToLogbook' (ACTUALIZADA) ---
+async function saveToLogbook() {
+    if (!calculatedLogEntry.value) {
+        alert("No hay datos calculados para guardar.");
+        return;
+    }
+    
+    isSaving.value = true;
+    saveStatus.value = null; // Resetea el estado
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+    try {
+        const response = await fetch(`${backendUrl}/api/log-route`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(calculatedLogEntry.value) // Envía el objeto calculado
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            console.log("Respuesta del servidor:", result);
+            saveStatus.value = { success: true, message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` };
+            // Opcional: resetear formulario o dar más feedback
+        } else {
+            throw new Error(result.message || 'Error desconocido del servidor.');
+        }
+
+    } catch (error) {
+        console.error("Error al guardar en bitácora:", error);
+        saveStatus.value = { success: false, message: `Error: ${error.message}` };
+    } finally {
+        isSaving.value = false;
+    }
+}
 </script>
 
 <template>
@@ -308,6 +347,18 @@ async function sendToBackend() {
                     <button @click="reorderList" class="button-reorder">🔄 Reordenar Lista</button>
                 </div>
                 <button @click="sendToBackend" class="button-map">Evaluar Escenarios</button>
+
+                <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
+                        {{ isSaving ? 'Guardando...' : '💾 Guardar en Bitácora' }}
+                    </button>
+                    
+                    <div v-if="saveStatus" 
+                         :class="['save-status', saveStatus.success ? 'success' : 'error']">
+                        {{ saveStatus.message }}
+                    </div>
+                </div>
+
+            </div>
 
                 <div v-if="backendResponse">
                     <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluando escenarios...</div>
@@ -428,4 +479,26 @@ async function sendToBackend() {
     .eta-label.pessimistic { color: #dc3545; }
     .eta-time { font-size: 1.3em; font-weight: bold; color: #0056b3; margin-right: 10px; }
     .eta-duration { font-size: 0.9em; color: #6c757d; }
+    .button-save-log:disabled {
+    background-color: #aaa;
+    cursor: not-allowed;
+}
+
+.save-status {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: bold;
+    text-align: center;
+}
+.save-status.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.save-status.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
 </style>
