@@ -19,20 +19,26 @@ const allowedOrigins = [
 // 2. LA FUNCIÓN MEJORADA (que limpia el slash)
 const corsOptions = {
   origin: function (origin, callback) {
-    let originToTest = origin;
     
-    // Si el origen (del navegador) termina en '/', se lo quitamos
+    // --- INICIO DEL CÓDIGO DE DEPURACIÓN ---
+    // ¡ESTO NOS DIRÁ LA VERDAD!
+    console.log("--- INICIO DEPURACIÓN CORS ---");
+    console.log("Origen (Navegador):", origin);
+    console.log("Lista 'allowedOrigins' (En Memoria del Servidor):", allowedOrigins);
+    // --- FIN DEPURACIÓN ---
+    
+    let originToTest = origin;
     if (originToTest && originToTest.endsWith('/')) {
       originToTest = originToTest.slice(0, -1);
     }
 
-    // Ahora comparamos el origen "limpio" con nuestra lista "limpia"
     if (allowedOrigins.indexOf(originToTest) !== -1 || !origin) {
-      callback(null, true); // Permitido
+      console.log("RESULTADO: Permitido");
+      callback(null, true);
     } else {
-      // Si falla, imprime en Render exactamente qué URL fue rechazada
+      // Este es el error que ya vemos
       console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
-      callback(new Error('No permitido por CORS')); // Rechazado
+      callback(new Error('No permitido por CORS'));
     }
   }
 };
