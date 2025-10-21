@@ -9,12 +9,28 @@ const { createClient } = require('@supabase/supabase-js'); // <-- 1. IMPORTAR SU
 const app = express();
 const PORT = 3000;
 
-const allowedOrigins = [ 'http://localhost:5173', 'https://flex-optimizer.vercel.app', 'flex-optimizer-git-main-ernestos-projects-d9e7c95d.vercel.app','https://flex-optimizer-git-main-ernestos-projects-d9e7c95d.vercel.app/' ];
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://flex-optimizer.vercel.app',
+  'https://flex-optimizer-git-main-ernestos-projects-d9e7c95d.vercel.app' // <-- LA VERSIÓN CORRECTA
+];
+
+// 2. LA FUNCIÓN MEJORADA (que limpia el slash)
 const corsOptions = {
   origin: function (origin, callback) {
-    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+    let originToTest = origin;
+    
+    // Si el origen (del navegador) termina en '/', se lo quitamos
+    if (originToTest && originToTest.endsWith('/')) {
+      originToTest = originToTest.slice(0, -1);
+    }
+
+    // Ahora comparamos el origen "limpio" con nuestra lista "limpia"
+    if (allowedOrigins.indexOf(originToTest) !== -1 || !origin) {
       callback(null, true);
     } else {
+      // Si falla, imprime en Render exactamente qué URL fue rechazada
+      console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
       callback(new Error('No permitido por CORS'));
     }
   }
