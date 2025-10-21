@@ -9,7 +9,7 @@ const { createClient } = require('@supabase/supabase-js'); // <-- 1. IMPORTAR SU
 const app = express();
 const PORT = 3000;
 
-const allowedOrigins = [ 'http://localhost:5173', 'https://flex-optimizer.vercel.app', 'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app/' ];
+const allowedOrigins = [ 'http://localhost:5173', 'https://flex-optimizer.vercel.app', 'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app/','https://flex-optimizer-2cij0q81m-ernestos-projects-d9e7c95d.vercel.app' ];
 const corsOptions = {
   origin: function (origin, callback) {
     if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
