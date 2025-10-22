@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import Tesseract from 'tesseract.js';
+import stringSimilarity from 'string-similarity';
 
 // --- VARIABLES Y DATOS (v1.5) ---
 const extractedAddresses = ref([]);
@@ -268,71 +269,402 @@ const calculatedLogEntry = computed(() => {
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); }
 function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); }
-function preprocessImage(file) {
+
+
+// aqui van las funciones nuevas
+// ============================================
+// CONFIGURACIÓN Y DICCIONARIOS
+// ============================================
+
+const KNOWN_CITIES = [
+  'ORANGE CITY', 'WINTER PARK', 'DEBARY', 'DELTONA', 'SANFORD',
+  'LAKE MARY', 'LONGWOOD', 'OVIEDO', 'CASSELBERRY', 'ALTAMONTE SPRINGS',
+  'APOPKA', 'MAITLAND', 'ORLANDO'
+];
+
+// Diccionario de correcciones comunes de Tesseract
+const STREET_TYPE_CORRECTIONS = {
+  // AVE variations
+  'AV': 'AVE', 'AVF': 'AVE', 'AV3': 'AVE', 'AVF.': 'AVE', 'AVEE': 'AVE',
+  'AVL': 'AVE', 'AYE': 'AVE', 'AWE': 'AVE',
+  
+  // RD variations
+  'R0': 'RD', 'RO': 'RD', 'RD.': 'RD', 'RE': 'RD',
+  
+  // ST variations
+  'S1': 'ST', 'ST.': 'ST', 'STR': 'ST', 'STT': 'ST',
+  
+  // DR variations
+  'DR.': 'DR', 'DRI': 'DR', 'DF': 'DR', 'D8': 'DR',
+  
+  // LN variations
+  'LN.': 'LN', 'LNE': 'LN', 'L1': 'LN',
+  
+  // CT variations
+  'CT.': 'CT', 'C1': 'CT', 'CY': 'CT',
+  
+  // WAY variations
+  'WAY.': 'WAY', 'WY': 'WAY', 'W4Y': 'WAY',
+  
+  // BLVD variations
+  'BLVD.': 'BLVD', 'BLDV': 'BLVD', 'BLV': 'BLVD',
+  
+  // CIR variations
+  'CIR.': 'CIR', 'CIRC': 'CIR', 'C1R': 'CIR',
+  
+  // PKWY variations
+  'PKWY.': 'PKWY', 'PKW': 'PKWY', 'PKWY': 'PKWY',
+  
+  // PL variations
+  'PL.': 'PL', 'P1': 'PL',
+  
+  // TRL variations
+  'TRL.': 'TRL', 'TRAIL': 'TRL', 'TR1': 'TRL'
+};
+
+const VALID_STREET_TYPES = [
+  'AVE', 'ST', 'RD', 'DR', 'LN', 'CT', 'WAY', 'BLVD', 
+  'CIR', 'PKWY', 'PL', 'TRL', 'LOOP', 'PATH', 'TER'
+];
+
+// ============================================
+// PREPROCESAMIENTO DE IMAGEN MEJORADO
+// ============================================
+
+async function preprocessImage(imageFile) {
   return new Promise((resolve) => {
-    const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
-    const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
-    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data; const contrast = 2.0; const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = factor * (data[i] - 128) + 128; data[i+1] = factor * (data[i+1] - 128) + 128; data[i+2] = factor * (data[i+2] - 128) + 128;
-      const avg = (data[i] + data[i+1] + data[i+2]) / 3; data[i] = avg; data[i+1] = avg; data[i+2] = avg;
-    }
-    ctx.putImageData(imageData, 0, 0); resolve(canvas.toDataURL('image/png'));
-    }; img.src = e.target.result; }; reader.readAsDataURL(file);
+    const img = new Image();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    img.onload = () => {
+      // Recortar el 20% izquierdo (línea de tiempo)
+      const cropLeft = Math.floor(img.width * 0.20);
+      const newWidth = img.width - cropLeft;
+      
+      canvas.width = newWidth;
+      canvas.height = img.height;
+      
+      // Dibujar la imagen recortada
+      ctx.drawImage(img, cropLeft, 0, newWidth, img.height, 0, 0, newWidth, img.height);
+      
+      // Obtener datos de píxeles
+      const imageData = ctx.getImageData(0, 0, newWidth, img.height);
+      const data = imageData.data;
+      
+      // Aumentar contraste y sharpening
+      for (let i = 0; i < data.length; i += 4) {
+        // Convertir a escala de grises
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        
+        // Aumentar contraste (threshold adaptativo)
+        const contrast = avg > 128 ? 255 : 0;
+        
+        data[i] = contrast;     // R
+        data[i + 1] = contrast; // G
+        data[i + 2] = contrast; // B
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
+      
+      canvas.toBlob((blob) => {
+        resolve(new File([blob], 'preprocessed.png', { type: 'image/png' }));
+      });
+    };
+    
+    img.src = URL.createObjectURL(imageFile);
   });
 }
-function parseAddresses(rawText) {
-  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
-  const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
-  let match;
-  while ((match = pattern.exec(rawText)) !== null) {
-    const stopNumber = parseInt(match[1]);
-    const textBlock = match[2];
-    const addressPattern = /(\d{3,5}\s[A-Z].*)/;
-    const addressMatch = textBlock.match(addressPattern);
-    if (addressMatch) {
-      let street = addressMatch[1].trim(); let city = '';
-      const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
-      if (lines.length > 1) {
-        let nextLine = lines[1].trim();
-        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
-        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
+
+// ============================================
+// CORRECCIÓN POST-OCR
+// ============================================
+
+function correctStreetType(address) {
+  let corrected = address;
+  
+  // Buscar y corregir tipos de calle conocidos
+  const words = address.split(' ');
+  const correctedWords = words.map(word => {
+    const upper = word.toUpperCase().replace(/[.,]/g, '');
+    return STREET_TYPE_CORRECTIONS[upper] || word;
+  });
+  
+  return correctedWords.join(' ');
+}
+
+function cleanOCRNoise(text) {
+  // Eliminar líneas de ruido común
+  let cleaned = text
+    .replace(/Scheduled\s+\d{1,2}:\d{2}\s*-?\s*\d{1,2}:\d{2}\s*(AM|PM)/gi, '')
+    .replace(/Deliver\s+\d+\s+package/gi, '')
+    .replace(/#\s*A-\d+\.\d+A/gi, '')
+    .replace(/⏱️|📍|🗺️/g, '');
+  
+  return cleaned;
+}
+
+// ============================================
+// EXTRACCIÓN INTELIGENTE DE DIRECCIONES
+// ============================================
+
+function extractAddresses(rawText) {
+  const addresses = [];
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  let currentStop = null;
+  let currentAddress = null;
+  let lastKnownCity = null;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // 1. Detectar número de parada
+    const stopMatch = line.match(/^(\d{1,3})$/);
+    if (stopMatch) {
+      // Si teníamos una parada anterior, guardarla
+      if (currentStop && currentAddress) {
+        addresses.push({
+          stop: currentStop,
+          address: currentAddress,
+          city: lastKnownCity,
+          confidence: calculateConfidence(currentAddress, lastKnownCity)
+        });
       }
-      if (!city) { city = lastKnownCity; }
-      stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false });
+      
+      currentStop = parseInt(stopMatch[1]);
+      currentAddress = null;
+      continue;
+    }
+    
+    // 2. Detectar dirección (RegEx PERMISIVO)
+    // Busca: número(s) + al menos 2 palabras
+    const addressMatch = line.match(/^(\d{1,6})\s+([A-Z0-9].*)/i);
+    if (addressMatch && !currentAddress) {
+      let rawAddress = `${addressMatch[1]} ${addressMatch[2]}`.trim();
+      
+      // Aplicar correcciones
+      rawAddress = correctStreetType(rawAddress);
+      
+      currentAddress = rawAddress;
+      continue;
+    }
+    
+    // 3. Detectar ciudad (fuzzy matching)
+    const cityMatch = findBestCityMatch(line);
+    if (cityMatch && cityMatch.rating > 0.7) {
+      lastKnownCity = cityMatch.target;
+      
+      // Si teníamos dirección pero no ciudad, ahora la guardamos
+      if (currentStop && currentAddress) {
+        addresses.push({
+          stop: currentStop,
+          address: currentAddress,
+          city: lastKnownCity,
+          confidence: calculateConfidence(currentAddress, lastKnownCity)
+        });
+        
+        currentStop = null;
+        currentAddress = null;
+      }
     }
   }
-  return stops;
+  
+  // Guardar la última parada si existe
+  if (currentStop && currentAddress) {
+    addresses.push({
+      stop: currentStop,
+      address: currentAddress,
+      city: lastKnownCity,
+      confidence: calculateConfidence(currentAddress, lastKnownCity)
+    });
+  }
+  
+  return addresses;
 }
-async function handleFileChange(event) {
-  const files = event.target.files; if (!files.length) return;
-  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null;
-  let allParsedStops = [];
+
+// ============================================
+// FUZZY MATCHING PARA CIUDADES
+// ============================================
+
+function findBestCityMatch(text) {
+  const cleanText = text.toUpperCase().trim();
+  
+  if (cleanText.length < 3) return null;
+  
+  const matches = stringSimilarity.findBestMatch(cleanText, KNOWN_CITIES);
+  return matches.bestMatch;
+}
+
+// ============================================
+// SISTEMA DE CONFIANZA
+// ============================================
+
+function calculateConfidence(address, city) {
+  let score = 0;
+  
+  // +30 puntos: tiene número de casa
+  if (/^\d{1,6}\s/.test(address)) {
+    score += 30;
+  }
+  
+  // +30 puntos: tiene tipo de calle válido
+  const hasValidType = VALID_STREET_TYPES.some(type => 
+    address.toUpperCase().includes(` ${type}`)
+  );
+  if (hasValidType) {
+    score += 30;
+  }
+  
+  // +20 puntos: tiene ciudad
+  if (city) {
+    score += 20;
+  }
+  
+  // +10 puntos: tiene dirección (N, S, E, W)
+  if (/\b(N|S|E|W|NORTH|SOUTH|EAST|WEST)\b/i.test(address)) {
+    score += 10;
+  }
+  
+  // +10 puntos: longitud razonable (15-50 caracteres)
+  if (address.length >= 15 && address.length <= 50) {
+    score += 10;
+  }
+  
+  return score;
+}
+
+// ============================================
+// FUNCIÓN PRINCIPAL DE OCR
+// ============================================
+
+export async function processFlexScreenshot(imageFile) {
   try {
-      for (const file of files) {
-        const processedImage = await preprocessImage(file);
-        const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-        const stopsFromFile = parseAddresses(text);
-        allParsedStops.push(...stopsFromFile);
+    // 1. Preprocesar imagen
+    const processedImage = await preprocessImage(imageFile);
+    
+    // 2. Ejecutar OCR con configuración optimizada
+    const result = await Tesseract.recognize(processedImage, 'eng', {
+      tessedit_pageseg_mode: 6, // Bloque de texto único
+      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz -.',
+    });
+    
+    // 3. Limpiar texto de ruido
+    const cleanedText = cleanOCRNoise(result.data.text);
+    
+    // 4. Extraer direcciones con lógica inteligente
+    const addresses = extractAddresses(cleanedText);
+    
+    // 5. Filtrar y ordenar por confianza
+    const filteredAddresses = addresses
+      .filter(addr => addr.confidence >= 50) // Umbral mínimo
+      .sort((a, b) => a.stop - b.stop);
+    
+    return {
+      success: true,
+      addresses: filteredAddresses,
+      rawText: cleanedText,
+      stats: {
+        total: filteredAddresses.length,
+        highConfidence: filteredAddresses.filter(a => a.confidence >= 80).length,
+        mediumConfidence: filteredAddresses.filter(a => a.confidence >= 60 && a.confidence < 80).length,
+        lowConfidence: filteredAddresses.filter(a => a.confidence < 60).length
       }
-      const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
-      let maxStopNumber = 0;
-      uniqueStopsMap.forEach(stop => { if (stop.number > maxStopNumber) maxStopNumber = stop.number; });
-      const fullListWithGaps = [];
-      for (let i = 2; i <= maxStopNumber; i++) {
-          if (uniqueStopsMap.has(i)) { fullListWithGaps.push(uniqueStopsMap.get(i)); }
-          else { fullListWithGaps.push({ number: i, address: '', isDowntown: false }); }
-      }
-      extractedAddresses.value = fullListWithGaps;
-  } catch(error) {
-      console.error("Error processing files:", error);
-      alert("Hubo un error procesando las imágenes. Revisa la consola.");
-  } finally {
-      isProcessing.value = false;
+    };
+    
+  } catch (error) {
+    console.error('OCR Error:', error);
+    return {
+      success: false,
+      error: error.message,
+      addresses: []
+    };
   }
 }
-function sanitizeAddress(address) {
+
+// ============================================
+// FUNCIÓN DE VALIDACIÓN MANUAL
+// ============================================
+
+export function createManualReviewUI(addresses) {
+  // Esta función retorna un objeto con las direcciones
+  // marcadas por nivel de confianza para que el usuario
+  // revise y corrija los "gaps"
+  
+  return addresses.map(addr => ({
+    ...addr,
+    needsReview: addr.confidence < 80,
+    status: addr.confidence >= 80 ? 'auto' : 'manual'
+  }));
+}
+// REEMPLAZA TU 'handleFileChange' CON ESTO:
+async function handleFileChange(event) {
+  const files = event.target.files;
+  if (!files.length) return;
+  
+  isProcessing.value = true;
+  extractedAddresses.value = [];
+  backendResponse.value = null; // Resetea la respuesta anterior
+  
+  let allParsedStops = [];
+  
+  try {
+    for (const file of files) {
+      // 1. ¡Usamos la nueva pipeline v3.0!
+      const result = await processFlexScreenshot(file);
+      
+      if (result.success) {
+        // 2. Convertimos el formato de v3.0 al formato que usa nuestro UI
+        // El nuevo formato es: { stop, address, city, confidence }
+        const stopsFromFile = result.addresses.map(addr => ({
+          number: addr.stop,
+          address: `${addr.address} ${addr.city || ''}`.trim().toUpperCase(),
+          isDowntown: false,
+          confidence: addr.confidence // ¡Guardamos la confianza!
+        }));
+        allParsedStops.push(...stopsFromFile);
+      } else {
+        console.error("Fallo el OCR v3.0:", result.error);
+      }
+    }
+    
+    // 3. Mantenemos nuestra lógica de "gaps" (relleno de huecos)
+    const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+    let maxStopNumber = 0;
+    
+    // Encontramos el número de parada más alto
+    uniqueStopsMap.forEach(stop => {
+      if (stop.number > maxStopNumber) maxStopNumber = stop.number;
+    });
+
+    const fullListWithGaps = [];
+    if (maxStopNumber > 0) {
+      // Bucle empieza en 2 (asumiendo que 1 es el warehouse) o en el min
+      // Por ahora, mantenemos la lógica del 2
+      let minStopNumber = 2; 
+      // Opcional: encontrar el número más bajo si no es 2
+      if (allParsedStops.length > 0) {
+         minStopNumber = allParsedStops.reduce((min, p) => p.number < min ? p.number : min, allParsedStops[0].number);
+      }
+
+      for (let i = minStopNumber; i <= maxStopNumber; i++) {
+          if (uniqueStopsMap.has(i)) {
+              fullListWithGaps.push(uniqueStopsMap.get(i));
+          } else {
+              // Creamos el hueco con el formato correcto
+              fullListWithGaps.push({ number: i, address: '', isDowntown: false, confidence: 0 });
+          }
+      }
+    }
+    extractedAddresses.value = fullListWithGaps;
+
+  } catch (error) {
+    console.error("Error en handleFileChange:", error);
+    alert("Hubo un error procesando las imágenes. Revisa la consola.");
+  } finally {
+    isProcessing.value = false;
+  }
+}function sanitizeAddress(address) {
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
