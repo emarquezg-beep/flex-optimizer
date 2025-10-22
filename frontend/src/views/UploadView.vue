@@ -282,29 +282,75 @@ function preprocessImage(file) {
     }; img.src = e.target.result; }; reader.readAsDataURL(file);
   });
 }
+// REEMPLAZA ESTA FUNCIÓN COMPLETA
 function parseAddresses(rawText) {
-  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
+  const stops = [];
+  const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
+  let lastKnownCity = 'Orlando'; // Fallback por defecto
+
+  // --- FASE 2: Lista de Ciudades Conocidas (Sugerencia del Experto) ---
+  const KNOWN_CITIES = [
+    'ORLANDO', 'WINTER PARK', 'MAITLAND', 'OVIEDO', 'KISSIMMEE', 'APOPKA', 
+    'LONGWOOD', 'CASSELBERRY', 'ALTAMONTE SPRINGS', 'GROVELAND', 'DAYTONA BEACH'
+  ];
+
   const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
   let match;
+
   while ((match = pattern.exec(rawText)) !== null) {
     const stopNumber = parseInt(match[1]);
-    const textBlock = match[2];
-    const addressPattern = /(\d{3,5}\s[A-Z].*)/;
+    const textBlock = match[2]; // Texto de la "tarjeta"
+
+    // --- FASE 2: RegEx Experto (Sugerencia del Experto) ---
+    const addressPattern = /(\d{1,6}\s[A-Z0-9][A-Z0-9\s\.\-]+(?:ST|DR|CT|LN|RD|AVE|PKWY|PL|CIR|BLVD|WAY|TER|TRAIL|PARKWAY|COURT|LANE|ROAD|AVENUE|PLACE|CIRCLE)\b.*)/i;
     const addressMatch = textBlock.match(addressPattern);
+
     if (addressMatch) {
-      let street = addressMatch[1].trim(); let city = '';
+      let street = addressMatch[1].trim();
+      let city = '';
+
+      // --- FASE 2: Lógica de Ciudad Mejorada (Sugerencia del Experto) ---
       const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
+      
+      // 1. Intentar la siguiente línea (como antes)
       if (lines.length > 1) {
-        let nextLine = lines[1].trim();
-        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
-        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
+        let nextLine = lines[1].trim().toUpperCase();
+        for (const word of stopWords) {
+          if (nextLine.includes(word.toUpperCase())) {
+            nextLine = nextLine.substring(0, nextLine.indexOf(word.toUpperCase())).trim();
+          }
+        }
+        // Verificar si la línea es una ciudad conocida
+        if (KNOWN_CITIES.includes(nextLine)) {
+          city = nextLine;
+          lastKnownCity = city;
+        }
       }
-      if (!city) { city = lastKnownCity; }
-      stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false });
+
+      // 2. Si falló, buscar en TODO el bloque de texto
+      if (!city) {
+        const textBlockUpper = textBlock.toUpperCase();
+        for (const knownCity of KNOWN_CITIES) {
+          if (textBlockUpper.includes(knownCity)) {
+            city = knownCity;
+            lastKnownCity = city;
+            break; // Encontramos una, salimos del bucle
+          }
+        }
+      }
+
+      // 3. Si AÚN falló, usar el fallback
+      if (!city) {
+        city = lastKnownCity;
+      }
+      
+      // Convertir a mayúsculas para consistencia, ya que el RegEx es case-insensitive
+      stops.push({ number: stopNumber, address: `${street} ${city}`.toUpperCase(), isDowntown: false });
     }
   }
   return stops;
 }
+// REEMPLAZA ESTA FUNCIÓN COMPLETA
 async function handleFileChange(event) {
   const files = event.target.files; if (!files.length) return;
   isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null;
@@ -312,15 +358,22 @@ async function handleFileChange(event) {
   try {
       for (const file of files) {
         const processedImage = await preprocessImage(file);
-        const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
+        
+        // --- FASE 1: Page Segmentation Mode (Sugerencia del Experto) ---
+        const { data: { text } } = await Tesseract.recognize(processedImage, 'eng', {
+          tessedit_pageseg_mode: 4 // Modo 4 = Columna única de texto
+        });
+        
         const stopsFromFile = parseAddresses(text);
         allParsedStops.push(...stopsFromFile);
       }
       const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
       let maxStopNumber = 0;
       uniqueStopsMap.forEach(stop => { if (stop.number > maxStopNumber) maxStopNumber = stop.number; });
+
+      // Crea la lista final con gaps, empezando desde el #2
       const fullListWithGaps = [];
-      for (let i = 2; i <= maxStopNumber; i++) {
+      for (let i = 2; i <= maxStopNumber; i++) { // Bucle empieza en 2
           if (uniqueStopsMap.has(i)) { fullListWithGaps.push(uniqueStopsMap.get(i)); }
           else { fullListWithGaps.push({ number: i, address: '', isDowntown: false }); }
       }
