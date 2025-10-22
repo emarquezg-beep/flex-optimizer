@@ -306,7 +306,7 @@ const VALID_STREET_TYPES = [
 // SECCIÓN 2: PREPROCESAMIENTO DE IMAGEN
 // ============================================
 
-async function preprocessImage(imageFile) {
+aasync function preprocessImage(imageFile) {
   return new Promise((resolve) => {
     const img = new Image();
     const canvas = document.createElement('canvas');
