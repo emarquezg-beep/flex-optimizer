@@ -13,7 +13,7 @@ const PORT = 3000;
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app', // Producción (main)
-  'https://flex-optimizer-git-v21-ocr-im-b1502c-ernestos-projects-d9e7c95d.vercel.app' // ¡La nueva rama v2.1!
+  'https://flex-optimizer-git-v22-ocr-cropping-ernestos-projects-d9e7c95d.vercel.app' // ¡La nueva rama v2.2!
 ];
 
 // 2. LA FUNCIÓN MEJORADA (que limpia el slash)
@@ -21,7 +21,6 @@ const corsOptions = {
   origin: function (origin, callback) {
     let originToTest = origin;
     
-    // Si el origen (del navegador) termina en '/', se lo quitamos
     if (originToTest && originToTest.endsWith('/')) {
       originToTest = originToTest.slice(0, -1);
     }
