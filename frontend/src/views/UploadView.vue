@@ -601,7 +601,8 @@ async function handleFileChange(event) {
           number: addr.stop,
           address: `${addr.address} ${addr.city || ''}`.trim().toUpperCase(),
           isDowntown: false,
-          confidence: addr.confidence
+          confidence: addr.confidence,
+          needsReview: addr.needsReview || false // ← NUEVO FLAG
         }));
         
         allParsedStops.push(...stopsFromFile);
@@ -651,7 +652,6 @@ async function handleFileChange(event) {
     isProcessing.value = false;
   }
 }
-
 function sanitizeAddress(address) {
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
@@ -756,7 +756,7 @@ async function saveToLogbook() {
             <div class="address-list">
                 <h2>📝 Revisa y Edita las Paradas ({{ extractedAddresses.length }})</h2>
                 <ol class="ordered-list">
-                    <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item">
+                    <li v-for="(stop, index) in extractedAddresses" :key="index" :class="['editable-item', { 'needs-review': stop.needsReview }]">
                         <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#">
                         <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección de la parada">
                         <label class="downtown-label" title="Marcar si es Downtown">
@@ -989,5 +989,18 @@ async function saveToLogbook() {
     background-color: #f8d7da;
     color: #721c24;
     border: 1px solid #f5c6cb;
+}
+
+/* Resaltar direcciones auto-asignadas que necesitan revisión */
+.editable-item.needs-review {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding-left: 10px;
+    margin-left: -10px;
+}
+
+.editable-item.needs-review .address-input {
+    background-color: #fffbf0;
+    border-color: #ffc107;
 }
 </style>
