@@ -649,15 +649,15 @@ function createManualReviewUI(addresses) {
     status: addr.confidence >= 80 ? 'auto' : 'manual'
   }));
 }
-// REEMPLAZA TU 'handleFileChange' CON ESTO:
-function correctStreetType(address) {
-  const words = address.split(' ');
-  const correctedWords = words.map(word => {
-    const upper = word.toUpperCase().replace(/[.,]/g, '');
-    return STREET_TYPE_CORRECTIONS[upper] || word;
-  });
-  return correctedWords.join(' ');
-}
+
+//function correctStreetType(address) {
+  //const words = address.split(' ');
+  //const correctedWords = words.map(word => {
+   // const upper = word.toUpperCase().replace(/[.,]/g, '');
+    //return STREET_TYPE_CORRECTIONS[upper] || word;
+  //});
+  //return correctedWords.join(' ');
+//}
 
 function cleanOCRNoise(text) {
   let cleaned = text
