@@ -410,15 +410,13 @@ function calculateConfidence(address, city) {
 function extractAddresses(rawText) {
   const addresses = [];
   const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  const confidence = calculateConfidence(street, city);
-  
+
   let currentStop = null;
   let currentAddress = null;
   let lastKnownCity = 'ORLANDO';
   let stopCounter = 2; // Empezamos en 2 (Parada 1 es el warehouse)
   let wasAutoAssigned = false; // ¡¡AQUÍ ESTÁ LA LÓGICA QUE FALTABA!!
-  console.log(`📊 Confianza calculada para parada ${stopNumber}: ${confidence} (Calle: "${street}", Ciudad: "${city}")`);
-      // --- FIN DEL LOG ---
+  // --- FIN DEL LOG ---
   
   console.log('📄 Texto OCR Crudo:', rawText);
   console.log('📋 Líneas procesadas:', lines);
@@ -627,8 +625,7 @@ async function handleFileChange(event) {
           address: `${addr.address} ${addr.city || ''}`.trim().toUpperCase(),
           isDowntown: false,
           confidence: addr.confidence,
-          //needsReview: addr.needsReview || false // ← NUEVO FLAG
-          needsReview: addr.needsReview // <-- Usa el flag calculado
+          needsReview: addr.needsReview 
         }));
         
         allParsedStops.push(...stopsFromFile);
