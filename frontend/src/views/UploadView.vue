@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import Tesseract from 'tesseract.js';
+import { matchCity } from '../utils/cityMatcher.js';
 
 // --- VARIABLES Y DATOS (v1.5) ---
 const extractedAddresses = ref([]);
@@ -285,67 +286,56 @@ function preprocessImage(file) {
 // REEMPLAZA ESTA FUNCIÓN COMPLETA
 function parseAddresses(rawText) {
   const stops = [];
-  const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
-  let lastKnownCity = 'Orlando'; // Fallback por defecto
-
-  // --- FASE 2 (Modificada): Lista de Ciudades Conocidas ---
-  const KNOWN_CITIES = [
-    'ORLANDO', 'WINTER PARK', 'MAITLAND', 'OVIEDO', 'KISSIMMEE', 'APOPKA', 
-    'LONGWOOD', 'CASSELBERRY', 'ALTAMONTE SPRINGS', 'GROVELAND', 'DAYTONA BEACH',
-    'DEBARY' // <-- 1. CIUDAD AÑADIDA
-  ];
+  let lastKnownCity = 'ORLANDO'; // Fallback final
 
   const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
   let match;
 
   while ((match = pattern.exec(rawText)) !== null) {
     const stopNumber = parseInt(match[1]);
-    let textBlock = match[2]; // <-- Cambiado a 'let' para poder limpiarlo
+    let textBlock = match[2];
 
-    // --- NUEVO (Fix 1): Limpieza de Contaminación ---
-    // Elimina la línea "Scheduled..." ANTES de buscar la dirección
-    // Esto evita que "7:00 AM" se pegue con "70 HOLLOW PINE"
+    // 1. Limpieza de Contaminación (como planeamos)
     const scheduledLinePattern = /.*Scheduled.*\n/i; 
     textBlock = textBlock.replace(scheduledLinePattern, '');
-    // --- FIN DE LA LIMPIEZA ---
 
-    // --- FASE 2: RegEx Experto (Sin cambios) ---
+    // 2. RegEx Experto (como recomendó tu amigo)
     const addressPattern = /(\d{1,6}\s[A-Z0-9][A-Z0-9\s\.\-]+(?:ST|DR|CT|LN|RD|AVE|PKWY|PL|CIR|BLVD|WAY|TER|TRAIL|PARKWAY|COURT|LANE|ROAD|AVENUE|PLACE|CIRCLE)\b.*)/i;
     const addressMatch = textBlock.match(addressPattern);
 
     if (addressMatch) {
-      let street = addressMatch[1].trim();
-      let city = '';
+      const street = addressMatch[1].trim();
+      let city = null;
 
-      // --- FASE 2: Lógica de Ciudad Mejorada (Sin cambios) ---
+      // 3. Extracción y Corrección de Ciudad (La Nueva Lógica)
       const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
       
       if (lines.length > 1) {
-        let nextLine = lines[1].trim().toUpperCase();
-        for (const word of stopWords) {
-          if (nextLine.includes(word.toUpperCase())) {
-            nextLine = nextLine.substring(0, nextLine.indexOf(word.toUpperCase())).trim();
-          }
+        // Asumimos que la ciudad está en la siguiente línea
+        let ocrCityGuess = lines[1].trim();
+        
+        // Limpiamos "Deliver 1 package" de la línea
+        const deliverMatch = ocrCityGuess.match(/DELIVER \d/i);
+        if (deliverMatch) {
+          ocrCityGuess = ocrCityGuess.substring(0, deliverMatch.index).trim();
         }
-        if (KNOWN_CITIES.includes(nextLine)) {
-          city = nextLine;
-          lastKnownCity = city;
-        }
+
+        // ¡Usamos el Fuzzy Matcher!
+        city = matchCity(ocrCityGuess);
       }
 
+      // 4. Fallback (si la línea 2 falló o estaba vacía)
       if (!city) {
-        const textBlockUpper = textBlock.toUpperCase();
-        for (const knownCity of KNOWN_CITIES) {
-          if (textBlockUpper.includes(knownCity)) {
-            city = knownCity;
-            lastKnownCity = city;
-            break;
-          }
-        }
+        // Si no encontramos ciudad en la línea 2, probamos con el bloque entero
+        // Esto es más lento pero puede salvar casos
+        city = matchCity(textBlock);
       }
 
-      if (!city) {
-        city = lastKnownCity;
+      // 5. Asignación final
+      if (city) {
+        lastKnownCity = city; // Actualizamos nuestro fallback
+      } else {
+        city = lastKnownCity; // Usamos el último bueno conocido
       }
       
       stops.push({ number: stopNumber, address: `${street} ${city}`.toUpperCase(), isDowntown: false });
