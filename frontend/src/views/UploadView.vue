@@ -696,7 +696,7 @@ async function saveToLogbook() {
     } finally {
         isSaving.value = false;
     }
-}
+
 </script>
 
 <template>
