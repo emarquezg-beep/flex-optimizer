@@ -696,8 +696,8 @@ async function saveToLogbook() {
     } finally {
         isSaving.value = false;
     }
-
-</script>
+}
+//</script>
 
 <template>
     <div class="view-container"><div class="uploader-container">
