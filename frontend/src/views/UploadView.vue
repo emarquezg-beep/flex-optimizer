@@ -406,6 +406,7 @@ function calculateConfidence(address, city) {
 // SECCIÓN 5: EXTRACCIÓN DE DIRECCIONES
 // ============================================
 
+// REEMPLAZA ESTA FUNCIÓN COMPLETA
 function extractAddresses(rawText) {
   const addresses = [];
   const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -413,7 +414,8 @@ function extractAddresses(rawText) {
   let currentStop = null;
   let currentAddress = null;
   let lastKnownCity = 'ORLANDO';
-  let stopCounter = 18;
+  let stopCounter = 2; // Empezamos en 2 (Parada 1 es el warehouse)
+  let wasAutoAssigned = false; // ¡¡AQUÍ ESTÁ LA LÓGICA QUE FALTABA!!
   
   console.log('📄 Texto OCR Crudo:', rawText);
   console.log('📋 Líneas procesadas:', lines);
@@ -426,11 +428,13 @@ function extractAddresses(rawText) {
     
     if (combinedMatch) {
       if (currentStop && currentAddress) {
+        // Guardar la parada anterior
         addresses.push({
           stop: currentStop,
           address: currentAddress,
           city: lastKnownCity,
-          confidence: calculateConfidence(currentAddress, lastKnownCity)
+          confidence: calculateConfidence(currentAddress, lastKnownCity),
+          needsReview: wasAutoAssigned // Pasa el flag de la parada anterior
         });
       }
       
@@ -439,6 +443,9 @@ function extractAddresses(rawText) {
       rawAddress = correctStreetType(rawAddress);
       currentAddress = rawAddress;
       
+      wasAutoAssigned = false; // No fue auto-asignada, encontramos el número
+      stopCounter = currentStop + 1; // Actualizamos el contador
+      
       console.log(`🔢 Parada detectada: ${currentStop}`);
       console.log(`🏠 Dirección detectada: ${currentAddress}`);
       continue;
@@ -446,28 +453,34 @@ function extractAddresses(rawText) {
     
     // 2. DETECTAR NÚMERO DE PARADA SOLO
     let stopMatch = null;
-    stopMatch = line.match(/^\((\d{1,3})\)$/);
+    stopMatch = line.match(/^\((\d{1,3})\)$/); // Busca (18)
     if (!stopMatch) {
-      stopMatch = line.match(/^(\d{1,3})$/);
+      stopMatch = line.match(/^(\d{1,3})$/); // Busca 18
     }
     
     if (stopMatch) {
       if (currentStop && currentAddress) {
+        // Guardar la parada anterior
         addresses.push({
           stop: currentStop,
           address: currentAddress,
           city: lastKnownCity,
-          confidence: calculateConfidence(currentAddress, lastKnownCity)
+          confidence: calculateConfidence(currentAddress, lastKnownCity),
+          needsReview: wasAutoAssigned
         });
       }
       
       currentStop = parseInt(stopMatch[1]);
-      currentAddress = null;
+      currentAddress = null; // Reseteamos la dirección
+      
+      wasAutoAssigned = false; // No fue auto-asignada
+      stopCounter = currentStop + 1; // Actualizamos el contador
+      
       console.log(`🔢 Parada detectada (solo): ${currentStop}`);
       continue;
     }
     
-    // 3. DETECTAR DIRECCIÓN
+    // 3. DETECTAR DIRECCIÓN SOLA (AQUÍ OCURRE LA MAGIA)
     const addressMatch = line.match(/^(\d{1,6})\s+([A-Z0-9].{2,})/i);
     
     if (addressMatch && !currentAddress) {
@@ -475,9 +488,11 @@ function extractAddresses(rawText) {
       rawAddress = correctStreetType(rawAddress);
       
       if (!currentStop) {
+        // ¡No teníamos número! Asignamos uno.
         currentStop = stopCounter;
-        stopCounter++;
-        console.log(`🔢 Parada asignada automáticamente: ${currentStop}`);
+        wasAutoAssigned = true; // ¡¡LA MARCAMOS PARA REVISIÓN!!
+        stopCounter++; // Incrementamos para la próxima
+        console.log(`🤖 Parada asignada por secuencia: ${currentStop} (REVISAR)`);
       }
       
       currentAddress = rawAddress;
@@ -486,7 +501,7 @@ function extractAddresses(rawText) {
     }
     
     // 4. DETECTAR CIUDAD
-    if (currentStop) {
+    if (currentStop) { // Solo si ya tenemos una parada...
       const cityMatch = findBestCityMatch(line);
       
       if (cityMatch && cityMatch.rating > 0.7) {
@@ -494,33 +509,38 @@ function extractAddresses(rawText) {
         console.log(`🏙️ Ciudad detectada: ${lastKnownCity} (rating: ${cityMatch.rating})`);
         
         if (currentAddress) {
+          // Guardamos la parada completa
           addresses.push({
             stop: currentStop,
             address: currentAddress,
             city: lastKnownCity,
-            confidence: calculateConfidence(currentAddress, lastKnownCity)
+            confidence: calculateConfidence(currentAddress, lastKnownCity),
+            needsReview: wasAutoAssigned // ¡¡PASAMOS EL FLAG!!
           });
           
+          // Reseteamos para la siguiente
           currentStop = null;
           currentAddress = null;
+          wasAutoAssigned = false;
         }
       }
     }
   }
   
-  // Guardar última parada pendiente
+  // Guardar última parada pendiente (si quedó alguna)
   if (currentStop && currentAddress) {
     addresses.push({
       stop: currentStop,
       address: currentAddress,
       city: lastKnownCity,
-      confidence: calculateConfidence(currentAddress, lastKnownCity)
+      confidence: calculateConfidence(currentAddress, lastKnownCity),
+      needsReview: wasAutoAssigned
     });
   }
   
   console.log('✅ Direcciones extraídas:', addresses);
   return addresses;
-}    
+}   
 // SECCIÓN 6: FUNCIÓN PRINCIPAL DE OCR
 // ============================================
 
