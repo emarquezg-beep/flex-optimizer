@@ -300,7 +300,7 @@ function parseAddresses(rawText) {
     textBlock = textBlock.replace(scheduledLinePattern, '');
 
     // 2. RegEx Experto (como recomendó tu amigo)
-    const addressPattern = /(\d{1,6}\s[A-Z0-9][A-Z0-9\s\.\-]+(?:ST|DR|CT|LN|RD|AVE|PKWY|PL|CIR|BLVD|WAY|TER|TRAIL|PARKWAY|COURT|LANE|ROAD|AVENUE|PLACE|CIRCLE)\b.*)/i;
+    const addressPattern = /(\d{1,6}\s[A-Z0-9][A-Z0-9\s\.\-]+(?:ST|DR|CT|LN|RD|AVE|AV|PKWY|PKY|PL|CIR|BLVD|WAY|TER|TRAIL|PARKWAY|COURT|LANE|ROAD|AVENUE|PLACE|CIRCLE)\b.*)/i;
     const addressMatch = textBlock.match(addressPattern);
 
     if (addressMatch) {
