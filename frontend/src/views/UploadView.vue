@@ -272,8 +272,8 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 
 
 // aqui van las funciones nuevas
-// ============================================
-// CONFIGURACIÓN Y DICCIONARIOS
+
+// SECCIÓN 1: CONFIGURACIÓN Y CONSTANTES
 // ============================================
 
 const KNOWN_CITIES = [
@@ -282,43 +282,19 @@ const KNOWN_CITIES = [
   'APOPKA', 'MAITLAND', 'ORLANDO'
 ];
 
-// Diccionario de correcciones comunes de Tesseract
 const STREET_TYPE_CORRECTIONS = {
-  // AVE variations
   'AV': 'AVE', 'AVF': 'AVE', 'AV3': 'AVE', 'AVF.': 'AVE', 'AVEE': 'AVE',
   'AVL': 'AVE', 'AYE': 'AVE', 'AWE': 'AVE',
-  
-  // RD variations
   'R0': 'RD', 'RO': 'RD', 'RD.': 'RD', 'RE': 'RD',
-  
-  // ST variations
   'S1': 'ST', 'ST.': 'ST', 'STR': 'ST', 'STT': 'ST',
-  
-  // DR variations
   'DR.': 'DR', 'DRI': 'DR', 'DF': 'DR', 'D8': 'DR',
-  
-  // LN variations
   'LN.': 'LN', 'LNE': 'LN', 'L1': 'LN',
-  
-  // CT variations
   'CT.': 'CT', 'C1': 'CT', 'CY': 'CT',
-  
-  // WAY variations
   'WAY.': 'WAY', 'WY': 'WAY', 'W4Y': 'WAY',
-  
-  // BLVD variations
   'BLVD.': 'BLVD', 'BLDV': 'BLVD', 'BLV': 'BLVD',
-  
-  // CIR variations
   'CIR.': 'CIR', 'CIRC': 'CIR', 'C1R': 'CIR',
-  
-  // PKWY variations
-  'PKWY.': 'PKWY', 'PKW': 'PKWY', 'PKWY': 'PKWY',
-  
-  // PL variations
+  'PKWY.': 'PKWY', 'PKW': 'PKWY',
   'PL.': 'PL', 'P1': 'PL',
-  
-  // TRL variations
   'TRL.': 'TRL', 'TRAIL': 'TRL', 'TR1': 'TRL'
 };
 
@@ -327,8 +303,7 @@ const VALID_STREET_TYPES = [
   'CIR', 'PKWY', 'PL', 'TRL', 'LOOP', 'PATH', 'TER'
 ];
 
-// ============================================
-// PREPROCESAMIENTO DE IMAGEN MEJORADO
+// SECCIÓN 2: PREPROCESAMIENTO DE IMAGEN
 // ============================================
 
 async function preprocessImage(imageFile) {
@@ -338,31 +313,21 @@ async function preprocessImage(imageFile) {
     const ctx = canvas.getContext('2d');
     
     img.onload = () => {
-      // NO recortar - necesitamos los números de parada
       canvas.width = img.width;
       canvas.height = img.height;
-      
-      // Dibujar imagen completa
       ctx.drawImage(img, 0, 0);
       
-      // Obtener datos de píxeles
       const imageData = ctx.getImageData(0, 0, img.width, img.height);
       const data = imageData.data;
       
-      // Aplicar inversión de colores SOLO para el texto blanco sobre negro
-      // y aumento de contraste suave
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        
-        // Calcular luminosidad
         const luminosity = (r + g + b) / 3;
         
-        // Si es texto oscuro sobre fondo claro (>200), mantener
-        // Si es texto claro sobre fondo oscuro (<100), INVERTIR
         if (luminosity < 100) {
-          // Invertir colores para texto blanco sobre negro
+          // Invertir para texto blanco sobre negro
           data[i] = 255 - r;
           data[i + 1] = 255 - g;
           data[i + 2] = 255 - b;
@@ -376,7 +341,6 @@ async function preprocessImage(imageFile) {
       }
       
       ctx.putImageData(imageData, 0, 0);
-      
       canvas.toBlob((blob) => {
         resolve(new File([blob], 'preprocessed.png', { type: 'image/png' }));
       });
@@ -385,279 +349,9 @@ async function preprocessImage(imageFile) {
     img.src = URL.createObjectURL(imageFile);
   });
 }
+
+// SECCIÓN 3: FUNCIONES DE LIMPIEZA Y CORRECCIÓN
 // ============================================
-// CORRECCIÓN POST-OCR
-// ============================================
-
-function correctStreetType(address) {
-  let corrected = address;
-  
-  // Buscar y corregir tipos de calle conocidos
-  const words = address.split(' ');
-  const correctedWords = words.map(word => {
-    const upper = word.toUpperCase().replace(/[.,]/g, '');
-    return STREET_TYPE_CORRECTIONS[upper] || word;
-  });
-  
-  return correctedWords.join(' ');
-}
-
-function cleanOCRNoise(text) {
-  // Eliminar líneas de ruido común
-  let cleaned = text
-    .replace(/Scheduled\s+\d{1,2}:\d{2}\s*-?\s*\d{1,2}:\d{2}\s*(AM|PM)/gi, '')
-    .replace(/Deliver\s+\d+\s+package/gi, '')
-    .replace(/#\s*A-\d+\.\d+A/gi, '')
-    .replace(/⏱️|📍|🗺️/g, '');
-  
-  return cleaned;
-}
-
-// ============================================
-// EXTRACCIÓN INTELIGENTE DE DIRECCIONES
-// ============================================
-
-// REEMPLAZA ESTA FUNCIÓN COMPLETA
-function extractAddresses(rawText) {
-  const addresses = [];
-  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  
-  let currentStop = null;
-  let currentAddress = null;
-  let lastKnownCity = 'ORLANDO';
-  
-  // Contador de direcciones encontradas (como fallback)
-  let stopCounter = 18; // Asumimos que empieza en 18 si no encontramos números
-  
-  console.log('📄 Texto OCR Crudo:', rawText);
-  console.log('📋 Líneas procesadas:', lines);
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    
-    // 1. DETECTAR NÚMERO DE PARADA (múltiples estrategias)
-    
-    // Estrategia A: Línea que es SOLO un número
-    let stopMatch = line.match(/^(\d{1,3})$/);
-    
-    // Estrategia B: Buscar número en paréntesis o similar
-    if (!stopMatch) {
-      stopMatch = line.match(/\((\d{1,3})\)/);
-    }
-    
-    // Estrategia C: Buscar número al inicio seguido de caracteres raros
-    if (!stopMatch) {
-      stopMatch = line.match(/^(\d{1,3})[^\w]/);
-    }
-    
-    if (stopMatch) {
-      // Guardar parada anterior si existe
-      if (currentStop && currentAddress) {
-        addresses.push({
-          stop: currentStop,
-          address: currentAddress,
-          city: lastKnownCity,
-          confidence: calculateConfidence(currentAddress, lastKnownCity)
-        });
-      }
-      
-      currentStop = parseInt(stopMatch[1]);
-      currentAddress = null;
-      console.log(`🔢 Parada detectada: ${currentStop}`);
-      continue;
-    }
-    
-    // 2. DETECTAR DIRECCIÓN
-    // Debe tener un currentStop activo Y no haber capturado dirección aún
-    if (currentStop && !currentAddress) {
-      // RegEx permisivo: número(s) + espacio + al menos 2 caracteres
-      const addressMatch = line.match(/^(\d{1,6})\s+([A-Z0-9].{2,})/i);
-      
-      if (addressMatch) {
-        let rawAddress = `${addressMatch[1]} ${addressMatch[2]}`.trim();
-        
-        // Aplicar correcciones de tipos de calle
-        rawAddress = correctStreetType(rawAddress);
-        
-        currentAddress = rawAddress;
-        console.log(`🏠 Dirección detectada: ${currentAddress}`); // DEBUG
-        continue;
-      }
-    }
-    
-    // 3. DETECTAR CIUDAD (siempre que tengamos una parada activa)
-    if (currentStop) {
-      const cityMatch = findBestCityMatch(line);
-      
-      if (cityMatch && cityMatch.rating > 0.7) {
-        lastKnownCity = cityMatch.target;
-        console.log(`🏙️ Ciudad detectada: ${lastKnownCity} (rating: ${cityMatch.rating})`); // DEBUG
-        
-        // Si teníamos dirección, ahora la guardamos completa
-        if (currentAddress) {
-          addresses.push({
-            stop: currentStop,
-            address: currentAddress,
-            city: lastKnownCity,
-            confidence: calculateConfidence(currentAddress, lastKnownCity)
-          });
-          
-          // Reset para la siguiente parada
-          currentStop = null;
-          currentAddress = null;
-        }
-      }
-    }
-  }
-  
-  // Guardar la última parada si quedó pendiente
-  if (currentStop && currentAddress) {
-    addresses.push({
-      stop: currentStop,
-      address: currentAddress,
-      city: lastKnownCity,
-      confidence: calculateConfidence(currentAddress, lastKnownCity)
-    });
-  }
-  
-  console.log('✅ Direcciones extraídas:', addresses); // DEBUG
-  return addresses;
-}
-
-// ============================================
-// FUZZY MATCHING PARA CIUDADES
-// ============================================
-
-function findBestCityMatch(text) {
-  const cleanText = text.toUpperCase().trim();
-  
-  if (cleanText.length < 3) return null;
-  
-  const matches = stringSimilarity.findBestMatch(cleanText, KNOWN_CITIES);
-  return matches.bestMatch;
-}
-
-// ============================================
-// SISTEMA DE CONFIANZA
-// ============================================
-
-function calculateConfidence(address, city) {
-  let score = 0;
-  
-  // +30 puntos: tiene número de casa
-  if (/^\d{1,6}\s/.test(address)) {
-    score += 30;
-  }
-  
-  // +30 puntos: tiene tipo de calle válido
-  const hasValidType = VALID_STREET_TYPES.some(type => 
-    address.toUpperCase().includes(` ${type}`)
-  );
-  if (hasValidType) {
-    score += 30;
-  }
-  
-  // +20 puntos: tiene ciudad
-  if (city) {
-    score += 20;
-  }
-  
-  // +10 puntos: tiene dirección (N, S, E, W)
-  if (/\b(N|S|E|W|NORTH|SOUTH|EAST|WEST)\b/i.test(address)) {
-    score += 10;
-  }
-  
-  // +10 puntos: longitud razonable (15-50 caracteres)
-  if (address.length >= 15 && address.length <= 50) {
-    score += 10;
-  }
-  
-  return score;
-}
-
-// ============================================
-// FUNCIÓN PRINCIPAL DE OCR
-// ============================================
-
-async function processFlexScreenshot(imageFile) {
-  try {
-    console.log('🚀 Iniciando OCR v3.1...');
-    
-    // 1. Preprocesar imagen (nueva estrategia)
-    const processedImage = await preprocessImage(imageFile);
-    
-    // 2. Ejecutar OCR con PSM 4 (columna única de texto)
-    const result = await Tesseract.recognize(processedImage, 'eng', {
-      tessedit_pageseg_mode: 4, // Columna única (mejor para listas)
-      tessedit_char_blacklist: '|[]{}', // Eliminar caracteres que confunden
-      logger: info => {
-        if (info.status === 'recognizing text') {
-          console.log(`Tesseract: ${Math.round(info.progress * 100)}%`);
-        }
-      }
-    });
-    
-    console.log('📝 Texto OCR completo:', result.data.text);
-    
-    // 3. Limpiar ruido
-    const cleanedText = cleanOCRNoise(result.data.text);
-    console.log('🧹 Texto limpio:', cleanedText);
-    
-    // 4. Extraer direcciones
-    const addresses = extractAddresses(cleanedText);
-    
-    // 5. Filtrar y ordenar
-    const filteredAddresses = addresses
-      .filter(addr => addr.confidence >= 40) // Umbral más bajo
-      .sort((a, b) => a.stop - b.stop);
-    
-    return {
-      success: true,
-      addresses: filteredAddresses,
-      rawText: result.data.text,
-      cleanedText: cleanedText,
-      stats: {
-        total: filteredAddresses.length,
-        highConfidence: filteredAddresses.filter(a => a.confidence >= 80).length,
-        mediumConfidence: filteredAddresses.filter(a => a.confidence >= 60 && a.confidence < 80).length,
-        lowConfidence: filteredAddresses.filter(a => a.confidence < 60).length
-      }
-    };
-    
-  } catch (error) {
-    console.error('❌ OCR Error:', error);
-    return {
-      success: false,
-      error: error.message,
-      addresses: []
-    };
-  }
-}
-
-// ============================================
-// FUNCIÓN DE VALIDACIÓN MANUAL
-// ============================================
-
-function createManualReviewUI(addresses) {
-  // Esta función retorna un objeto con las direcciones
-  // marcadas por nivel de confianza para que el usuario
-  // revise y corrija los "gaps"
-  
-  return addresses.map(addr => ({
-    ...addr,
-    needsReview: addr.confidence < 80,
-    status: addr.confidence >= 80 ? 'auto' : 'manual'
-  }));
-}
-
-//function correctStreetType(address) {
-  //const words = address.split(' ');
-  //const correctedWords = words.map(word => {
-   // const upper = word.toUpperCase().replace(/[.,]/g, '');
-    //return STREET_TYPE_CORRECTIONS[upper] || word;
-  //});
-  //return correctedWords.join(' ');
-//}
 
 function cleanOCRNoise(text) {
   let cleaned = text
@@ -670,8 +364,16 @@ function cleanOCRNoise(text) {
   return cleaned;
 }
 
-// ============================================
-// FUZZY MATCHING Y CONFIANZA
+function correctStreetType(address) {
+  const words = address.split(' ');
+  const correctedWords = words.map(word => {
+    const upper = word.toUpperCase().replace(/[.,]/g, '');
+    return STREET_TYPE_CORRECTIONS[upper] || word;
+  });
+  return correctedWords.join(' ');
+}
+
+// SECCIÓN 4: FUZZY MATCHING Y CONFIANZA
 // ============================================
 
 function findBestCityMatch(text) {
@@ -701,8 +403,155 @@ function calculateConfidence(address, city) {
   return score;
 }
 
+// SECCIÓN 5: EXTRACCIÓN DE DIRECCIONES
 // ============================================
-// HANDLER DE ARCHIVO (SIN CAMBIOS MAYORES)
+
+function extractAddresses(rawText) {
+  const addresses = [];
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  let currentStop = null;
+  let currentAddress = null;
+  let lastKnownCity = 'ORLANDO';
+  let stopCounter = 18; // Fallback si no encontramos números
+  
+  console.log('📄 Texto OCR Crudo:', rawText);
+  console.log('📋 Líneas procesadas:', lines);
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // 1. DETECTAR NÚMERO DE PARADA
+    let stopMatch = line.match(/^(\d{1,3})$/);
+    if (!stopMatch) stopMatch = line.match(/\((\d{1,3})\)/);
+    if (!stopMatch) stopMatch = line.match(/^(\d{1,3})[^\w]/);
+    
+    if (stopMatch) {
+      if (currentStop && currentAddress) {
+        addresses.push({
+          stop: currentStop,
+          address: currentAddress,
+          city: lastKnownCity,
+          confidence: calculateConfidence(currentAddress, lastKnownCity)
+        });
+      }
+      
+      currentStop = parseInt(stopMatch[1]);
+      currentAddress = null;
+      console.log(`🔢 Parada detectada: ${currentStop}`);
+      continue;
+    }
+    
+    // 2. DETECTAR DIRECCIÓN
+    const addressMatch = line.match(/^(\d{1,6})\s+([A-Z0-9].{2,})/i);
+    
+    if (addressMatch && !currentAddress) {
+      let rawAddress = `${addressMatch[1]} ${addressMatch[2]}`.trim();
+      rawAddress = correctStreetType(rawAddress);
+      
+      // Si no tenemos número de parada, asignar automáticamente
+      if (!currentStop) {
+        currentStop = stopCounter;
+        stopCounter++;
+        console.log(`🔢 Parada asignada automáticamente: ${currentStop}`);
+      }
+      
+      currentAddress = rawAddress;
+      console.log(`🏠 Dirección detectada: ${currentAddress}`);
+      continue;
+    }
+    
+    // 3. DETECTAR CIUDAD
+    if (currentStop) {
+      const cityMatch = findBestCityMatch(line);
+      
+      if (cityMatch && cityMatch.rating > 0.7) {
+        lastKnownCity = cityMatch.target;
+        console.log(`🏙️ Ciudad detectada: ${lastKnownCity} (rating: ${cityMatch.rating})`);
+        
+        if (currentAddress) {
+          addresses.push({
+            stop: currentStop,
+            address: currentAddress,
+            city: lastKnownCity,
+            confidence: calculateConfidence(currentAddress, lastKnownCity)
+          });
+          
+          currentStop = null;
+          currentAddress = null;
+        }
+      }
+    }
+  }
+  
+  // Guardar última parada pendiente
+  if (currentStop && currentAddress) {
+    addresses.push({
+      stop: currentStop,
+      address: currentAddress,
+      city: lastKnownCity,
+      confidence: calculateConfidence(currentAddress, lastKnownCity)
+    });
+  }
+  
+  console.log('✅ Direcciones extraídas:', addresses);
+  return addresses;
+}
+
+// SECCIÓN 6: FUNCIÓN PRINCIPAL DE OCR
+// ============================================
+
+async function processFlexScreenshot(imageFile) {
+  try {
+    console.log('🚀 Iniciando OCR v3.1...');
+    
+    const processedImage = await preprocessImage(imageFile);
+    
+    const result = await Tesseract.recognize(processedImage, 'eng', {
+      tessedit_pageseg_mode: 4,
+      tessedit_char_blacklist: '|[]{}',
+      logger: info => {
+        if (info.status === 'recognizing text') {
+          console.log(`Tesseract: ${Math.round(info.progress * 100)}%`);
+        }
+      }
+    });
+    
+    console.log('📝 Texto OCR completo:', result.data.text);
+    
+    const cleanedText = cleanOCRNoise(result.data.text);
+    console.log('🧹 Texto limpio:', cleanedText);
+    
+    const addresses = extractAddresses(cleanedText);
+    
+    const filteredAddresses = addresses
+      .filter(addr => addr.confidence >= 40)
+      .sort((a, b) => a.stop - b.stop);
+    
+    return {
+      success: true,
+      addresses: filteredAddresses,
+      rawText: result.data.text,
+      cleanedText: cleanedText,
+      stats: {
+        total: filteredAddresses.length,
+        highConfidence: filteredAddresses.filter(a => a.confidence >= 80).length,
+        mediumConfidence: filteredAddresses.filter(a => a.confidence >= 60 && a.confidence < 80).length,
+        lowConfidence: filteredAddresses.filter(a => a.confidence < 60).length
+      }
+    };
+    
+  } catch (error) {
+    console.error('❌ OCR Error:', error);
+    return {
+      success: false,
+      error: error.message,
+      addresses: []
+    };
+  }
+}
+
+// SECCIÓN 7: HANDLER DE ARCHIVO
 // ============================================
 
 async function handleFileChange(event) {
@@ -778,6 +627,7 @@ async function handleFileChange(event) {
   } finally {
     isProcessing.value = false;
   }
+}
 
 }function sanitizeAddress(address) {
     if (!address) return '';
