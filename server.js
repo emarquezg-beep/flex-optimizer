@@ -9,34 +9,27 @@ const { createClient } = require('@supabase/supabase-js'); // <-- 1. IMPORTAR SU
 const app = express();
 const PORT = 3000;
 
+// 1. LA LISTA (con la nueva URL de la v2.1)
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://flex-optimizer.vercel.app',
-  'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app', // (Podrías borrar esta)
-  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app' // ¡La URL de tu rama v2.0!
+  'https://flex-optimizer.vercel.app', // Producción (main)
+  'https://flex-optimizer-git-v21-ocr-im-b1502c-ernestos-projects-d9e7c95d.vercel.app' // ¡La nueva rama v2.1!
 ];
 
 // 2. LA FUNCIÓN MEJORADA (que limpia el slash)
 const corsOptions = {
   origin: function (origin, callback) {
-    
-    // --- INICIO DEL CÓDIGO DE DEPURACIÓN ---
-    // ¡ESTO NOS DIRÁ LA VERDAD!
-    console.log("--- INICIO DEPURACIÓN CORS ---");
-    console.log("Origen (Navegador):", origin);
-    console.log("Lista 'allowedOrigins' (En Memoria del Servidor):", allowedOrigins);
-    // --- FIN DEPURACIÓN ---
-    
     let originToTest = origin;
+    
+    // Si el origen (del navegador) termina en '/', se lo quitamos
     if (originToTest && originToTest.endsWith('/')) {
       originToTest = originToTest.slice(0, -1);
     }
 
     if (allowedOrigins.indexOf(originToTest) !== -1 || !origin) {
-      console.log("RESULTADO: Permitido");
+      console.log("CORS Permitido:", origin); // Log de éxito
       callback(null, true);
     } else {
-      // Este es el error que ya vemos
       console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
       callback(new Error('No permitido por CORS'));
     }
