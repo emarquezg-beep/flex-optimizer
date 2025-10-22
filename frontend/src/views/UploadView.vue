@@ -408,81 +408,58 @@ function cleanOCRNoise(text) {
 // EXTRACCIÓN INTELIGENTE DE DIRECCIONES
 // ============================================
 
+// REEMPLAZA ESTA FUNCIÓN COMPLETA
 function extractAddresses(rawText) {
   const addresses = [];
-  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  
-  let currentStop = null;
-  let currentAddress = null;
-  let lastKnownCity = null;
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    
-    // 1. Detectar número de parada
-    const stopMatch = line.match(/^(\d{1,3})$/);
-    if (stopMatch) {
-      // Si teníamos una parada anterior, guardarla
-      if (currentStop && currentAddress) {
-        addresses.push({
-          stop: currentStop,
-          address: currentAddress,
-          city: lastKnownCity,
-          confidence: calculateConfidence(currentAddress, lastKnownCity)
-        });
-      }
-      
-      currentStop = parseInt(stopMatch[1]);
-      currentAddress = null;
-      continue;
-    }
-    
-    // 2. Detectar dirección (RegEx PERMISIVO)
+  let lastKnownCity = 'ORLANDO'; // Fallback
+
+  // 1. Usamos nuestro RegEx "buscador de bloques" (v2.1)
+  const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
+  let match;
+
+  while ((match = pattern.exec(rawText)) !== null) {
+    const stopNumber = parseInt(match[1]);
+    let textBlock = match[2]; // Texto de la "tarjeta"
+
+    // 2. Usamos el RegEx "permisivo" (v3.0) para encontrar la calle
     // Busca: número(s) + al menos 2 palabras
-    const addressMatch = line.match(/^(\d{1,6})\s+([A-Z0-9].*)/i);
-    if (addressMatch && !currentAddress) {
-      let rawAddress = `${addressMatch[1]} ${addressMatch[2]}`.trim();
-      
-      // Aplicar correcciones
-      rawAddress = correctStreetType(rawAddress);
-      
-      currentAddress = rawAddress;
-      continue;
-    }
+    const addressMatch = textBlock.match(/(\d{1,6})\s+([A-Z0-9].*)/i);
     
-    // 3. Detectar ciudad (fuzzy matching)
-    const cityMatch = findBestCityMatch(line);
-    if (cityMatch && cityMatch.rating > 0.7) {
-      lastKnownCity = cityMatch.target;
-      
-      // Si teníamos dirección pero no ciudad, ahora la guardamos
-      if (currentStop && currentAddress) {
-        addresses.push({
-          stop: currentStop,
-          address: currentAddress,
-          city: lastKnownCity,
-          confidence: calculateConfidence(currentAddress, lastKnownCity)
-        });
-        
-        currentStop = null;
-        currentAddress = null;
+    if (addressMatch) {
+      // 3. Usamos el corrector de calles (v3.0)
+      let street = correctStreetType(addressMatch[0].trim());
+      let city = null;
+
+      // 4. Usamos el buscador de ciudad (v3.0)
+      const lines = textBlock.split('\n');
+      for (const line of lines) {
+        const cityMatch = findBestCityMatch(line);
+        if (cityMatch && cityMatch.rating > 0.7) {
+          city = cityMatch.target;
+          break; // Encontramos la ciudad
+        }
       }
+      
+      // 5. Fallback de ciudad
+      if (city) {
+        lastKnownCity = city;
+      } else {
+        city = lastKnownCity;
+      }
+      
+      // 6. Usamos el sistema de confianza (v3.0)
+      const confidence = calculateConfidence(street, city);
+
+      addresses.push({
+        stop: stopNumber,
+        address: street,
+        city: city,
+        confidence: confidence
+      });
     }
   }
-  
-  // Guardar la última parada si existe
-  if (currentStop && currentAddress) {
-    addresses.push({
-      stop: currentStop,
-      address: currentAddress,
-      city: lastKnownCity,
-      confidence: calculateConfidence(currentAddress, lastKnownCity)
-    });
-  }
-  
   return addresses;
 }
-
 // ============================================
 // FUZZY MATCHING PARA CIUDADES
 // ============================================
@@ -546,7 +523,7 @@ async function processFlexScreenshot(imageFile) {
     // 2. Ejecutar OCR con configuración optimizada
     const result = await Tesseract.recognize(processedImage, 'eng', {
       tessedit_pageseg_mode: 6, // Bloque de texto único
-      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz -.',
+      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz -.,()',
     });
     
     // 3. Limpiar texto de ruido
