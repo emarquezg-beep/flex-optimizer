@@ -421,12 +421,44 @@ function extractAddresses(rawText) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
-    // 1. DETECTAR NÚMERO DE PARADA
-    let stopMatch = line.match(/^(\d{1,3})$/);
-    if (!stopMatch) stopMatch = line.match(/\((\d{1,3})\)/);
-    if (!stopMatch) stopMatch = line.match(/^(\d{1,3})[^\w]/);
+    // 1. DETECTAR NÚMERO DE PARADA Y DIRECCIÓN EN LA MISMA LÍNEA
+    // Ej: "(18 353 W GRAVES AVE" o "(19) 100 N CARPENTER AVE"
+    const combinedMatch = line.match(/\((\d{1,3})\)?\s+(\d{1,6})\s+([A-Z0-9].{2,})/i);
+    
+    if (combinedMatch) {
+      // Guardar parada anterior si existe
+      if (currentStop && currentAddress) {
+        addresses.push({
+          stop: currentStop,
+          address: currentAddress,
+          city: lastKnownCity,
+          confidence: calculateConfidence(currentAddress, lastKnownCity)
+        });
+      }
+      
+      currentStop = parseInt(combinedMatch[1]);
+      let rawAddress = `${combinedMatch[2]} ${combinedMatch[3]}`.trim();
+      rawAddress = correctStreetType(rawAddress);
+      currentAddress = rawAddress;
+      
+      console.log(`🔢 Parada detectada: ${currentStop}`);
+      console.log(`🏠 Dirección detectada: ${currentAddress}`);
+      continue;
+    }
+    
+    // 2. DETECTAR NÚMERO DE PARADA SOLO (para líneas separadas)
+    let stopMatch = null;
+    
+    // Estrategia A: Número en paréntesis
+    stopMatch = line.match(/^\((\d{1,3})\)$/);
+    
+    // Estrategia B: Línea que es solo un número
+    if (!stopMatch) {
+      stopMatch = line.match(/^(\d{1,3})$/);
+    }
     
     if (stopMatch) {
+      // Guardar parada anterior si existe
       if (currentStop && currentAddress) {
         addresses.push({
           stop: currentStop,
@@ -438,11 +470,11 @@ function extractAddresses(rawText) {
       
       currentStop = parseInt(stopMatch[1]);
       currentAddress = null;
-      console.log(`🔢 Parada detectada: ${currentStop}`);
+      console.log(`🔢 Parada detectada (solo): ${currentStop}`);
       continue;
     }
     
-    // 2. DETECTAR DIRECCIÓN
+    // 3. DETECTAR DIRECCIÓN (sin número de parada)
     const addressMatch = line.match(/^(\d{1,6})\s+([A-Z0-9].{2,})/i);
     
     if (addressMatch && !currentAddress) {
@@ -461,43 +493,6 @@ function extractAddresses(rawText) {
       continue;
     }
     
-    // 3. DETECTAR CIUDAD
-    if (currentStop) {
-      const cityMatch = findBestCityMatch(line);
-      
-      if (cityMatch && cityMatch.rating > 0.7) {
-        lastKnownCity = cityMatch.target;
-        console.log(`🏙️ Ciudad detectada: ${lastKnownCity} (rating: ${cityMatch.rating})`);
-        
-        if (currentAddress) {
-          addresses.push({
-            stop: currentStop,
-            address: currentAddress,
-            city: lastKnownCity,
-            confidence: calculateConfidence(currentAddress, lastKnownCity)
-          });
-          
-          currentStop = null;
-          currentAddress = null;
-        }
-      }
-    }
-  }
-  
-  // Guardar última parada pendiente
-  if (currentStop && currentAddress) {
-    addresses.push({
-      stop: currentStop,
-      address: currentAddress,
-      city: lastKnownCity,
-      confidence: calculateConfidence(currentAddress, lastKnownCity)
-    });
-  }
-  
-  console.log('✅ Direcciones extraídas:', addresses);
-  return addresses;
-}
-
 // SECCIÓN 6: FUNCIÓN PRINCIPAL DE OCR
 // ============================================
 
