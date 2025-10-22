@@ -421,16 +421,18 @@ function extractAddresses(rawText) {
     const stopNumber = parseInt(match[1]);
     let textBlock = match[2]; // Texto de la "tarjeta"
 
-    // 2. Usamos el RegEx "permisivo" (v3.0) para encontrar la calle
-    // Busca: número(s) + al menos 2 palabras
+    // 2. ¡LIMPIAMOS EL RUIDO! (v3.0)
+    textBlock = cleanOCRNoise(textBlock);
+
+    // 3. Usamos el RegEx "permisivo" (v3.0) para encontrar la calle
     const addressMatch = textBlock.match(/(\d{1,6})\s+([A-Z0-9].*)/i);
     
     if (addressMatch) {
-      // 3. Usamos el corrector de calles (v3.0)
+      // 4. Usamos el corrector de calles (v3.0)
       let street = correctStreetType(addressMatch[0].trim());
       let city = null;
 
-      // 4. Usamos el buscador de ciudad (v3.0)
+      // 5. Usamos el buscador de ciudad (v3.0)
       const lines = textBlock.split('\n');
       for (const line of lines) {
         const cityMatch = findBestCityMatch(line);
@@ -440,14 +442,14 @@ function extractAddresses(rawText) {
         }
       }
       
-      // 5. Fallback de ciudad
+      // 6. Fallback de ciudad
       if (city) {
         lastKnownCity = city;
       } else {
         city = lastKnownCity;
       }
       
-      // 6. Usamos el sistema de confianza (v3.0)
+      // 7. Usamos el sistema de confianza (v3.0)
       const confidence = calculateConfidence(street, city);
 
       addresses.push({
@@ -523,16 +525,13 @@ async function processFlexScreenshot(imageFile) {
     // 2. Ejecutar OCR con configuración optimizada
     const result = await Tesseract.recognize(processedImage, 'eng', {
       tessedit_pageseg_mode: 6, // Bloque de texto único
-      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz -.,()',
+      // ¡ELIMINAMOS EL WHITELIST! para que pueda leer los paréntesis ()
     });
     
-    // 3. Limpiar texto de ruido
-    const cleanedText = cleanOCRNoise(result.data.text);
+    // 3. Extraer direcciones con lógica inteligente
+    const addresses = extractAddresses(result.data.text); // Le pasamos el texto crudo
     
-    // 4. Extraer direcciones con lógica inteligente
-    const addresses = extractAddresses(cleanedText);
-    
-    // 5. Filtrar y ordenar por confianza
+    // 4. Filtrar y ordenar por confianza
     const filteredAddresses = addresses
       .filter(addr => addr.confidence >= 50) // Umbral mínimo
       .sort((a, b) => a.stop - b.stop);
@@ -540,7 +539,7 @@ async function processFlexScreenshot(imageFile) {
     return {
       success: true,
       addresses: filteredAddresses,
-      rawText: cleanedText,
+      rawText: result.data.text,
       stats: {
         total: filteredAddresses.length,
         highConfidence: filteredAddresses.filter(a => a.confidence >= 80).length,
