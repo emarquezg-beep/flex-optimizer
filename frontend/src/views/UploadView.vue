@@ -288,10 +288,11 @@ function parseAddresses(rawText) {
   const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
   let lastKnownCity = 'Orlando'; // Fallback por defecto
 
-  // --- FASE 2: Lista de Ciudades Conocidas (Sugerencia del Experto) ---
+  // --- FASE 2 (Modificada): Lista de Ciudades Conocidas ---
   const KNOWN_CITIES = [
     'ORLANDO', 'WINTER PARK', 'MAITLAND', 'OVIEDO', 'KISSIMMEE', 'APOPKA', 
-    'LONGWOOD', 'CASSELBERRY', 'ALTAMONTE SPRINGS', 'GROVELAND', 'DAYTONA BEACH'
+    'LONGWOOD', 'CASSELBERRY', 'ALTAMONTE SPRINGS', 'GROVELAND', 'DAYTONA BEACH',
+    'DEBARY' // <-- 1. CIUDAD AÑADIDA
   ];
 
   const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
@@ -299,9 +300,16 @@ function parseAddresses(rawText) {
 
   while ((match = pattern.exec(rawText)) !== null) {
     const stopNumber = parseInt(match[1]);
-    const textBlock = match[2]; // Texto de la "tarjeta"
+    let textBlock = match[2]; // <-- Cambiado a 'let' para poder limpiarlo
 
-    // --- FASE 2: RegEx Experto (Sugerencia del Experto) ---
+    // --- NUEVO (Fix 1): Limpieza de Contaminación ---
+    // Elimina la línea "Scheduled..." ANTES de buscar la dirección
+    // Esto evita que "7:00 AM" se pegue con "70 HOLLOW PINE"
+    const scheduledLinePattern = /.*Scheduled.*\n/i; 
+    textBlock = textBlock.replace(scheduledLinePattern, '');
+    // --- FIN DE LA LIMPIEZA ---
+
+    // --- FASE 2: RegEx Experto (Sin cambios) ---
     const addressPattern = /(\d{1,6}\s[A-Z0-9][A-Z0-9\s\.\-]+(?:ST|DR|CT|LN|RD|AVE|PKWY|PL|CIR|BLVD|WAY|TER|TRAIL|PARKWAY|COURT|LANE|ROAD|AVENUE|PLACE|CIRCLE)\b.*)/i;
     const addressMatch = textBlock.match(addressPattern);
 
@@ -309,10 +317,9 @@ function parseAddresses(rawText) {
       let street = addressMatch[1].trim();
       let city = '';
 
-      // --- FASE 2: Lógica de Ciudad Mejorada (Sugerencia del Experto) ---
+      // --- FASE 2: Lógica de Ciudad Mejorada (Sin cambios) ---
       const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
       
-      // 1. Intentar la siguiente línea (como antes)
       if (lines.length > 1) {
         let nextLine = lines[1].trim().toUpperCase();
         for (const word of stopWords) {
@@ -320,31 +327,27 @@ function parseAddresses(rawText) {
             nextLine = nextLine.substring(0, nextLine.indexOf(word.toUpperCase())).trim();
           }
         }
-        // Verificar si la línea es una ciudad conocida
         if (KNOWN_CITIES.includes(nextLine)) {
           city = nextLine;
           lastKnownCity = city;
         }
       }
 
-      // 2. Si falló, buscar en TODO el bloque de texto
       if (!city) {
         const textBlockUpper = textBlock.toUpperCase();
         for (const knownCity of KNOWN_CITIES) {
           if (textBlockUpper.includes(knownCity)) {
             city = knownCity;
             lastKnownCity = city;
-            break; // Encontramos una, salimos del bucle
+            break;
           }
         }
       }
 
-      // 3. Si AÚN falló, usar el fallback
       if (!city) {
         city = lastKnownCity;
       }
       
-      // Convertir a mayúsculas para consistencia, ya que el RegEx es case-insensitive
       stops.push({ number: stopNumber, address: `${street} ${city}`.toUpperCase(), isDowntown: false });
     }
   }
