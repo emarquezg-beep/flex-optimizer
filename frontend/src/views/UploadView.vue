@@ -269,18 +269,53 @@ const calculatedLogEntry = computed(() => {
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); }
 function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); }
+// En: frontend/src/views/UploadView.vue
+//
+// REEMPLAZA ESTA FUNCIÓN COMPLETA:
+//
 function preprocessImage(file) {
   return new Promise((resolve) => {
-    const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
-    const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
-    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data; const contrast = 2.0; const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = factor * (data[i] - 128) + 128; data[i+1] = factor * (data[i+1] - 128) + 128; data[i+2] = factor * (data[i+2] - 128) + 128;
-      const avg = (data[i] + data[i+1] + data[i+2]) / 3; data[i] = avg; data[i+1] = avg; data[i+2] = avg;
-    }
-    ctx.putImageData(imageData, 0, 0); resolve(canvas.toDataURL('image/png'));
-    }; img.src = e.target.result; }; reader.readAsDataURL(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const width = img.width;
+        const height = img.height;
+
+        // --- EXPERT'S CROP LOGIC ---
+        // Recortamos la imagen al 80% derecho
+        const cropWidth = width * 0.8;
+        const cropX = width * 0.2; // Empezamos a 20% del borde izquierdo
+
+        canvas.width = cropWidth;
+        canvas.height = height;
+        
+        // Dibuja solo el 80% derecho de la imagen en el canvas
+        // (img, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
+        ctx.drawImage(img, cropX, 0, cropWidth, height, 0, 0, cropWidth, height);
+        
+        // (Opcional) Aún podemos aplicar nuestros filtros de contraste
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        const contrast = 2.0;
+        const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = factor * (data[i] - 128) + 128;
+          data[i+1] = factor * (data[i+1] - 128) + 128;
+          data[i+2] = factor * (data[i+2] - 128) + 128;
+          const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+          data[i] = avg; data[i+1] = avg; data[i+2] = avg;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        
+        resolve(canvas.toDataURL('image/png'));
+        // --- FIN DEL CROP ---
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
   });
 }
 // REEMPLAZA ESTA FUNCIÓN COMPLETA
@@ -344,19 +379,25 @@ function parseAddresses(rawText) {
   return stops;
 }
 // REEMPLAZA ESTA FUNCIÓN COMPLETA
+// En: frontend/src/views/UploadView.vue
+//
+// REEMPLAZA ESTA FUNCIÓN COMPLETA:
+//
 async function handleFileChange(event) {
   const files = event.target.files; if (!files.length) return;
   isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null;
   let allParsedStops = [];
   try {
       for (const file of files) {
+        // 1. La imagen ahora está pre-recortada al 80% derecho
         const processedImage = await preprocessImage(file);
         
-        // --- FASE 1: Page Segmentation Mode (Sugerencia del Experto) ---
+        // 2. Usamos el Page Segmentation Mode 6 (Sugerencia del Experto)
         const { data: { text } } = await Tesseract.recognize(processedImage, 'eng', {
-          tessedit_pageseg_mode: 4 // Modo 4 = Columna única de texto
+          tessedit_pageseg_mode: 6 // Modo 6 = Asumir un solo bloque de texto uniforme
         });
         
+        // 3. Nuestro parser inteligente existente procesa el texto más limpio
         const stopsFromFile = parseAddresses(text);
         allParsedStops.push(...stopsFromFile);
       }
@@ -364,9 +405,8 @@ async function handleFileChange(event) {
       let maxStopNumber = 0;
       uniqueStopsMap.forEach(stop => { if (stop.number > maxStopNumber) maxStopNumber = stop.number; });
 
-      // Crea la lista final con gaps, empezando desde el #2
       const fullListWithGaps = [];
-      for (let i = 2; i <= maxStopNumber; i++) { // Bucle empieza en 2
+      for (let i = 2; i <= maxStopNumber; i++) {
           if (uniqueStopsMap.has(i)) { fullListWithGaps.push(uniqueStopsMap.get(i)); }
           else { fullListWithGaps.push({ number: i, address: '', isDowntown: false }); }
       }
