@@ -629,7 +629,7 @@ async function handleFileChange(event) {
   }
 }
 
-}function sanitizeAddress(address) {
+function sanitizeAddress(address) {
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
