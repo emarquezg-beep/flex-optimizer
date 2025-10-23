@@ -8,6 +8,12 @@ const isProcessing = ref(false);
 const backendResponse = ref(null);
 const isSaving = ref(false);
 const saveStatus = ref(null);
+const fileInputRef = ref(null);
+const selectedFileNames = ref([]);
+
+const fileInputLabel = computed(() => {
+  return isProcessing.value ? 'Processing...' : 'Choose Screenshots or Drag Here';
+});
 
 // VAMOS A USAR ESTOS VALORES
 const VEHICULO_OPTIONS = ['Pontiac', 'Trax', 'Kia', 'Otro Carro'];
@@ -44,7 +50,8 @@ const blockData = ref({
   duracion_horas: DURACION_OPTIONS[1],
   pago: 0,
   antes_del_bloque: 30,
-  commute_1_manual: warehouses.value[0].commuteMiles
+  commute_1_manual: warehouses.value[0].commuteMiles,
+  retraso_almacen: 20 // <-- NUEVO: Default 20 mins prep time
 });
 
 // (4) WATCHER para actualizar Conmute_1 (Este te faltaba)
@@ -130,33 +137,63 @@ const reportData = computed(() => {
     };
 });
 
-// (Tu lógica de scenarioETAs está perfecta, la mantengo)
+// En <script setup> de UploadView.vue
+
 const scenarioETAs = computed(() => {
-    if (!reportData.value?.normal || !blockData.value?.hora) return null;
+    // Need reportData AND the block start time AND the prep time delay
+    if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
+         return null;
+    }
+
     const stopCount = Number(reportData.value.stopCount) || 0;
     const apartmentCount = Number(reportData.value.apartmentCount) || 0;
     const downtownCount = Number(reportData.value.downtownCount) || 0;
     const regularApartmentCount = apartmentCount - downtownCount;
-    //const now = new Date();
+    
+    // --- NUEVA LÓGICA DE TIEMPO DE SALIDA ---
     const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
-    const startTime = new Date(); // Crea una fecha de "hoy"
-    startTime.setHours(startHours, startMinutes, 0, 0); // La ajusta a la hora de inicio del bloque
+    const blockStartTime = new Date(); // Today's date
+    blockStartTime.setHours(startHours, startMinutes, 0, 0); // Set to block start time
+
+    const prepTimeMinutes = Number(blockData.value.retraso_almacen) || 0;
+    // Calculate actual departure time by adding prep delay
+    const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000); 
+    // --- FIN NUEVA LÓGICA ---
+
     const calculateScenario = (baseDrive, commute, multiplier) => {
-        const baseStopTime = stopCount * multiplier;
-        const extraTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
-        const totalDuration = (Number(baseDrive) || 0) + baseStopTime + extraTime + (Number(commute) || 0);
-        if (isNaN(totalDuration)) { return { totalDuration: 'N/A', eta: 'Error' }; }
-        //const eta = new Date(now.getTime() + totalDuration * 60000);
-        const eta = new Date(startTime.getTime() + totalDuration * 60000);
+        // baseDrive is ONLY driving time (Warehouse -> First Stop + Inter-stop driving)
+        // commute is ONLY driving time (Last Stop -> Home)
+        
+        // Calculate stop time based on multiplier
+        const baseStopTime = stopCount * multiplier; 
+        // Calculate extra time for apartments (fixed)
+        const extraAptTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5); 
+        
+        // Route duration = Driving from Warehouse + Stop Time + Extra Apt Time + Drive Home
+        const routeDurationMinutes = (Number(baseDrive) || 0) + baseStopTime + extraAptTime + (Number(commute) || 0);
+
+        if (isNaN(routeDurationMinutes)) { 
+            return { totalDuration: 'N/A', eta: 'Error' }; 
+        }
+        
+        // Final ETA = Estimated Departure Time + Route Duration
+        const eta = new Date(estimatedDepartureTime.getTime() + routeDurationMinutes * 60000); 
+        
         return {
-            totalDuration: Math.round(totalDuration),
+            totalDuration: Math.round(routeDurationMinutes), // This is the route duration only
             eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
     };
-    const normalBaseDrive = reportData.value.normal.baseDriveDuration;
+
+    // Make sure 'baseDriveDuration' from reportData is ONLY driving time
+    // (It should NOT include the old stop time calculations)
+    // We might need to adjust reportData calculation if it includes stop times.
+    // Assuming reportData.normal.baseDriveDuration = toFirstStopDur + totalBlockDriveDuration
+    const normalBaseDrive = reportData.value.normal.baseDriveDuration; 
     const normalCommute = reportData.value.normal.commuteDuration;
     const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
     const inverseCommute = reportData.value.inverse.commuteDuration;
+
     return {
         normal: {
             optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
@@ -170,7 +207,6 @@ const scenarioETAs = computed(() => {
         }
     };
 });
-
 // (5) --- PROPIEDAD COMPUTADA QUE FALTABA ---
 // Aquí es donde ocurre la magia de tus cálculos
 const calculatedLogEntry = computed(() => {
@@ -306,68 +342,54 @@ function parseAddresses(rawText) {
   return stops;
 }
 async function handleFileChange(event) {
-  const files = event.target.files; if (!files.length) return;
-  isProcessing.value = true; extractedAddresses.value = []; backendResponse.value = null;
+  const files = event.target.files;
+  if (!files || files.length === 0) {
+    selectedFileNames.value = []; // Limpia nombres si no hay archivo
+    return;
+  }
+
+  // Guarda los nombres de los archivos seleccionados
+  selectedFileNames.value = Array.from(files).map(f => f.name);
+
+  isProcessing.value = true;
+  extractedAddresses.value = [];
+  backendResponse.value = null;
   let allParsedStops = [];
-  try {
-      for (const file of files) {
-        const processedImage = await preprocessImage(file);
-        const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-        const stopsFromFile = parseAddresses(text);
-        allParsedStops.push(...stopsFromFile);
-      }
-      const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
-      let maxStopNumber = 0;
-      uniqueStopsMap.forEach(stop => { if (stop.number > maxStopNumber) maxStopNumber = stop.number; });
-      const fullListWithGaps = [];
-      for (let i = 2; i <= maxStopNumber; i++) {
-          if (uniqueStopsMap.has(i)) { fullListWithGaps.push(uniqueStopsMap.get(i)); }
-          else { fullListWithGaps.push({ number: i, address: '', isDowntown: false }); }
-      }
-      extractedAddresses.value = fullListWithGaps;
-  } catch(error) {
-      console.error("Error processing files:", error);
-      alert("Hubo un error procesando las imágenes. Revisa la consola.");
-  } finally {
-      isProcessing.value = false;
-  }
-}
-function sanitizeAddress(address) {
-    if (!address) return '';
-    return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
-}
 
-// (6) sendToBackend (ACTUALIZADO para v1.5)
-async function sendToBackend() {
-  const addressesToSend = extractedAddresses.value.map(stop => stop.address);
-  const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
-  if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
-  
-  // --- ESTA PARTE CAMBIÓ ---
-  // Encuentra la dirección del warehouse a partir del CÓDIGO seleccionado
-  const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
-  if (!warehouse) {
-      alert('Error: Warehouse no encontrado.'); return;
-  }
-  const warehouseAddress = sanitizeAddress(warehouse.address);
-  // --- FIN DEL CAMBIO ---
-
-  const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
-  if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
-  
-  // Usamos la dirección encontrada
-  const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
-  
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-  backendResponse.value = { status: 'loading' }; 
   try {
-    const response = await fetch(`${backendUrl}/api/optimize-route`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addresses: fullRoute }),
+    for (const file of files) {
+      const processedImage = await preprocessImage(file);
+      const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
+      const stopsFromFile = parseAddresses(text);
+      allParsedStops.push(...stopsFromFile);
+    }
+
+    const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+    let maxStopNumber = 0;
+    uniqueStopsMap.forEach(stop => {
+      if (stop.number > maxStopNumber) maxStopNumber = stop.number;
     });
-    const result = await response.json();
-    backendResponse.value = result;
+
+    const fullListWithGaps = [];
+    for (let i = 2; i <= maxStopNumber; i++) {
+      if (uniqueStopsMap.has(i)) {
+        fullListWithGaps.push(uniqueStopsMap.get(i));
+      } else {
+        fullListWithGaps.push({ number: i, address: '', isDowntown: false });
+      }
+    }
+
+    extractedAddresses.value = fullListWithGaps;
   } catch (error) {
-    backendResponse.value = { error: 'Error: No se pudo conectar al servidor.' };
+    console.error("Error processing files:", error);
+    alert("Hubo un error procesando las imágenes. Revisa la consola.");
+  } finally {
+    isProcessing.value = false;
+
+    // 🔄 Reinicia el input de archivos para permitir volver a subir los mismos
+    if (fileInputRef.value) {
+      fileInputRef.value.value = '';
+    }
   }
 }
 
@@ -409,7 +431,24 @@ async function saveToLogbook() {
 
 <template>
     <div class="view-container"><div class="uploader-container"></div>
-        <input type="file" multiple accept="image/*" @change="handleFileChange" id="file-input" :disabled="isProcessing">
+        <div class="file-input-area">
+            <label for="file-input" class="file-input-label">
+                <span class="file-input-icon">📤</span>
+                <span class="file-input-text">{{ fileInputLabel }}</span>
+            </label>
+    <input 
+        type="file" 
+        multiple 
+        accept="image/*" 
+        @change="handleFileChange" 
+        id="file-input" 
+        :disabled="isProcessing"
+        ref="fileInputRef" 
+    />
+    <div v-if="selectedFileNames.length > 0" class="selected-files">
+        Selected: {{ selectedFileNames.join(', ') }}
+    </div>
+    </div>
         <div v-if="isProcessing" class="status"><h3>Procesando imágenes...</h3></div>
         
         <div v-if="extractedAddresses.length > 0 && !isProcessing">
@@ -556,6 +595,13 @@ async function saveToLogbook() {
                                 <input type="number" v-model.number="blockData.pago" placeholder="Ej: 70.50">
                             </div>
                         </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Retraso Estimado en Almacén (min)</label>
+                                <input type="number" v-model.number="blockData.retraso_almacen" step="5">
+                            </div>
+                            <div class="form-group"></div>
+                        </div>
 
                         <div class="form-row">
                             <div class="form-group">
@@ -651,6 +697,118 @@ async function saveToLogbook() {
     .button-save-log:disabled {
     background-color: #aaa;
     cursor: not-allowed;
+    /* Add these styles at the end of your <style scoped> block */
+
+/* --- New File Input Styles --- */
+.file-input-area {
+  margin-bottom: 30px; 
+  text-align: center;
+}
+.file-input-area input[type="file"] {
+  display: none;
+}
+.file-input-label {
+  display: block; 
+  padding: 40px 20px;
+  border: 2px dashed var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.file-input-label:hover {
+  background-color: var(--color-border);
+  border-color: var(--color-primary);
+  color: var(--color-text-primary);
+}
+.file-input-icon {
+  font-size: 2em;
+  display: block;
+  margin-bottom: 10px;
+}
+.file-input-text {
+  font-weight: 500;
+}
+.selected-files {
+  margin-top: 10px;
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+  text-align: center; 
+}
+
+/* --- Adjust Existing Styles for Dark Theme --- */
+.status { 
+  background-color: var(--color-surface); 
+  border-left: 5px solid var(--color-primary); 
+  color: var(--color-text-primary); 
+}
+.controls-container { 
+  background-color: var(--color-surface); 
+  border: 1px solid var(--color-border);
+}
+.address-list { 
+  background-color: var(--color-surface); 
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+.address-list h2 { color: var(--color-primary); }
+.stop-number-input, .address-input {
+  background-color: var(--color-background); 
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+.button-add, .button-reorder {
+  padding: 10px; flex-grow: 1; cursor: pointer; border-radius: 5px;
+}
+.button-add {
+  background-color: var(--color-accent); color: var(--color-black); border: 1px solid var(--color-accent);
+}
+.button-add:hover { background-color: #bad0b1; }
+.button-reorder {
+  background-color: var(--color-surface); color: var(--color-text-primary); border: 1px solid var(--color-border);
+}
+.button-reorder:hover { background-color: var(--color-border); }
+.button-delete {
+  background-color: #6c2a32; color: var(--color-text-primary); border: none;
+}
+.button-delete:hover { background-color: #8b3640; }
+.button-map { margin-top: 20px; } /* Inherits primary style */
+.results-container { 
+  background-color: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-primary);
+}
+.result-block h4, .scenario-table h4, .eta-block h4 { color: var(--color-primary); }
+.result-block p, .scenario-table td, .eta-scenario { color: var(--color-text-primary); }
+hr, .dotted-hr { border-top-color: var(--color-border); }
+.scenario-table td { border-bottom-color: var(--color-border); }
+.highlight { background-color: rgba(163, 177, 138, 0.1); } 
+.savings { color: var(--color-accent); }
+.logbook-form-container {
+    background-color: var(--color-surface); border: 1px solid var(--color-border);
+}
+.logbook-form-container h3 { color: var(--color-primary); border-bottom-color: var(--color-border); }
+.logbook-summary { 
+ background-color: var(--color-background); border-color: var(--color-border);
+}
+.button-save-log {
+ background-color: var(--color-accent); color: var(--color-black);
+}
+.button-save-log:hover { background-color: #bad0b1; }
+.editable-item.needs-review {
+    background-color: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107;
+}
+.editable-item.needs-review .address-input {
+    background-color: rgba(255, 193, 7, 0.05); border-color: #ffc107;
+}
+.downtown-checkbox {
+  appearance: none; width: 18px; height: 18px; border: 1px solid var(--color-border);
+  border-radius: 3px; cursor: pointer; position: relative; background-color: var(--color-background);
+}
+.downtown-checkbox:checked { background-color: var(--color-primary); border-color: var(--color-primary); }
+.downtown-checkbox:checked::after {
+ content: '✓'; color: white; position: absolute; left: 50%; top: 50%;
+ transform: translate(-50%, -50%); font-size: 14px; font-weight: bold;
+}
 }
 
 .save-status {
