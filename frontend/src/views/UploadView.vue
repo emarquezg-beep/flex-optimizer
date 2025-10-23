@@ -393,6 +393,72 @@ async function handleFileChange(event) {
   }
 }
 
+// PASTE THIS FUNCTION BACK INTO YOUR <script setup>
+
+async function sendToBackend() {
+  // Get only the address strings
+  const addressesToSend = extractedAddresses.value.map(stop => stop.address);
+  
+  // Sanitize them (remove weird characters, extra spaces)
+  const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
+  
+  if (sanitizedAddresses.length === 0) { 
+    alert('No hay direcciones válidas para optimizar.'); 
+    return; 
+  }
+  
+  // Find the selected warehouse ADDRESS based on the CODE
+  const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+  if (!warehouse) {
+      alert('Error: Warehouse no encontrado.'); return;
+  }
+  const warehouseAddress = sanitizeAddress(warehouse.address);
+
+  // Get the final destination address (handle 'custom')
+  const finalDestination = selectedDestination.value === 'custom' 
+    ? sanitizeAddress(customDestination.value) 
+    : sanitizeAddress(selectedDestination.value);
+    
+  if (!finalDestination) { 
+    alert('Por favor, especifica un destino final.'); 
+    return; 
+  }
+  
+  // Create the full route array: [Warehouse, Stop 1, Stop 2, ..., Destination]
+  const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
+  
+  // Get the backend URL (from .env file or default to localhost)
+  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+  
+  // Show loading state and clear previous results
+  backendResponse.value = { status: 'loading' }; 
+  
+  try {
+    // Send the request to the backend
+    const response = await fetch(`${backendUrl}/api/optimize-route`, {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ addresses: fullRoute }), // Send the addresses array
+    });
+    
+    // Get the result from the backend
+    const result = await response.json();
+    
+    // Store the result (this will trigger the display update)
+    backendResponse.value = result;
+    
+    if (!response.ok) {
+        // If the backend sent an error message, show it
+        throw new Error(result.message || `Error ${response.status}`);
+    }
+    
+  } catch (error) {
+    // If the fetch fails (network error, server down, CORS error), show an error
+    console.error("Error calling backend:", error);
+    backendResponse.value = { error: `Error: ${error.message || 'No se pudo conectar al servidor.'}` };
+  }
+}
+
 // (7) saveToLogbook (Tu función v1.5 está perfecta, la mantengo)
 async function saveToLogbook() {
     if (!calculatedLogEntry.value) {
