@@ -393,6 +393,12 @@ async function handleFileChange(event) {
   }
 }
 
+function sanitizeAddress(address) {
+    if (!address) return '';
+    // Remove characters that aren't letters, numbers, spaces, or #
+    // Replace multiple spaces with a single space, trim ends
+    return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
+}
 // PASTE THIS FUNCTION BACK INTO YOUR <script setup>
 
 async function sendToBackend() {
