@@ -737,15 +737,15 @@ async function saveToLogbook() {
     .button-reorder { background-color: #d1e7fd; color: #0c5460; border: 1px solid #bee5eb; padding: 10px; flex-grow: 1; cursor: pointer; font-weight: bold; }
     .button-map { display: block; width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold; color: white; background-color: #1976d2; border: none; border-radius: 5px; cursor: pointer; }
     .backend-status { margin-top: 15px; padding: 10px; background-color: #eee; border-radius: 4px; text-align: center; }
-    .results-container { margin-top: 20px; padding: 15px; background-color: #f7f9fc; border: 1px solid #e1e8ed; border-radius: 8px; color: #212529; }
+    .results-container { margin-top: 20px; padding: 15px; background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text-primary); }
     .result-block { padding: 20px 0 10px 0; }
     .result-block.inverse-block { background-color: #fffaf0; margin: 0 -15px -15px -15px; padding: 20px 15px 0px 15px; border-radius: 0 0 8px 8px;} 
     .result-block h4 { margin: 0 0 15px 0; color: #495057; }
     .result-block p { margin: 5px 0; font-size: 1.1em; color: #212529; }
     .segment-breakdown { padding-left: 15px; border-left: 2px solid #dee2e6; margin-left: 5px; margin-top: 10px; }
-    .calc-details { font-size: 0.85em; color: #6c757d; display: inline; }
-    .total-time { font-size: 1.1em !important; border-top: 1px solid #ced4da; padding-top: 8px; margin-top: 8px; }
-    .grand-total { font-size: 1.25em !important; color: #007bff; }
+    .calc-details { font-size: 0.85em; color: var(--color-text-secondary); display: inline; }
+    .total-time { font-size: 1.1em !important; border-top: 1px solid #ced4da; padding-top: 8px; margin-top: 8px; color: var(--color-text-primary); }
+    .grand-total { font-size: 1.25em !important; color: #007bff; color: var(--color-primary);font-weight: bold; }
     .dotted-hr { border: none; border-top: 2px dotted #adb5bd; margin: 15px 0; }
     hr { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
     .backend-status.error { background-color: #fdecea; color: #c51162; }
@@ -765,7 +765,7 @@ async function saveToLogbook() {
     .eta-label.normal { color: #ffc107; }
     .eta-label.pessimistic { color: #dc3545; }
     .eta-time { font-size: 1.3em; font-weight: bold; color: #0056b3; margin-right: 10px; }
-    .eta-duration { font-size: 0.9em; color: #6c757d; }
+    .eta-duration { font-size: 0.9em; color: var(--color-text-secondary); }
     .button-save-log:disabled {
     background-color: #aaa;
     cursor: not-allowed;
@@ -854,13 +854,23 @@ async function saveToLogbook() {
 hr, .dotted-hr { border-top-color: var(--color-border); }
 .scenario-table td { border-bottom-color: var(--color-border); }
 .highlight { background-color: rgba(163, 177, 138, 0.1); } 
-.savings { color: var(--color-accent); }
+.savings { color: var(--color-accent); font-weight: bold;}
 .logbook-form-container {
     background-color: var(--color-surface); border: 1px solid var(--color-border);
 }
 .logbook-form-container h3 { color: var(--color-primary); border-bottom-color: var(--color-border); }
 .logbook-summary { 
  background-color: var(--color-background); border-color: var(--color-border);
+}
+.logbook-summary p {
+  color: var(--color-text-primary); /* Ensure summary text is light */
+}
+.logbook-summary p strong {
+    color: var(--color-white); /* Make bold text slightly brighter */
+}
+.form-group label {
+    color: var(--color-text-secondary); /* Use secondary text color for labels */
+    font-weight: normal; /* Adjust if needed */
 }
 .button-save-log {
  background-color: var(--color-accent); color: var(--color-black);
