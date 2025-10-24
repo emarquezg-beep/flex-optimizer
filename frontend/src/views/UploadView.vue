@@ -158,6 +158,16 @@ if (maxStopNumber > 0) { // Only run if we found any stops
 } else {
     console.log("No valid stops found by OCR to fill gaps."); // Debug log
 }
+
+extractedAddresses.value = fullListWithGaps;
+
+  } catch (error) {
+    console.error("Error processing images:", error);
+    alert(`Error procesando imágenes: ${error.message}`);
+  } finally {
+    isProcessing.value = false;
+  }
+}
 // --- END OF NEW BLOCK ---
 
 // ============================================
