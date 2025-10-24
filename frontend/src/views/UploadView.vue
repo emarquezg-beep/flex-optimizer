@@ -408,6 +408,22 @@ function sanitizeAddress(address) {
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+function startManualEntry() {
+  console.log('Starting manual entry...');
+  // Clear any potential OCR results or selected files
+  extractedAddresses.value = []; 
+  backendResponse.value = null;
+  selectedFileNames.value = [];
+  if (fileInputRef.value) {
+    fileInputRef.value.value = ''; // Clear the file input
+  }
+  
+  // Initialize with one empty stop (number 2)
+  extractedAddresses.value = [{ number: 2, address: '', isDowntown: false }];
+  
+  // No need to set processing flags, the v-if will handle visibility
+}
+
 async function sendToBackend() {
     // --- Restored sendToBackend ---
       const addressesToSend = extractedAddresses.value.map(stop => stop.address);
@@ -489,217 +505,165 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 </script>
 
 <template>
-    <div class="view-container"><div class="uploader-container"></div>
-        <div class="file-input-area">
-            <label for="file-input" class="file-input-label">
-                <span class="file-input-icon">📤</span>
-                <span class="file-input-text">{{ fileInputLabel }}</span>
-            </label>
-    <input 
-        type="file" 
-        multiple 
-        accept="image/*" 
-        @change="handleFileChange" 
-        id="file-input" 
-        :disabled="isProcessing"
-        ref="fileInputRef" 
-    />
-    <div v-if="selectedFileNames.length > 0" class="selected-files">
-        Selected: {{ selectedFileNames.join(', ') }}
-    </div>
-    </div>
-        <div v-if="isProcessing" class="status"><h3>Procesando imágenes...</h3></div>
+  <div class="view-container">
+    <div class="uploader-container">
+
+      <div class="file-input-area">
+        <label for="file-input" class="file-input-label">
+          <span class="file-input-icon">📤</span>
+          <span class="file-input-text">{{ fileInputLabel }}</span>
+        </label>
+        <input 
+          type="file" 
+          multiple 
+          accept="image/*" 
+          @change="handleFileChange" 
+          id="file-input" 
+          :disabled="isProcessing"
+          ref="fileInputRef" 
+        />
+        <div v-if="selectedFileNames.length > 0" class="selected-files">
+          Selected: {{ selectedFileNames.join(', ') }}
+        </div>
+      </div>
+
+      <div class="manual-entry-container">
+          <button @click="startManualEntry" class="button-secondary" :disabled="isProcessing">
+              📝 Enter Stops Manually
+          </button>
+      </div>
+
+      <div v-if="isProcessing" class="status"><h3>Processing images...</h3></div>
+      
+      <div v-if="extractedAddresses.length > 0 && !isProcessing">
         
-        <div v-if="extractedAddresses.length > 0 && !isProcessing">
-            <div class="controls-container">
-                <div class="control-group">
-                    <label for="warehouse-select">Punto de Partida</label>
-                    <select id="warehouse-select" v-model="selectedWarehouseCode">
-                        <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
-                            {{ wh.code }} ({{ wh.commuteMiles }} mi)
-                        </option>
-                    </select>
+        <div class="controls-container">
+          <div class="control-group">
+            <label for="warehouse-select">Departure Point</label>
+            <select id="warehouse-select" v-model="selectedWarehouseCode">
+              <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
+                {{ wh.code }} ({{ wh.commuteMiles }} mi)
+              </option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="destination-select">Final Destination</label>
+            <select id="destination-select" v-model="selectedDestination">
+              <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
+            </select>
+          </div>
+        </div>
+        <div v-if="selectedDestination === 'custom'" class="custom-input-container">
+          <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
+        </div>
+
+        <div class="block-details-container">
+            <h3>Block Details</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" v-model="blockData.fecha">
                 </div>
-                <div class="control-group">
-                    <label for="destination-select">Destino Final</label>
-                    <select id="destination-select" v-model="selectedDestination">
-                        <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
+                <div class="form-group">
+                    <label>Start Time (24h)</label>
+                    <input type="time" v-model="blockData.hora">
+                </div>
+                <div class="form-group">
+                    <label>Vehicle</label>
+                    <select v-model="blockData.vehiculo">
+                        <option v-for="v in VEHICULO_OPTIONS" :key="v" :value="v">{{ v }}</option>
                     </select>
                 </div>
             </div>
-            <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-                <input type="text" v-model="customDestination" placeholder="Escribe la dirección de destino aquí">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Duration (Hours)</label>
+                    <select v-model.number="blockData.duracion_horas">
+                        <option v-for="d in DURACION_OPTIONS" :key="d" :value="d">{{ d }} hrs</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Payment ($)</label>
+                    <input type="number" v-model.number="blockData.pago" placeholder="e.g., 70.50">
+                </div>
+            </div>
+             <div class="form-row">
+                <div class="form-group">
+                    <label>Time Before Block (min)</label>
+                    <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
+                </div>
+                <div class="form-group">
+                    <label>Commute 1 (Miles)</label>
+                    <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
+                </div>
+            </div>
+        </div>
+
+        <div class="address-list">
+          <h2>📝 Review and Edit Stops ({{ extractedAddresses.length }})</h2>
+          <ol class="ordered-list">
+            <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item">
+              <input type="number" v-model.number="stop.number" class="stop-number-input" placeholder="#">
+              <input type="text" v-model="stop.address" class="address-input" placeholder="Stop address">
+              <label class="downtown-label" title="Mark if Downtown">
+                <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox"> DT
+              </label>
+              <button @click="removeAddress(index)" class="button-delete">🗑️</button>
+            </li>
+          </ol>
+          <div class="action-buttons">
+            <button @click="addAddress" class="button-add">➕ Add Stop</button>
+            <button @click="reorderList" class="button-reorder">🔄 Reorder List</button>
+          </div>
+        </div> 
+        
+        <button @click="sendToBackend" class="button-map button-primary">Evaluate Scenarios</button>
+
+        <div v-if="backendResponse">
+          <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
+          
+          <div v-else-if="reportData && calculatedLogEntry" class="results-container">
+            <div class="scenario-table">
+              </div>
+            <hr>
+            <div class="result-block">
+               </div>
+            <div v-if="scenarioETAs?.normal" class="result-block eta-block">
+              </div>
+            <hr>
+            <div class="result-block inverse-block">
+               </div>
+            <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
+              </div>
+          </div>
+          <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
+
+          <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
+            <h3>📓 Logbook Block Data</h3>
+            <div class="logbook-scenario-selector">
+              <strong>Use data from scenario:</strong>
+              <label><input type="radio" v-model="selectedScenarioForLog" value="normal"> Normal</label>
+              <label><input type="radio" v-model="selectedScenarioForLog" value="inverse"> Inverse</label>
             </div>
 
-            <div class="address-list">
-                <h2>📝 Revisa y Edita las Paradas ({{ extractedAddresses.length }})</h2>
-                <ol class="ordered-list">
-                    <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item">
-                        <input type="number" v-model="stop.number" class="stop-number-input" placeholder="#">
-                        <input type="text" v-model="stop.address" class="address-input" placeholder="Dirección de la parada">
-                        <label class="downtown-label" title="Marcar si es Downtown">
-                            <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox"> DT
-                        </label>
-                        <button @click="removeAddress(index)" class="button-delete">🗑️</button>
-                    </li>
-                </ol>
-                <div class="action-buttons">
-                    <button @click="addAddress" class="button-add">➕ Añadir Parada</button>
-                    <button @click="reorderList" class="button-reorder">🔄 Reordenar Lista</button>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Estimated Warehouse Delay (min)</label>
+                    <input type="number" v-model.number="blockData.retraso_almacen" step="5">
                 </div>
-                <button @click="sendToBackend" class="button-map">Evaluar Escenarios</button>
+                <div class="form-group"></div> </div>
 
-                <div v-if="backendResponse">
-                    <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluando escenarios...</div>
-                    
-                    <div v-else-if="reportData && calculatedLogEntry" class="results-container">
-                        
-                        <div class="scenario-table">
-                            <h4>📊 Comparación Final</h4>
-                            <table>
-                                <tbody>
-                                    <tr><td>Ruta Normal (1 → Fin)</td><td>{{ reportData.normal.totalMiles }} mi</td><td>-</td></tr>
-                                    <tr class="highlight">
-                                        <td><strong>Ruta Inversa (Fin → 1)</strong></td>
-                                        <td><strong>{{ reportData.inverse.totalMiles }} mi</strong></td>
-                                        <td><strong class="savings">{{ reportData.savings > 0 ? `-${reportData.savings}` : `+${Math.abs(reportData.savings)}` }} mi</strong></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <hr>
-                        <div class="result-block">
-                            <h4>➡️ Desglose Ruta Normal</h4>
-                            <p>Hacia 1ra Parada: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
-                            <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
-                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong> 
-                                    <span class="calc-details">({{ segment.stopsCount }} paradas | {{ segment.aptCount }} aptos | {{ segment.downtownCount }} DT)</span>
-                                </p>
-                            </div>
-                            <hr class="dotted-hr">
-                            <p class="total-time"><strong>Total Trabajo: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
-                            <p>Hacia Destino Final: <strong>{{ reportData.normal.toEnd.duration }} min - {{ reportData.normal.toEnd.distance }} mi</strong></p>
-                            <hr class="dotted-hr">
-                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
-                        </div>
-                         <div v-if="scenarioETAs?.normal" class="result-block eta-block">
-                             <h4>⏱️ Estimaciones Llegada (Ruta Normal)</h4>
-                             <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.normal.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.optimistic.totalDuration }} min)</span></div>
-                             <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.normal.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.normal.totalDuration }} min)</span></div>
-                             <div class="eta-scenario"><span class="eta-label pessimistic">Pesimista:</span><strong class="eta-time">{{ scenarioETAs.normal.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.pessimistic.totalDuration }} min)</span></div>
-                        </div>
-                        <hr>
-                         <div class="result-block inverse-block">
-                            <h4>⬅️ Desglose Ruta Inversa</h4>
-                            <p>Hacia Última Parada: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
-                            <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
-                                <p>Segmento {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
-                                     <span class="calc-details">({{ segment.stopsCount }} paradas | {{ segment.aptCount }} aptos | {{ segment.downtownCount }} DT)</span>
-                                </p>
-                            </div>
-                            <hr class="dotted-hr">
-                            <p class="total-time"><strong>Total Trabajo: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
-                            <p>Desde 1ra Parada a Destino: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
-                            <hr class="dotted-hr">
-                            <p class="total-time grand-total"><strong>Total Ruta: {{ reportData.inverse.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
-                        </div>
-                         <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
-                             <h4>⏱️ Estimaciones Llegada (Ruta Inversa)</h4>
-                             <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.optimistic.totalDuration }} min)</span></div>
-                             <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.inverse.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.normal.totalDuration }} min)</span></div>
-                             <div class="eta-scenario"><span class="eta-label pessimistic">Pesimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
-                        </div>
-                    </div>
-                    <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
-
-                    <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
-                        <h3>📓 Datos del Bloque para Bitácora</h3>
-                        
-                        <div class="logbook-scenario-selector">
-                            <strong>Usar datos del escenario:</strong>
-                            <label>
-                                <input type="radio" v-model="selectedScenarioForLog" value="normal"> Normal
-                            </label>
-                            <label>
-                                <input type="radio" v-model="selectedScenarioForLog" value="inverse"> Inverso
-                            </label>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Fecha</label>
-                                <input type="date" v-model="blockData.fecha">
-                            </div>
-                            <div class="form-group">
-                                <label>Hora Inicio (24h)</label>
-                                <input type="time" v-model="blockData.hora">
-                            </div>
-                            <div class="form-group">
-                                <label>Vehículo</label>
-                                <select v-model="blockData.vehiculo">
-                                    <option v-for="v in VEHICULO_OPTIONS" :key="v" :value="v">{{ v }}</option>
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Duración (Horas)</label>
-                                <select v-model.number="blockData.duracion_horas">
-                                    <option v-for="d in DURACION_OPTIONS" :key="d" :value="d">{{ d }} hrs</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Pago ($)</label>
-                                <input type="number" v-model.number="blockData.pago" placeholder="Ej: 70.50">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Retraso Estimado en Almacén (min)</label>
-                                <input type="number" v-model.number="blockData.retraso_almacen" step="5">
-                            </div>
-                            <div class="form-group"></div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Antes del Bloque (min)</label>
-                                <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
-                            </div>
-                            <div class="form-group">
-                                <label>Conmute 1 (Millas)</label>
-                                <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
-                            </div>
-                        </div>
-                        
-                        <div class="logbook-summary">
-                            <h4>Resumen Calculado (para Guardar)</h4>
-                            <p><strong>Pago/Hora Base:</strong> ${{ calculatedLogEntry.pago_por_hora }}</p>
-                            <p><strong>Millas de Trabajo:</strong> {{ calculatedLogEntry.millas_de_trabajo }} mi</p>
-                            <p><strong>Conmute 2 (API):</strong> {{ calculatedLogEntry.commute_2 }} mi</p>
-                            <p><strong>Millas Totales:</strong> {{ calculatedLogEntry.millas_totales }} mi</p>
-                            <hr>
-                            <p><strong>Tiempo "Después Bloque":</strong> {{ calculatedLogEntry.despues_del_bloque }} hrs</p>
-                            <p><strong>Tiempo Total Invertido:</strong> {{ calculatedLogEntry.tiempo_total }} hrs</p>
-                            <p><strong>PAGO REAL POR HORA:</strong> ${{ calculatedLogEntry.pago_real_por_hora }}</p>
-                            <hr>
-                            <p><strong>Gasto Gasolina:</strong> -${{ calculatedLogEntry.gasto_de_gasolina }}</p>
-                            <p><strong>Desgaste Vehículo:</strong> -${{ calculatedLogEntry.desgaste_vehiculo }}</p>
-                            <p><strong>Impuestos (Tax):</strong> -${{ calculatedLogEntry.tax }}</p>
-                            <p><strong>Claim por Milla:</strong> +${{ calculatedLogEntry.claim_por_milla }}</p>
-                        </div>
-
-                        <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
-                            {{ isSaving ? 'Guardando...' : '💾 Guardar en Bitácora' }}
-                        </button>
-                        
-                        <div v-if="saveStatus" 
-                             :class="['save-status', saveStatus.success ? 'success' : 'error']">
-                            {{ saveStatus.message }}
-                        </div>
-                    </div> </div> </div> </div> </div> </template>
-
+            <div class="logbook-summary">
+              <h4>Calculated Summary (to Save)</h4>
+              </div>
+            <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
+              {{ isSaving ? 'Saving...' : '💾 Save to Logbook' }}
+            </button>
+            <div v-if="saveStatus" :class="['save-status', saveStatus.success ? 'success' : 'error']">
+              {{ saveStatus.message }}
+            </div>
+          </div> 
+        </div> </div> </div> </div> </template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -843,5 +807,31 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
     .editable-item.needs-review .address-input {
       background-color: rgba(40, 38, 30, 0.5); /* Slightly yellow dark background */
       border-color: #ffc107;
+    }
+    .manual-entry-container {
+  text-align: center;
+  margin-bottom: 20px;
+    }
+
+    .block-details-container {
+      margin-top: 20px;
+      margin-bottom: 20px;
+      padding: 20px;
+      background-color: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+    }
+
+    .block-details-container h3 {
+      margin-top: 0;
+      color: var(--color-primary);
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+
+    /* Ensure address list only appears after details are shown */
+    .address-list {
+      /* margin-top is already there, looks fine */
     }
 </style>
