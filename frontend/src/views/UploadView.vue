@@ -109,7 +109,7 @@ function parseAddresses(rawText) {
 }
 
 async function handleFileChange(event) {
-  // --- This is your original v1.x/v2.0 file handling logic ---
+  // --- File selection logic ---
   const files = event.target.files;
   if (!files || files.length === 0) {
     selectedFileNames.value = [];
@@ -117,29 +117,54 @@ async function handleFileChange(event) {
   }
   selectedFileNames.value = Array.from(files).map(f => f.name);
 
+  // --- Reset state ---
   isProcessing.value = true;
   extractedAddresses.value = [];
-  backendResponse.value = null; // Clear previous results
-  let allParsedStops = [];
+  backendResponse.value = null;
+  let allParsedStops = []; // Array to hold stops from all images
+
+  // --- Declare range variables OUTSIDE try ---
+  let maxStopNumber = 0;
+  let minStopNumber = Infinity;
+  // --- End declarations ---
 
   try {
+    // --- OCR Loop ---
     for (const file of files) {
-      const processedImage = await preprocessImage(file); // Use original preprocess
-      const { data: { text } } = await Tesseract.recognize(processedImage, 'eng'); // Simple Tesseract call
-      const stopsFromFile = parseAddresses(text); // Use original parse
+      console.log(`📸 Procesando archivo: ${file.name}`); // Log which file is being processed
+      const processedImage = await preprocessImage(file);
+      const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
+      console.log(`📝 Texto OCR para ${file.name}:`, text); // Log raw OCR text
+      const stopsFromFile = parseAddresses(text);
+      console.log(`🔍 Paradas encontradas en ${file.name}:`, stopsFromFile); // Log parsed stops for this file
       allParsedStops.push(...stopsFromFile);
     }
+    // --- End OCR Loop ---
 
-    // Gap filling logic (remains the same)
-// --- START OF NEW BLOCK ---
-const fullListWithGaps = [];
-    if (maxStopNumber > 0) {
+    console.log('📦 Total de paradas extraídas (antes de gaps):', allParsedStops);
+
+    // --- Calculate Min/Max Stop Numbers ---
+    // This MUST happen AFTER the loop finishes and BEFORE the gap filling
+    const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+
+    // Re-calculate min/max here using the final map
+    minStopNumber = Infinity; // Reset before calculating
+    maxStopNumber = 0;      // Reset before calculating
+    uniqueStopsMap.forEach(stop => {
+      if (stop.number > maxStopNumber) maxStopNumber = stop.number;
+      if (stop.number < minStopNumber) minStopNumber = stop.number;
+    });
+    console.log(`📍 Rango de paradas detectado: ${minStopNumber} - ${maxStopNumber}`);
+    // --- End Min/Max Calculation ---
+
+    // --- Gap Filling Logic ---
+    const fullListWithGaps = [];
+    if (maxStopNumber > 0 && minStopNumber !== Infinity) { // Check if we found any valid stops
         const loopStart = Math.max(2, minStopNumber);
-        console.log(`[DEBUG] Gap filling range: ${loopStart} to ${maxStopNumber}`); // Existing log
+        console.log(`[DEBUG] Gap filling range: ${loopStart} to ${maxStopNumber}`);
 
         for (let i = loopStart; i <= maxStopNumber; i++) {
-            // --- ADD THESE LOGS ---
-            console.log(`[DEBUG] Checking for stop number: ${i}`); 
+            console.log(`[DEBUG] Checking for stop number: ${i}`);
             if (uniqueStopsMap.has(i)) {
                 console.log(`[DEBUG] Found stop ${i} in map. Adding it.`);
                 fullListWithGaps.push(uniqueStopsMap.get(i));
@@ -147,19 +172,25 @@ const fullListWithGaps = [];
                 console.log(`[DEBUG] Stop ${i} NOT found. Adding GAP.`);
                 fullListWithGaps.push({ number: i, address: '', isDowntown: false });
             }
-            // --- END ADDED LOGS ---
         }
     } else {
-        console.log("[DEBUG] No valid stops found by OCR to fill gaps."); // Existing log
+        console.log("[DEBUG] No valid stops found by OCR to fill gaps.");
     }
-    console.log('[DEBUG] Final list with gaps (before assignment):', JSON.stringify(fullListWithGaps)); // Log the list itself
+    // --- End Gap Filling ---
+
+    console.log('[DEBUG] Final list with gaps (before assignment):', JSON.stringify(fullListWithGaps));
     extractedAddresses.value = fullListWithGaps;
 
   } catch (error) {
     console.error("Error processing images:", error);
-    alert(`Error procesando imágenes: ${error.message}`);
+    // Use error.message for a more specific alert
+    alert(`Error procesando imágenes: ${error.message || 'Error desconocido'}`);
   } finally {
     isProcessing.value = false;
+    // Reset file input to allow re-uploading the same file
+    if (fileInputRef.value) {
+      fileInputRef.value.value = '';
+    }
   }
 }
 // --- END OF NEW BLOCK ---
