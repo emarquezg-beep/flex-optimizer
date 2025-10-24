@@ -655,6 +655,19 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 
             <div class="logbook-summary">
               <h4>Calculated Summary (to Save)</h4>
+              <p><strong>Base Pay/Hour:</strong> ${{ calculatedLogEntry.pago_por_hora }}</p>
+              <p><strong>Work Miles:</strong> {{ calculatedLogEntry.millas_de_trabajo }} mi</p>
+              <p><strong>Commute 2 (API):</strong> {{ calculatedLogEntry.commute_2 }} mi</p>
+              <p><strong>Total Miles:</strong> {{ calculatedLogEntry.millas_totales }} mi</p>
+              <hr>
+              <p><strong>"After Block" Time:</strong> {{ calculatedLogEntry.despues_del_bloque }} hrs</p>
+              <p><strong>Total Time Invested:</strong> {{ calculatedLogEntry.tiempo_total }} hrs</p>
+              <p><strong>ACTUAL PAY PER HOUR:</strong> ${{ calculatedLogEntry.pago_real_por_hora }}</p>
+              <hr>
+              <p><strong>Gas Expense:</strong> -${{ calculatedLogEntry.gasto_de_gasolina }}</p>
+              <p><strong>Vehicle Wear:</strong> -${{ calculatedLogEntry.desgaste_vehiculo }}</p>
+              <p><strong>Taxes:</strong> -${{ calculatedLogEntry.tax }}</p>
+              <p><strong>Mileage Claim:</strong> +${{ calculatedLogEntry.claim_por_milla }}</p>
               </div>
             <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
               {{ isSaving ? 'Saving...' : '💾 Save to Logbook' }}
