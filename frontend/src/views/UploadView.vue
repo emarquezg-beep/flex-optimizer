@@ -420,6 +420,27 @@ async function sendToBackend() {
       if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
       const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
       const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+      try {
+        const now = new Date();
+        const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
+        const blockStartTime = new Date(); // Today's date
+        blockStartTime.setHours(startHours, startMinutes, 0, 0); // Set to block start time
+
+        // Calculate difference in milliseconds
+        const diffMs = now.getTime() - blockStartTime.getTime();
+        
+        // Convert to minutes, ensure it's not negative (if evaluated before block start)
+        const actualDelayMinutes = Math.max(0, Math.round(diffMs / 60000)); 
+        
+        // Update the blockData ref - this will trigger computed properties
+        blockData.value.retraso_almacen = actualDelayMinutes;
+        
+        console.log(`⏱️ Actual prep time calculated: ${actualDelayMinutes} minutes`);
+        
+      } catch (e) {
+          console.error("Error calculating actual prep time:", e);
+          // Keep the default or previously entered value if parsing fails
+      }
       backendResponse.value = { status: 'loading' };
       try {
         const response = await fetch(`${backendUrl}/api/optimize-route`, {
