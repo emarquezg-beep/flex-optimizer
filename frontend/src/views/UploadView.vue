@@ -131,34 +131,34 @@ async function handleFileChange(event) {
     }
 
     // Gap filling logic (remains the same)
-    const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
-    let maxStopNumber = 0; let minStopNumber = Infinity;
-    uniqueStopsMap.forEach(stop => {
-      if (stop.number > maxStopNumber) maxStopNumber = stop.number;
-      if (stop.number < minStopNumber) minStopNumber = stop.number;
-    });
-    const fullListWithGaps = [];
-    if (maxStopNumber > 0) {
-      minStopNumber = Math.max(2, minStopNumber); 
-      for (let i = minStopNumber; i <= maxStopNumber; i++) {
-        if (uniqueStopsMap.has(i)) {
-          fullListWithGaps.push(uniqueStopsMap.get(i));
-        } else {
-          // Add gap without confidence/needsReview
-          fullListWithGaps.push({ number: i, address: '', isDowntown: false }); 
-        }
-      }
-    }
-    extractedAddresses.value = fullListWithGaps;
+// --- START OF NEW BLOCK ---
+const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+let maxStopNumber = 0;
+let minStopNumber = Infinity; // Find the actual minimum stop number found
 
-  } catch (error) {
-    console.error("Error processing files:", error);
-    alert("Hubo un error procesando las imágenes. Revisa la consola.");
-  } finally {
-    isProcessing.value = false;
-    if (fileInputRef.value) { fileInputRef.value.value = ''; }
-  }
+uniqueStopsMap.forEach(stop => {
+  if (stop.number > maxStopNumber) maxStopNumber = stop.number;
+  if (stop.number < minStopNumber) minStopNumber = stop.number;
+});
+
+const fullListWithGaps = [];
+if (maxStopNumber > 0) { // Only run if we found any stops
+    // Start the loop from 2 OR the actual minimum stop number found, whichever is greater
+    const loopStart = Math.max(2, minStopNumber); 
+    console.log(`Gap filling range: ${loopStart} to ${maxStopNumber}`); // Debug log
+
+    for (let i = loopStart; i <= maxStopNumber; i++) {
+        if (uniqueStopsMap.has(i)) {
+            fullListWithGaps.push(uniqueStopsMap.get(i));
+        } else {
+            // Create gap without confidence/needsReview flags
+            fullListWithGaps.push({ number: i, address: '', isDowntown: false });
+        }
+    }
+} else {
+    console.log("No valid stops found by OCR to fill gaps."); // Debug log
 }
+// --- END OF NEW BLOCK ---
 
 // ============================================
 // COMPUTED PROPERTIES (reportData, scenarioETAs, calculatedLogEntry)
