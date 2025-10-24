@@ -364,7 +364,7 @@ const calculatedLogEntry = computed(() => {
     // --- End City Calculation ---
 
     const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
-    const user_id = 'c130d2a8-6f96-48bc-b69a-68692797b5e6'; // Your UUID
+    
     const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
     let despues_del_bloque_hrs = 0;
     try {
