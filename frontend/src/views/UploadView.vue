@@ -388,10 +388,11 @@ const calculatedLogEntry = computed(() => {
 
     // ... (all the calculations for commute_1, commute_2, millas_de_trabajo, etc.)
 
-    // --- ADD THIS LOG ---
+// --- REPLACE THIS LOG ---
     console.log('[DEBUG] Data for Commute 2:', {
         scenarioKey: scenarioKey,
-        chosenReport_toEnd: chosenReport.toEnd,
+        // Log the specific distance property
+        chosenReport_toEnd_distance: chosenReport?.toEnd?.distance, 
         calculated_commute_2: commute_2 
     });
     // --- END LOG ---
