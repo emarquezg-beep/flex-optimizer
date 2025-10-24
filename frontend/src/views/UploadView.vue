@@ -384,6 +384,17 @@ const calculatedLogEntry = computed(() => {
     const desgaste_vehiculo = millas_totales * 0.25;
     const tax = pago * 0.153;
     const claim_por_milla = millas_de_trabajo * 0.70;
+    // Inside calculatedLogEntry computed property
+
+    // ... (all the calculations for commute_1, commute_2, millas_de_trabajo, etc.)
+
+    // --- ADD THIS LOG ---
+    console.log('[DEBUG] Data for Commute 2:', {
+        scenarioKey: scenarioKey,
+        chosenReport_toEnd: chosenReport.toEnd,
+        calculated_commute_2: commute_2 
+    });
+    // --- END LOG ---
     return {
         fecha: data.fecha, vehiculo: data.vehiculo, warehouse: selectedWarehouseCode.value,
         hora: data.hora, duracion_horas: duracion_horas, pago: pago,
