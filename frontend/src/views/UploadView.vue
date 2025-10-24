@@ -402,7 +402,7 @@ const calculatedLogEntry = computed(() => {
         pago_por_hora: pago_por_hora.toFixed(2), antes_del_bloque: antes_del_bloque_hrs.toFixed(2),
         despues_del_bloque: despues_del_bloque_hrs.toFixed(2), tiempo_total: tiempo_total.toFixed(2),
         pago_real_por_hora: pago_real_por_hora.toFixed(2), commute_1: commute_1.toFixed(2),
-        conmute_2: commute_2.toFixed(2), millas_de_trabajo: millas_de_trabajo.toFixed(2),
+        commute_2: commute_2.toFixed(2), millas_de_trabajo: millas_de_trabajo.toFixed(2),
         millas_totales: millas_totales.toFixed(2), millas_por_hora: millas_por_hora.toFixed(2),
         gasto_de_gasolina: gasto_de_gasolina.toFixed(2), desgaste_vehiculo: desgaste_vehiculo.toFixed(2),
         tax: tax.toFixed(2), claim_por_milla: claim_por_milla.toFixed(2),
