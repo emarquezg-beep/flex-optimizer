@@ -639,6 +639,63 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           <div v-else-if="backendResponse.error" class="backend-status error">{{ backendResponse.error }}</div>
 
           <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
+            <div class="scenario-table">
+              <h4>📊 Final Comparison</h4>
+              <table>
+                <tbody>
+                  <tr><td>Normal Route (1 → End)</td><td>{{ reportData.normal.totalMiles }} mi</td><td>-</td></tr>
+                  <tr class="highlight">
+                    <td><strong>Inverse Route (End → 1)</strong></td>
+                    <td><strong>{{ reportData.inverse.totalMiles }} mi</strong></td>
+                    <td><strong class="savings">{{ reportData.savings >= 0 ? `-${reportData.savings}` : `+${Math.abs(reportData.savings)}` }} mi</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <hr>
+            <div class="result-block">
+              <h4>➡️ Normal Route Breakdown</h4>
+              <p>To 1st Stop: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
+              <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
+                <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
+                  <span class="calc-details">({{ segment.stopsCount }} stops | {{ segment.aptCount }} apts | {{ segment.downtownCount }} DT)</span>
+                </p>
+              </div>
+              <hr class="dotted-hr">
+              <p class="total-time"><strong>Total Work: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
+              <p>To Final Destination: <strong>{{ reportData.normal.toEnd.duration }} min - {{ reportData.normal.toEnd.distance }} mi</strong></p>
+              <hr class="dotted-hr">
+              <p class="total-time grand-total"><strong>Total Route: {{ reportData.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
+            </div>
+            <div v-if="scenarioETAs?.normal" class="result-block eta-block">
+              <h4>⏱️ Arrival Estimates (Normal Route)</h4>
+              <div class="eta-scenario"><span class="eta-label optimistic">Optimistic:</span><strong class="eta-time">{{ scenarioETAs.normal.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.optimistic.totalDuration }} min)</span></div>
+              <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.normal.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.normal.totalDuration }} min)</span></div>
+              <div class="eta-scenario"><span class="eta-label pessimistic">Pessimistic:</span><strong class="eta-time">{{ scenarioETAs.normal.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.pessimistic.totalDuration }} min)</span></div>
+            </div>
+            <hr>
+            <div class="result-block inverse-block">
+              <h4>⬅️ Inverse Route Breakdown</h4>
+              <p>To Last Stop: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
+              <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
+                <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
+                  <span class="calc-details">({{ segment.stopsCount }} stops | {{ segment.aptCount }} apts | {{ segment.downtownCount }} DT)</span>
+                </p>
+              </div>
+              <hr class="dotted-hr">
+              <p class="total-time"><strong>Total Work: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
+              <p>From 1st Stop to Destination: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
+              <hr class="dotted-hr">
+              <p class="total-time grand-total"><strong>Total Route: {{ reportData.inverse.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
+            </div>
+            <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
+              <h4>⏱️ Arrival Estimates (Inverse Route)</h4>
+              <div class="eta-scenario"><span class="eta-label optimistic">Optimistic:</span><strong class="eta-time">{{ scenarioETAs.inverse.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.optimistic.totalDuration }} min)</span></div>
+              <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.inverse.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.normal.totalDuration }} min)</span></div>
+              <div class="eta-scenario"><span class="eta-label pessimistic">Pessimistic:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
+            </div>
+            <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
+            
             <h3>📓 Logbook Block Data</h3>
             <div class="logbook-scenario-selector">
               <strong>Use data from scenario:</strong>
@@ -676,7 +733,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               {{ saveStatus.message }}
             </div>
           </div> 
-        </div> </div> </div> </div> </template>
+        </div> </div> </div> </div> </div> </template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
