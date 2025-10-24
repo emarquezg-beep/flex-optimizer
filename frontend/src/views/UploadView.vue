@@ -1,8 +1,51 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import Tesseract from 'tesseract.js';
+import stringSimilarity from 'string-similarity'; // Make sure this is installed
 
-// --- VARIABLES Y DATOS (v1.5) ---
+// ============================================
+// CONFIGURATION AND CONSTANTS (From v3.x OCR)
+// ============================================
+
+const KNOWN_CITIES = [
+  'ORLANDO', 'WINTER PARK', 'MAITLAND', 'OVIEDO', 'KISSIMMEE', 'APOPKA',
+  'LONGWOOD', 'CASSELBERRY', 'ALTAMONTE SPRINGS', 'GROVELAND', 'DAYTONA BEACH',
+  'DEBARY', 'LAKE MARY', 'SANFORD', 'DELTONA', 'WINTER SPRINGS', 'OCOEE',
+  'CLERMONT', 'WINTER GARDEN', 'WINDERMERE', 'ST CLOUD', 'SAINT CLOUD', 'CELEBRATION',
+  'DAVENPORT', 'MOUNT DORA', 'EUSTIS', 'TAVARES', 'LEESBURG', 'BUNNELL',
+  'PALM COAST', 'DELAND', 'GENEVA', 'CHULUOTA', 'FERN PARK', 'FOREST CITY',
+  'LOCKHART', 'PINE HILLS', 'HUNTERS CREEK', 'MEADOW WOODS', 'LAKE NONA',
+  'AZALEA PARK', 'BITHLO', 'CHRISTMAS', 'ZELLWOOD', 'MINNEOLA', 'MASCOTTE',
+  'HOWEY IN THE HILLS', 'SORRENTO', 'TANGERINE', 'OAKLAND', 'MONTVERDE',
+  'EDGEWOOD', 'BELLE ISLE', 'CONWAY', 'UNIVERSITY PARK', 'DOCTOR PHILLIPS',
+  'BAY HILL', 'METROWEST', 'HORIZON WEST', 'LAKE BUENA VISTA', 'FOUR CORNERS',
+  'REUNION', 'POINCIANA', 'HAINES CITY', 'ALTURA', 'POLK CITY', 'EAGLE LAKE',
+  'WINTER HAVEN', 'LAKELAND', 'AUBURNDALE', 'SEMINOLE', 'ORANGE CITY',
+  'DELEON SPRINGS', 'NEW SMYRNA BEACH', 'EDGEWATER', 'PORT ORANGE',
+  'HOLLY HILL', 'ORMOND BEACH', 'TITUSVILLE', 'MIMS', 'COCOA', 'COCOA BEACH',
+  'ROCKLEDGE', 'MERRITT ISLAND', 'MELBOURNE', 'PALM BAY', 'EATONVILLE'
+];
+
+const STREET_TYPE_CORRECTIONS = {
+  'AV': 'AVE', 'AVF': 'AVE', 'AV3': 'AVE', 'AVF.': 'AVE', 'AVEE': 'AVE',
+  'AVL': 'AVE', 'AYE': 'AVE', 'AWE': 'AVE', 'R0': 'RD', 'RO': 'RD', 'RD.': 'RD',
+  'RE': 'RD', 'S1': 'ST', 'ST.': 'ST', 'STR': 'ST', 'STT': 'ST', 'DR.': 'DR',
+  'DRI': 'DR', 'DF': 'DR', 'D8': 'DR', 'LN.': 'LN', 'LNE': 'LN', 'L1': 'LN',
+  'CT.': 'CT', 'C1': 'CT', 'CY': 'CT', 'WAY.': 'WAY', 'WY': 'WAY', 'W4Y': 'WAY',
+  'BLVD.': 'BLVD', 'BLDV': 'BLVD', 'BLV': 'BLVD', 'CIR.': 'CIR', 'CIRC': 'CIR',
+  'C1R': 'CIR', 'PKWY.': 'PKWY', 'PKW': 'PKWY', 'PKY': 'PKWY', /* Added PKY */ 'PL.': 'PL',
+  'P1': 'PL', 'TRL.': 'TRL', 'TRAIL': 'TRL', 'TR1': 'TRL'
+};
+
+const VALID_STREET_TYPES = [
+  'AVE', 'ST', 'RD', 'DR', 'LN', 'CT', 'WAY', 'BLVD',
+  'CIR', 'PKWY', 'PL', 'TRL', 'LOOP', 'PATH', 'TER'
+];
+
+// ============================================
+// BASE VARIABLES AND REFS (From Dark Theme/ETA updates)
+// ============================================
+
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -15,11 +58,9 @@ const fileInputLabel = computed(() => {
   return isProcessing.value ? 'Processing...' : 'Choose Screenshots or Drag Here';
 });
 
-// VAMOS A USAR ESTOS VALORES
 const VEHICULO_OPTIONS = ['Pontiac', 'Trax', 'Kia', 'Otro Carro'];
 const DURACION_OPTIONS = [3, 3.5, 4, 4.5, 5];
 
-// (1) WAREHOUSES ACTUALIZADOS con commuteMiles
 const warehouses = ref([
   { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL', commuteMiles: 24 },
   { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL', commuteMiles: 18 },
@@ -27,21 +68,19 @@ const warehouses = ref([
   { code: 'DFL4', address: '4401 Seaboard Rd Orlando, FL', commuteMiles: 22 },
   { code: 'DFL8', address: '7453 Republic Dr Groveland, FL', commuteMiles: 35 },
   { code: 'DMO4', address: '2400 Mason Ave Daytona Beach, FL', commuteMiles: 55 },
-  { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL', commuteMiles: 15 }, // Añadí DFL5 y un commute
+  { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL', commuteMiles: 15 },
 ]);
 
 const destinations = ref([
   { code: 'Casa', address: '513 Alafaya Woods Blvd Oviedo, FL' },
-  ...warehouses.value, // Usamos .value porque warehouses ahora es un ref
+  ...warehouses.value,
   { code: 'Otro (especificar abajo)', address: 'custom' }
 ]);
 
-// (2) VARIABLES DE v1.5 (Estas te faltaban)
-const selectedWarehouseCode = ref(warehouses.value[0].code); 
+const selectedWarehouseCode = ref(warehouses.value[0].code);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
 
-// (3) REFS para el formulario de bitácora (Estos te faltaban)
 const selectedScenarioForLog = ref('normal');
 const blockData = ref({
   fecha: new Date().toISOString().split('T')[0],
@@ -51,10 +90,9 @@ const blockData = ref({
   pago: 0,
   antes_del_bloque: 30,
   commute_1_manual: warehouses.value[0].commuteMiles,
-  retraso_almacen: 20 // <-- NUEVO: Default 20 mins prep time
+  retraso_almacen: 20
 });
 
-// (4) WATCHER para actualizar Conmute_1 (Este te faltaba)
 watch(selectedWarehouseCode, (newCode) => {
   const warehouse = warehouses.value.find(w => w.code === newCode);
   if (warehouse) {
@@ -62,9 +100,12 @@ watch(selectedWarehouseCode, (newCode) => {
   }
 });
 
-// --- PROPIEDADES COMPUTADAS (v1.5) ---
-// (Tu lógica de reportData v1.2-con-downtown-v2. Está perfecta, la mantengo)
+// ============================================
+// COMPUTED PROPERTIES (reportData, scenarioETAs, calculatedLogEntry)
+// ============================================
+
 const reportData = computed(() => {
+    // ... (Your existing reportData logic - NO CHANGES NEEDED)
     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
     let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBaseStopTime = 0;
@@ -75,6 +116,7 @@ const reportData = computed(() => {
         let downtownCount = 0; const currentStopCount = (seg.stops || []).length;
         totalStopCount += currentStopCount;
         (seg.stops || []).forEach(addr => {
+            // Find the stop data using address comparison (might need adjustment if addresses change slightly after correction)
             const stopData = extractedAddresses.value.find(s => s.address === addr);
             const isDowntown = stopData ? stopData.isDowntown : false;
             const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
@@ -86,9 +128,9 @@ const reportData = computed(() => {
         totalApartmentCount += aptCount + downtownCount; totalDowntownCount += downtownCount;
         totalBlockMiles += parseFloat(seg.distance || 0);
         totalBlockDriveDuration += parseFloat(seg.duration || 0);
-        return { 
-            distance: seg.distance, duration: seg.duration, stopsCount: currentStopCount, 
-            aptCount: aptCount, downtownCount: downtownCount 
+        return {
+            distance: seg.distance, duration: seg.duration, stopsCount: currentStopCount,
+            aptCount: aptCount, downtownCount: downtownCount
         };
     });
     const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
@@ -100,7 +142,7 @@ const reportData = computed(() => {
     const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
     const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
     const totalWorkMiles = toFirstStopDist + totalBlockMiles;
-    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime; 
+    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
     const totalNormalMiles = totalWorkMiles + toFinalDestDist;
     const totalNormalDuration = totalWorkDuration + toFinalDestDur;
     const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
@@ -137,63 +179,37 @@ const reportData = computed(() => {
     };
 });
 
-// En <script setup> de UploadView.vue
-
 const scenarioETAs = computed(() => {
-    // Need reportData AND the block start time AND the prep time delay
+    // ... (Your existing scenarioETAs logic with prep time - NO CHANGES NEEDED)
     if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
          return null;
     }
-
     const stopCount = Number(reportData.value.stopCount) || 0;
     const apartmentCount = Number(reportData.value.apartmentCount) || 0;
     const downtownCount = Number(reportData.value.downtownCount) || 0;
     const regularApartmentCount = apartmentCount - downtownCount;
-    
-    // --- NUEVA LÓGICA DE TIEMPO DE SALIDA ---
     const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
-    const blockStartTime = new Date(); // Today's date
-    blockStartTime.setHours(startHours, startMinutes, 0, 0); // Set to block start time
-
+    const blockStartTime = new Date();
+    blockStartTime.setHours(startHours, startMinutes, 0, 0);
     const prepTimeMinutes = Number(blockData.value.retraso_almacen) || 0;
-    // Calculate actual departure time by adding prep delay
-    const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000); 
-    // --- FIN NUEVA LÓGICA ---
-
+    const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000);
     const calculateScenario = (baseDrive, commute, multiplier) => {
-        // baseDrive is ONLY driving time (Warehouse -> First Stop + Inter-stop driving)
-        // commute is ONLY driving time (Last Stop -> Home)
-        
-        // Calculate stop time based on multiplier
-        const baseStopTime = stopCount * multiplier; 
-        // Calculate extra time for apartments (fixed)
-        const extraAptTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5); 
-        
-        // Route duration = Driving from Warehouse + Stop Time + Extra Apt Time + Drive Home
+        const baseStopTime = stopCount * multiplier;
+        const extraAptTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
         const routeDurationMinutes = (Number(baseDrive) || 0) + baseStopTime + extraAptTime + (Number(commute) || 0);
-
-        if (isNaN(routeDurationMinutes)) { 
-            return { totalDuration: 'N/A', eta: 'Error' }; 
+        if (isNaN(routeDurationMinutes)) {
+            return { totalDuration: 'N/A', eta: 'Error' };
         }
-        
-        // Final ETA = Estimated Departure Time + Route Duration
-        const eta = new Date(estimatedDepartureTime.getTime() + routeDurationMinutes * 60000); 
-        
+        const eta = new Date(estimatedDepartureTime.getTime() + routeDurationMinutes * 60000);
         return {
-            totalDuration: Math.round(routeDurationMinutes), // This is the route duration only
+            totalDuration: Math.round(routeDurationMinutes),
             eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
     };
-
-    // Make sure 'baseDriveDuration' from reportData is ONLY driving time
-    // (It should NOT include the old stop time calculations)
-    // We might need to adjust reportData calculation if it includes stop times.
-    // Assuming reportData.normal.baseDriveDuration = toFirstStopDur + totalBlockDriveDuration
-    const normalBaseDrive = reportData.value.normal.baseDriveDuration; 
+    const normalBaseDrive = reportData.value.normal.baseDriveDuration;
     const normalCommute = reportData.value.normal.commuteDuration;
     const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
     const inverseCommute = reportData.value.inverse.commuteDuration;
-
     return {
         normal: {
             optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
@@ -207,48 +223,32 @@ const scenarioETAs = computed(() => {
         }
     };
 });
-// (5) --- PROPIEDAD COMPUTADA QUE FALTABA ---
-// In UploadView.vue <script setup>
 
 const calculatedLogEntry = computed(() => {
-    // Need the OCR results (for city calculation), reportData, and scenarioETAs
-    if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
+    // ... (Your existing calculatedLogEntry logic with DB fields - NO CHANGES NEEDED, but ensure findBestCityMatch is called correctly)
+     if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
         return null;
     }
-
-    // --- A. Variables Base ---
     const data = blockData.value;
     const pago = Number(data.pago) || 0;
     const duracion_horas = Number(data.duracion_horas) || 0;
-    
     const scenarioKey = selectedScenarioForLog.value;
     const chosenReport = reportData.value[scenarioKey];
     const chosenETA = scenarioETAs.value[scenarioKey].normal;
-
-    // --- B. Calculate Primary City ---
     let primary_city = null;
     if (extractedAddresses.value.length > 0) {
         const cityCounts = {};
         extractedAddresses.value.forEach(stop => {
-            // Extract city from the full address string (assuming CITY is the last part)
             const addressParts = stop.address.split(' ');
             if (addressParts.length >= 2) {
-                // Try fuzzy matching the potential city part
-                const potentialCity = addressParts.slice(-2).join(' '); // Check last two words
-                const matchedCity = findBestCityMatch(potentialCity); // Use your existing fuzzy matcher
-                if (matchedCity) {
+                const potentialCity = addressParts.slice(-2).join(' ');
+                const cityMatchResult = findBestCityMatch(potentialCity); // Call the function
+                if (cityMatchResult) {
+                    const matchedCity = cityMatchResult.target;
                     cityCounts[matchedCity] = (cityCounts[matchedCity] || 0) + 1;
-                } else {
-                    // Fallback: use the very last word if no fuzzy match
-                    const lastWord = addressParts[addressParts.length - 1];
-                    if (lastWord.length > 2) { // Basic check to avoid things like 'DR'
-                       cityCounts[lastWord] = (cityCounts[lastWord] || 0) + 1;
-                    }
                 }
             }
         });
-        
-        // Find the city with the highest count
         let maxCount = 0;
         for (const city in cityCounts) {
             if (cityCounts[city] > maxCount) {
@@ -256,268 +256,305 @@ const calculatedLogEntry = computed(() => {
                 primary_city = city;
             }
         }
+        console.log("🏙️ Primary City Calculated:", primary_city, "Counts:", cityCounts);
     }
-
-    // --- C. Get First Stop Distance ---
-    // This comes from the 'toStart' part of the chosen scenario report
     const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
-
-    // --- D. Set Temporary User ID ---
-    // TODO: Replace this with actual user ID from authentication later
-    const user_id = 'YOUR_TEMPORARY_UUID_HERE'; // Replace with your actual UUID
-    // OR for Carmen: const user_id = 'CARMEN_TEMPORARY_UUID_HERE';
-
-    // --- E. Existing Calculations (Time, Distance, Finance) ---
-    // (Your existing logic for antes_del_bloque_hrs, despues_del_bloque_hrs, etc. remains the same)
+    // IMPORTANT: Replace with your actual UUID
+    const user_id = 'c130d2a8-6f96-48bc-b69a-68692797b5e6';
     const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
     let despues_del_bloque_hrs = 0;
-    try { /* ... your existing try/catch for despues_del_bloque ... */ } catch (e) { /* ... */ }
+    try {
+        const [startHours, startMinutes] = data.hora.split(':').map(Number);
+        const blockStart = new Date(); blockStart.setHours(startHours, startMinutes, 0, 0);
+        const durationMs = duracion_horas * 3600 * 1000;
+        const blockEnd = new Date(blockStart.getTime() + durationMs);
+        const etaString = chosenETA.eta; const [time, ampm] = etaString.split(' ');
+        let [etaHours, etaMinutes] = time.split(':').map(Number);
+        if (ampm.toUpperCase() === 'PM' && etaHours !== 12) etaHours += 12;
+        if (ampm.toUpperCase() === 'AM' && etaHours === 12) etaHours = 0;
+        const etaTime = new Date(); etaTime.setHours(etaHours, etaMinutes, 0, 0);
+        const diffMs = etaTime.getTime() - blockEnd.getTime();
+        despues_del_bloque_hrs = diffMs / (3600 * 1000);
+    } catch (e) { console.error("Error parsing time for logbook:", e); }
     const tiempo_total = antes_del_bloque_hrs + duracion_horas + despues_del_bloque_hrs;
-    const commute_1 = Number(data.commute_1_manual) || 0; // Manual WH -> Home guess
-    const commute_2 = Number(chosenReport.toEnd.distance) || 0; // API Last Stop -> Destination
-    // Corrected millas_de_trabajo: It's the total driving MINUS commutes
+    const commute_1 = Number(data.commute_1_manual) || 0;
+    const commute_2 = Number(chosenReport.toEnd.distance) || 0;
     const millas_de_trabajo = (Number(chosenReport.totalMiles) || 0) - commute_1 - commute_2;
-    //const millas_de_trabajo = Number(chosenReport.totalWorkMiles) || 0; // This included WH->FirstStop
     const millas_totales = commute_1 + millas_de_trabajo + commute_2;
     const pago_por_hora = duracion_horas > 0 ? pago / duracion_horas : 0;
     const pago_real_por_hora = tiempo_total > 0 ? pago / tiempo_total : 0;
     const millas_por_hora = duracion_horas > 0 ? millas_de_trabajo / duracion_horas : 0;
-    const gasto_de_gasolina = (millas_totales / 35) * 3.00; // Assuming 35 MPG and $3/gallon
-    const desgaste_vehiculo = millas_totales * 0.25; // Assuming $0.25/mile wear
+    const gasto_de_gasolina = (millas_totales / 35) * 3.00;
+    const desgaste_vehiculo = millas_totales * 0.25;
     const tax = pago * 0.153;
-    const claim_por_milla = millas_de_trabajo * 0.70; // Assuming $0.70/mile claimable
-
+    const claim_por_milla = millas_de_trabajo * 0.70;
     return {
-        // --- Existing fields ---
-        fecha: data.fecha,
-        vehiculo: data.vehiculo,
-        warehouse: selectedWarehouseCode.value, // Send code, backend saves code
-        hora: data.hora,
-        duracion_horas: duracion_horas,
-        pago: pago,
-        pago_por_hora: pago_por_hora.toFixed(2),
-        antes_del_bloque: antes_del_bloque_hrs.toFixed(2),
-        despues_del_bloque: despues_del_bloque_hrs.toFixed(2),
-        tiempo_total: tiempo_total.toFixed(2),
-        pago_real_por_hora: pago_real_por_hora.toFixed(2),
-        conmute_1: commute_1.toFixed(2),        // Manual commute
-        conmute_2: commute_2.toFixed(2),        // API last->home
-        millas_de_trabajo: millas_de_trabajo.toFixed(2), // API route miles only
-        millas_totales: millas_totales.toFixed(2),
-        millas_por_hora: millas_por_hora.toFixed(2),
-        gasto_de_gasolina: gasto_de_gasolina.toFixed(2),
-        desgaste_vehiculo: desgaste_vehiculo.toFixed(2),
-        tax: tax.toFixed(2),
-        claim_por_milla: claim_por_milla.toFixed(2),
-
-        // --- NEW fields ---
-        user_id: user_id,                       // Your UUID
-        primary_city: primary_city,             // Calculated city
-        first_stop: first_stop_distance.toFixed(2) // API WH->first
-        // 'status' is set by the backend
+        fecha: data.fecha, vehiculo: data.vehiculo, warehouse: selectedWarehouseCode.value,
+        hora: data.hora, duracion_horas: duracion_horas, pago: pago,
+        pago_por_hora: pago_por_hora.toFixed(2), antes_del_bloque: antes_del_bloque_hrs.toFixed(2),
+        despues_del_bloque: despues_del_bloque_hrs.toFixed(2), tiempo_total: tiempo_total.toFixed(2),
+        pago_real_por_hora: pago_real_por_hora.toFixed(2), commute_1: commute_1.toFixed(2),
+        conmute_2: commute_2.toFixed(2), millas_de_trabajo: millas_de_trabajo.toFixed(2),
+        millas_totales: millas_totales.toFixed(2), millas_por_hora: millas_por_hora.toFixed(2),
+        gasto_de_gasolina: gasto_de_gasolina.toFixed(2), desgaste_vehiculo: desgaste_vehiculo.toFixed(2),
+        tax: tax.toFixed(2), claim_por_milla: claim_por_milla.toFixed(2),
+        user_id: user_id, primary_city: primary_city, first_stop: first_stop_distance.toFixed(2)
     };
 });
 
-// --- FUNCIONES ---
-// (Tus funciones de OCR y parseo están bien, las mantengo)
-function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
-function addAddress() { extractedAddresses.value.push({ number: null, address: '', isDowntown: false }); }
-function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); }
-function preprocessImage(file) {
+// ============================================
+// OCR HELPER FUNCTIONS (v3.x logic - RESTORED)
+// ============================================
+
+// PASTE THESE FUNCTIONS BACK INTO <script setup>
+
+async function preprocessImage(imageFile) {
+  // ... (Your preprocessImage function from v3.0 - with cropping)
   return new Promise((resolve) => {
-    const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
-    const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
-    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data; const contrast = 2.0; const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = factor * (data[i] - 128) + 128; data[i+1] = factor * (data[i+1] - 128) + 128; data[i+2] = factor * (data[i+2] - 128) + 128;
-      const avg = (data[i] + data[i+1] + data[i+2]) / 3; data[i] = avg; data[i+1] = avg; data[i+2] = avg;
-    }
-    ctx.putImageData(imageData, 0, 0); resolve(canvas.toDataURL('image/png'));
-    }; img.src = e.target.result; }; reader.readAsDataURL(file);
+    const img = new Image(); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+    img.onload = () => {
+      const cropLeft = Math.floor(img.width * 0.20); const newWidth = img.width - cropLeft;
+      canvas.width = newWidth; canvas.height = img.height;
+      ctx.drawImage(img, cropLeft, 0, newWidth, img.height, 0, 0, newWidth, img.height);
+      const imageData = ctx.getImageData(0, 0, newWidth, img.height); const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        const contrast = avg > 128 ? 255 : 0; data[i] = contrast; data[i + 1] = contrast; data[i + 2] = contrast;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      canvas.toBlob((blob) => { resolve(new File([blob], 'preprocessed.png', { type: 'image/png' })); });
+    };
+    img.src = URL.createObjectURL(imageFile);
   });
 }
-function parseAddresses(rawText) {
-  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
+
+function correctStreetType(address) {
+  // ... (Your correctStreetType function from v3.0)
+  const words = address.split(' ');
+  const correctedWords = words.map(word => {
+    const upper = word.toUpperCase().replace(/[.,]/g, '');
+    return STREET_TYPE_CORRECTIONS[upper] || word;
+  });
+  return correctedWords.join(' ');
+}
+
+function cleanOCRNoise(text) {
+  // ... (Your cleanOCRNoise function from v3.0)
+  let cleaned = text
+    .replace(/Scheduled\s+\d{1,2}:\d{2}\s*-?\s*\d{1,2}:\d{2}\s*(AM|PM)/gi, '')
+    .replace(/Deliver\s+\d+\s+package/gi, '')
+    .replace(/#\s*A-\d+\.\d+A/gi, '')
+    .replace(/⏱️|📍|🗺️/g, '');
+  return cleaned;
+}
+
+function findBestCityMatch(text) {
+   // ... (Your findBestCityMatch function from previous fix)
+   const cleanText = text.toUpperCase().trim();
+   if (cleanText.length < 3) return null;
+   const matches = stringSimilarity.findBestMatch(cleanText, KNOWN_CITIES);
+   if (matches.bestMatch.rating >= 0.6) {
+       return matches.bestMatch;
+   }
+   return null;
+}
+
+function calculateConfidence(address, city) {
+  // ... (Your calculateConfidence function from v3.0)
+   let score = 0;
+   if (/^\d{1,6}\s/.test(address)) { score += 30; }
+   const hasValidType = VALID_STREET_TYPES.some(type => address.toUpperCase().includes(` ${type}`) );
+   if (hasValidType) { score += 30; }
+   if (city) { score += 20; }
+   if (/\b(N|S|E|W|NORTH|SOUTH|EAST|WEST)\b/i.test(address)) { score += 10; }
+   if (address.length >= 15 && address.length <= 50) { score += 10; }
+   return score;
+}
+
+// ============================================
+// CORE OCR PIPELINE FUNCTIONS (v3.2 logic - RESTORED)
+// ============================================
+
+// PASTE THESE FUNCTIONS BACK INTO <script setup>
+
+function extractAddresses(rawText) {
+  // ... (Your extractAddresses function from v3.2 hybrid - RESTORED)
+  const addresses = [];
+  let lastKnownCity = 'ORLANDO';
   const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
   let match;
   while ((match = pattern.exec(rawText)) !== null) {
     const stopNumber = parseInt(match[1]);
-    const textBlock = match[2];
-    const addressPattern = /(\d{3,5}\s[A-Z].*)/;
-    const addressMatch = textBlock.match(addressPattern);
+    let textBlock = match[2];
+    textBlock = cleanOCRNoise(textBlock);
+    const addressMatch = textBlock.match(/(\d{1,6})\s+([A-Z0-9].*)/i);
     if (addressMatch) {
-      let street = addressMatch[1].trim(); let city = '';
-      const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
-      if (lines.length > 1) {
-        let nextLine = lines[1].trim();
-        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
-        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
+      let street = correctStreetType(addressMatch[0].trim());
+      let city = null;
+      const lines = textBlock.split('\n');
+      for (const line of lines) {
+        const cityMatch = findBestCityMatch(line);
+        if (cityMatch && cityMatch.rating > 0.7) {
+          city = cityMatch.target;
+          break;
+        }
       }
-      if (!city) { city = lastKnownCity; }
-      stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false });
+      if (city) { lastKnownCity = city; } else { city = lastKnownCity; }
+      const confidence = calculateConfidence(street, city);
+      addresses.push({
+        stop: stopNumber, address: street, city: city, confidence: confidence,
+        needsReview: confidence < 80 // Add needsReview flag here
+      });
     }
   }
-  return stops;
+  return addresses;
 }
-async function handleFileChange(event) {
-  const files = event.target.files;
-  if (!files || files.length === 0) {
-    selectedFileNames.value = []; // Limpia nombres si no hay archivo
-    return;
-  }
 
-  // Guarda los nombres de los archivos seleccionados
-  selectedFileNames.value = Array.from(files).map(f => f.name);
-
-  isProcessing.value = true;
-  extractedAddresses.value = [];
-  backendResponse.value = null;
-  let allParsedStops = [];
-
+async function processFlexScreenshot(imageFile) {
+   // ... (Your processFlexScreenshot function from v3.2 - RESTORED)
   try {
-    for (const file of files) {
-      const processedImage = await preprocessImage(file);
-      const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-      const stopsFromFile = parseAddresses(text);
-      allParsedStops.push(...stopsFromFile);
-    }
-
-    const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
-    let maxStopNumber = 0;
-    uniqueStopsMap.forEach(stop => {
-      if (stop.number > maxStopNumber) maxStopNumber = stop.number;
+    console.log('🚀 Iniciando OCR v3.2...');
+    const processedImage = await preprocessImage(imageFile);
+    const result = await Tesseract.recognize(processedImage, 'eng', {
+      tessedit_pageseg_mode: 6,
+      logger: info => { if (info.status === 'recognizing text') { console.log(`Tesseract: ${Math.round(info.progress * 100)}%`); } }
     });
-
-    const fullListWithGaps = [];
-    for (let i = 2; i <= maxStopNumber; i++) {
-      if (uniqueStopsMap.has(i)) {
-        fullListWithGaps.push(uniqueStopsMap.get(i));
-      } else {
-        fullListWithGaps.push({ number: i, address: '', isDowntown: false });
-      }
-    }
-
-    extractedAddresses.value = fullListWithGaps;
+    console.log('📝 Texto OCR completo:', result.data.text);
+    // Note: cleanOCRNoise is now called inside extractAddresses
+    const addresses = extractAddresses(result.data.text);
+    const filteredAddresses = addresses
+      .filter(addr => addr.confidence >= 40)
+      .sort((a, b) => a.stop - b.stop);
+    return {
+      success: true, addresses: filteredAddresses, rawText: result.data.text,
+      stats: { /* ... stats calculation ... */ }
+    };
   } catch (error) {
-    console.error("Error processing files:", error);
-    alert("Hubo un error procesando las imágenes. Revisa la consola.");
-  } finally {
-    isProcessing.value = false;
-
-    // 🔄 Reinicia el input de archivos para permitir volver a subir los mismos
-    if (fileInputRef.value) {
-      fileInputRef.value.value = '';
-    }
+    console.error('❌ OCR Error:', error);
+    return { success: false, error: error.message, addresses: [] };
   }
+}
+
+// ============================================
+// UI INTERACTION FUNCTIONS (handleFileChange, sendToBackend, etc.)
+// ============================================
+
+async function handleFileChange(event) {
+    // ... (Your handleFileChange function, ensure it calls processFlexScreenshot and maps needsReview)
+    const files = event.target.files;
+    if (!files || files.length === 0) { selectedFileNames.value = []; return; }
+    selectedFileNames.value = Array.from(files).map(f => f.name);
+    isProcessing.value = true;
+    extractedAddresses.value = [];
+    backendResponse.value = null;
+    let allParsedStops = [];
+    try {
+      for (const file of files) {
+        const result = await processFlexScreenshot(file); // Call the correct pipeline
+        if (result.success) {
+          const stopsFromFile = result.addresses.map(addr => ({
+            number: addr.stop,
+            address: `${addr.address} ${addr.city || ''}`.trim().toUpperCase(),
+            isDowntown: false,
+            confidence: addr.confidence,
+            needsReview: addr.needsReview // Pass the flag
+          }));
+          allParsedStops.push(...stopsFromFile);
+        } else { console.error("Fallo el OCR v3.2:", result.error); }
+      }
+      const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+      let maxStopNumber = 0; let minStopNumber = Infinity;
+      uniqueStopsMap.forEach(stop => {
+        if (stop.number > maxStopNumber) maxStopNumber = stop.number;
+        if (stop.number < minStopNumber) minStopNumber = stop.number;
+      });
+      const fullListWithGaps = [];
+      if (maxStopNumber > 0) {
+        minStopNumber = Math.max(2, minStopNumber); // Start from 2 or the actual min if > 2
+        for (let i = minStopNumber; i <= maxStopNumber; i++) {
+          if (uniqueStopsMap.has(i)) {
+            fullListWithGaps.push(uniqueStopsMap.get(i));
+          } else {
+            fullListWithGaps.push({ number: i, address: '', isDowntown: false, confidence: 0, needsReview: true }); // Mark gaps for review
+          }
+        }
+      }
+      extractedAddresses.value = fullListWithGaps;
+      console.log('📊 Direcciones encontradas:', allParsedStops);
+      console.log(`📍 Rango de paradas: ${minStopNumber} - ${maxStopNumber}`);
+      console.log('✅ Lista final con gaps:', extractedAddresses.value);
+
+    } catch (error) {
+      console.error("Error en handleFileChange:", error);
+      alert("Hubo un error procesando las imágenes. Revisa la consola.");
+    } finally {
+      isProcessing.value = false;
+      if (fileInputRef.value) { fileInputRef.value.value = ''; }
+    }
 }
 
 function sanitizeAddress(address) {
+    // ... (Your sanitizeAddress function - NO CHANGES NEEDED)
     if (!address) return '';
-    // Remove characters that aren't letters, numbers, spaces, or #
-    // Replace multiple spaces with a single space, trim ends
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
-// PASTE THIS FUNCTION BACK INTO YOUR <script setup>
 
 async function sendToBackend() {
-  // Get only the address strings
-  const addressesToSend = extractedAddresses.value.map(stop => stop.address);
-  
-  // Sanitize them (remove weird characters, extra spaces)
-  const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
-  
-  if (sanitizedAddresses.length === 0) { 
-    alert('No hay direcciones válidas para optimizar.'); 
-    return; 
-  }
-  
-  // Find the selected warehouse ADDRESS based on the CODE
-  const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
-  if (!warehouse) {
-      alert('Error: Warehouse no encontrado.'); return;
-  }
-  const warehouseAddress = sanitizeAddress(warehouse.address);
-
-  // Get the final destination address (handle 'custom')
-  const finalDestination = selectedDestination.value === 'custom' 
-    ? sanitizeAddress(customDestination.value) 
-    : sanitizeAddress(selectedDestination.value);
-    
-  if (!finalDestination) { 
-    alert('Por favor, especifica un destino final.'); 
-    return; 
-  }
-  
-  // Create the full route array: [Warehouse, Stop 1, Stop 2, ..., Destination]
-  const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
-  
-  // Get the backend URL (from .env file or default to localhost)
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-  
-  // Show loading state and clear previous results
-  backendResponse.value = { status: 'loading' }; 
-  
-  try {
-    // Send the request to the backend
-    const response = await fetch(`${backendUrl}/api/optimize-route`, {
-      method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify({ addresses: fullRoute }), // Send the addresses array
-    });
-    
-    // Get the result from the backend
-    const result = await response.json();
-    
-    // Store the result (this will trigger the display update)
-    backendResponse.value = result;
-    
-    if (!response.ok) {
-        // If the backend sent an error message, show it
-        throw new Error(result.message || `Error ${response.status}`);
-    }
-    
-  } catch (error) {
-    // If the fetch fails (network error, server down, CORS error), show an error
-    console.error("Error calling backend:", error);
-    backendResponse.value = { error: `Error: ${error.message || 'No se pudo conectar al servidor.'}` };
-  }
+    // ... (Your sendToBackend function - NO CHANGES NEEDED)
+      const addressesToSend = extractedAddresses.value.map(stop => stop.address);
+      const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
+      if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
+      const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+      if (!warehouse) { alert('Error: Warehouse no encontrado.'); return; }
+      const warehouseAddress = sanitizeAddress(warehouse.address);
+      const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
+      if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
+      const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
+      const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+      backendResponse.value = { status: 'loading' };
+      try {
+        const response = await fetch(`${backendUrl}/api/optimize-route`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addresses: fullRoute }),
+        });
+        const result = await response.json();
+        backendResponse.value = result;
+        if (!response.ok) { throw new Error(result.message || `Error ${response.status}`); }
+      } catch (error) {
+        console.error("Error calling backend:", error);
+        backendResponse.value = { error: `Error: ${error.message || 'No se pudo conectar al servidor.'}` };
+      }
 }
 
-// (7) saveToLogbook (Tu función v1.5 está perfecta, la mantengo)
 async function saveToLogbook() {
-    if (!calculatedLogEntry.value) {
-        alert("No hay datos calculados para guardar.");
-        return;
-    }
-    
-    isSaving.value = true;
-    saveStatus.value = null;
+    // ... (Your saveToLogbook function - NO CHANGES NEEDED)
+    if (!calculatedLogEntry.value) { alert("No hay datos calculados para guardar."); return; }
+    isSaving.value = true; saveStatus.value = null;
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
     try {
         const response = await fetch(`${backendUrl}/api/log-route`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(calculatedLogEntry.value)
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(calculatedLogEntry.value)
         });
-
         const result = await response.json();
-
         if (response.ok && result.success) {
             console.log("Respuesta del servidor:", result);
             saveStatus.value = { success: true, message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` };
-        } else {
-            throw new Error(result.message || 'Error desconocido del servidor.');
-        }
-
+        } else { throw new Error(result.message || 'Error desconocido del servidor.'); }
     } catch (error) {
         console.error("Error al guardar en bitácora:", error);
         saveStatus.value = { success: false, message: `Error: ${error.message}` };
-    } finally {
-        isSaving.value = false;
-    }
+    } finally { isSaving.value = false; }
 }
+
+// UI Helpers
+function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
+function addAddress() {
+    const nextNumber = extractedAddresses.value.length > 0
+        ? Math.max(...extractedAddresses.value.map(s => s.number)) + 1
+        : 2; // Start at 2 if list is empty
+    extractedAddresses.value.push({ number: nextNumber, address: '', isDowntown: false, confidence: 0, needsReview: true });
+}
+function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); }
+
 </script>
 
 <template>
