@@ -132,34 +132,28 @@ async function handleFileChange(event) {
 
     // Gap filling logic (remains the same)
 // --- START OF NEW BLOCK ---
-const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
-let maxStopNumber = 0;
-let minStopNumber = Infinity; // Find the actual minimum stop number found
-
-uniqueStopsMap.forEach(stop => {
-  if (stop.number > maxStopNumber) maxStopNumber = stop.number;
-  if (stop.number < minStopNumber) minStopNumber = stop.number;
-});
-
 const fullListWithGaps = [];
-if (maxStopNumber > 0) { // Only run if we found any stops
-    // Start the loop from 2 OR the actual minimum stop number found, whichever is greater
-    const loopStart = Math.max(2, minStopNumber); 
-    console.log(`Gap filling range: ${loopStart} to ${maxStopNumber}`); // Debug log
+    if (maxStopNumber > 0) {
+        const loopStart = Math.max(2, minStopNumber);
+        console.log(`[DEBUG] Gap filling range: ${loopStart} to ${maxStopNumber}`); // Existing log
 
-    for (let i = loopStart; i <= maxStopNumber; i++) {
-        if (uniqueStopsMap.has(i)) {
-            fullListWithGaps.push(uniqueStopsMap.get(i));
-        } else {
-            // Create gap without confidence/needsReview flags
-            fullListWithGaps.push({ number: i, address: '', isDowntown: false });
+        for (let i = loopStart; i <= maxStopNumber; i++) {
+            // --- ADD THESE LOGS ---
+            console.log(`[DEBUG] Checking for stop number: ${i}`); 
+            if (uniqueStopsMap.has(i)) {
+                console.log(`[DEBUG] Found stop ${i} in map. Adding it.`);
+                fullListWithGaps.push(uniqueStopsMap.get(i));
+            } else {
+                console.log(`[DEBUG] Stop ${i} NOT found. Adding GAP.`);
+                fullListWithGaps.push({ number: i, address: '', isDowntown: false });
+            }
+            // --- END ADDED LOGS ---
         }
+    } else {
+        console.log("[DEBUG] No valid stops found by OCR to fill gaps."); // Existing log
     }
-} else {
-    console.log("No valid stops found by OCR to fill gaps."); // Debug log
-}
-
-extractedAddresses.value = fullListWithGaps;
+    console.log('[DEBUG] Final list with gaps (before assignment):', JSON.stringify(fullListWithGaps)); // Log the list itself
+    extractedAddresses.value = fullListWithGaps;
 
   } catch (error) {
     console.error("Error processing images:", error);
