@@ -160,7 +160,7 @@ async function handleFileChange(event) {
     // --- Gap Filling Logic ---
     const fullListWithGaps = [];
     if (maxStopNumber > 0 && minStopNumber !== Infinity) { // Check if we found any valid stops
-        const loopStart = Math.max(2, minStopNumber);
+        const loopStart = 2; // Always start checking from stop #2
         console.log(`[DEBUG] Gap filling range: ${loopStart} to ${maxStopNumber}`);
 
         for (let i = loopStart; i <= maxStopNumber; i++) {
