@@ -172,8 +172,8 @@ app.post('/api/log-route', async (req, res) => {
         despues_del_bloque: logData.despues_del_bloque,
         tiempo_total: logData.tiempo_total,
         pago_real_por_hora: logData.pago_real_por_hora,
-        conmute_1: logData.conmute_1, // This is the manual commute 1 distance
-        conmute_2: logData.conmute_2, // API distance: last stop -> home
+        commute_1: logData.commute_1, // This is the manual commute 1 distance
+        commute_2: logData.commute_2, // API distance: last stop -> home
         millas_de_trabajo: logData.millas_de_trabajo, // API distance: WH -> first + between stops
         millas_totales: logData.millas_totales,
         millas_por_hora: logData.millas_por_hora,
