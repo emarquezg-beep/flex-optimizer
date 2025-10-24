@@ -1,49 +1,11 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import Tesseract from 'tesseract.js';
-import stringSimilarity from 'string-similarity'; // Make sure this is installed
+// We might not need stringSimilarity here if findBestCityMatch isn't used in this version's calculatedLogEntry
+// import stringSimilarity from 'string-similarity'; 
 
 // ============================================
-// CONFIGURATION AND CONSTANTS (From v3.x OCR)
-// ============================================
-
-const KNOWN_CITIES = [
-  'ORLANDO', 'WINTER PARK', 'MAITLAND', 'OVIEDO', 'KISSIMMEE', 'APOPKA',
-  'LONGWOOD', 'CASSELBERRY', 'ALTAMONTE SPRINGS', 'GROVELAND', 'DAYTONA BEACH',
-  'DEBARY', 'LAKE MARY', 'SANFORD', 'DELTONA', 'WINTER SPRINGS', 'OCOEE',
-  'CLERMONT', 'WINTER GARDEN', 'WINDERMERE', 'ST CLOUD', 'SAINT CLOUD', 'CELEBRATION',
-  'DAVENPORT', 'MOUNT DORA', 'EUSTIS', 'TAVARES', 'LEESBURG', 'BUNNELL',
-  'PALM COAST', 'DELAND', 'GENEVA', 'CHULUOTA', 'FERN PARK', 'FOREST CITY',
-  'LOCKHART', 'PINE HILLS', 'HUNTERS CREEK', 'MEADOW WOODS', 'LAKE NONA',
-  'AZALEA PARK', 'BITHLO', 'CHRISTMAS', 'ZELLWOOD', 'MINNEOLA', 'MASCOTTE',
-  'HOWEY IN THE HILLS', 'SORRENTO', 'TANGERINE', 'OAKLAND', 'MONTVERDE',
-  'EDGEWOOD', 'BELLE ISLE', 'CONWAY', 'UNIVERSITY PARK', 'DOCTOR PHILLIPS',
-  'BAY HILL', 'METROWEST', 'HORIZON WEST', 'LAKE BUENA VISTA', 'FOUR CORNERS',
-  'REUNION', 'POINCIANA', 'HAINES CITY', 'ALTURA', 'POLK CITY', 'EAGLE LAKE',
-  'WINTER HAVEN', 'LAKELAND', 'AUBURNDALE', 'SEMINOLE', 'ORANGE CITY',
-  'DELEON SPRINGS', 'NEW SMYRNA BEACH', 'EDGEWATER', 'PORT ORANGE',
-  'HOLLY HILL', 'ORMOND BEACH', 'TITUSVILLE', 'MIMS', 'COCOA', 'COCOA BEACH',
-  'ROCKLEDGE', 'MERRITT ISLAND', 'MELBOURNE', 'PALM BAY', 'EATONVILLE'
-];
-
-const STREET_TYPE_CORRECTIONS = {
-  'AV': 'AVE', 'AVF': 'AVE', 'AV3': 'AVE', 'AVF.': 'AVE', 'AVEE': 'AVE',
-  'AVL': 'AVE', 'AYE': 'AVE', 'AWE': 'AVE', 'R0': 'RD', 'RO': 'RD', 'RD.': 'RD',
-  'RE': 'RD', 'S1': 'ST', 'ST.': 'ST', 'STR': 'ST', 'STT': 'ST', 'DR.': 'DR',
-  'DRI': 'DR', 'DF': 'DR', 'D8': 'DR', 'LN.': 'LN', 'LNE': 'LN', 'L1': 'LN',
-  'CT.': 'CT', 'C1': 'CT', 'CY': 'CT', 'WAY.': 'WAY', 'WY': 'WAY', 'W4Y': 'WAY',
-  'BLVD.': 'BLVD', 'BLDV': 'BLVD', 'BLV': 'BLVD', 'CIR.': 'CIR', 'CIRC': 'CIR',
-  'C1R': 'CIR', 'PKWY.': 'PKWY', 'PKW': 'PKWY', 'PKY': 'PKWY', /* Added PKY */ 'PL.': 'PL',
-  'P1': 'PL', 'TRL.': 'TRL', 'TRAIL': 'TRL', 'TR1': 'TRL'
-};
-
-const VALID_STREET_TYPES = [
-  'AVE', 'ST', 'RD', 'DR', 'LN', 'CT', 'WAY', 'BLVD',
-  'CIR', 'PKWY', 'PL', 'TRL', 'LOOP', 'PATH', 'TER'
-];
-
-// ============================================
-// BASE VARIABLES AND REFS (From Dark Theme/ETA updates)
+// BASE VARIABLES AND REFS (Dark Theme/ETA updates)
 // ============================================
 
 const extractedAddresses = ref([]);
@@ -101,12 +63,111 @@ watch(selectedWarehouseCode, (newCode) => {
 });
 
 // ============================================
+// ORIGINAL (Simpler) OCR Logic from `main`
+// ============================================
+
+function preprocessImage(file) {
+  // --- This is your original v1.x/v2.0 preprocessing ---
+  return new Promise((resolve) => {
+    const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
+    const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data; const contrast = 2.0; const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = factor * (data[i] - 128) + 128; data[i+1] = factor * (data[i+1] - 128) + 128; data[i+2] = factor * (data[i+2] - 128) + 128;
+      const avg = (data[i] + data[i+1] + data[i+2]) / 3; data[i] = avg; data[i+1] = avg; data[i+2] = avg;
+    }
+    ctx.putImageData(imageData, 0, 0); resolve(canvas.toDataURL('image/png'));
+    }; img.src = e.target.result; }; reader.readAsDataURL(file);
+  });
+}
+
+function parseAddresses(rawText) {
+  // --- This is your original v1.x/v2.0 parsing logic ---
+  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
+  const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
+  let match;
+  while ((match = pattern.exec(rawText)) !== null) {
+    const stopNumber = parseInt(match[1]);
+    const textBlock = match[2];
+    // Uses the simpler address regex
+    const addressPattern = /(\d{3,5}\s[A-Z].*)/; 
+    const addressMatch = textBlock.match(addressPattern);
+    if (addressMatch) {
+      let street = addressMatch[1].trim(); let city = '';
+      const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
+      if (lines.length > 1) {
+        let nextLine = lines[1].trim();
+        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
+        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
+      }
+      if (!city) { city = lastKnownCity; }
+      stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false });
+    }
+  }
+  return stops;
+}
+
+async function handleFileChange(event) {
+  // --- This is your original v1.x/v2.0 file handling logic ---
+  const files = event.target.files;
+  if (!files || files.length === 0) {
+    selectedFileNames.value = [];
+    return;
+  }
+  selectedFileNames.value = Array.from(files).map(f => f.name);
+
+  isProcessing.value = true;
+  extractedAddresses.value = [];
+  backendResponse.value = null; // Clear previous results
+  let allParsedStops = [];
+
+  try {
+    for (const file of files) {
+      const processedImage = await preprocessImage(file); // Use original preprocess
+      const { data: { text } } = await Tesseract.recognize(processedImage, 'eng'); // Simple Tesseract call
+      const stopsFromFile = parseAddresses(text); // Use original parse
+      allParsedStops.push(...stopsFromFile);
+    }
+
+    // Gap filling logic (remains the same)
+    const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
+    let maxStopNumber = 0; let minStopNumber = Infinity;
+    uniqueStopsMap.forEach(stop => {
+      if (stop.number > maxStopNumber) maxStopNumber = stop.number;
+      if (stop.number < minStopNumber) minStopNumber = stop.number;
+    });
+    const fullListWithGaps = [];
+    if (maxStopNumber > 0) {
+      minStopNumber = Math.max(2, minStopNumber); 
+      for (let i = minStopNumber; i <= maxStopNumber; i++) {
+        if (uniqueStopsMap.has(i)) {
+          fullListWithGaps.push(uniqueStopsMap.get(i));
+        } else {
+          // Add gap without confidence/needsReview
+          fullListWithGaps.push({ number: i, address: '', isDowntown: false }); 
+        }
+      }
+    }
+    extractedAddresses.value = fullListWithGaps;
+
+  } catch (error) {
+    console.error("Error processing files:", error);
+    alert("Hubo un error procesando las imágenes. Revisa la consola.");
+  } finally {
+    isProcessing.value = false;
+    if (fileInputRef.value) { fileInputRef.value.value = ''; }
+  }
+}
+
+// ============================================
 // COMPUTED PROPERTIES (reportData, scenarioETAs, calculatedLogEntry)
 // ============================================
 
+// --- reportData (No changes needed) ---
 const reportData = computed(() => {
-    // ... (Your existing reportData logic - NO CHANGES NEEDED)
-    if (!backendResponse.value || !backendResponse.value.segments) { return null; }
+    // ... (Your existing reportData logic)
+     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
     const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
     let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBaseStopTime = 0;
     let totalExtraStopTime = 0; let totalApartmentCount = 0; let totalDowntownCount = 0;
@@ -116,8 +177,7 @@ const reportData = computed(() => {
         let downtownCount = 0; const currentStopCount = (seg.stops || []).length;
         totalStopCount += currentStopCount;
         (seg.stops || []).forEach(addr => {
-            // Find the stop data using address comparison (might need adjustment if addresses change slightly after correction)
-            const stopData = extractedAddresses.value.find(s => s.address === addr);
+            const stopData = extractedAddresses.value.find(s => s.address === addr); // Find based on original parsed address
             const isDowntown = stopData ? stopData.isDowntown : false;
             const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
             segmentBaseStopTime += 1.5;
@@ -179,8 +239,9 @@ const reportData = computed(() => {
     };
 });
 
+// --- scenarioETAs (With prep time - NO CHANGES NEEDED) ---
 const scenarioETAs = computed(() => {
-    // ... (Your existing scenarioETAs logic with prep time - NO CHANGES NEEDED)
+    // ... (Your existing scenarioETAs logic with prep time)
     if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
          return null;
     }
@@ -224,9 +285,9 @@ const scenarioETAs = computed(() => {
     };
 });
 
+// --- calculatedLogEntry (Updated for DB fields, uses simple city logic) ---
 const calculatedLogEntry = computed(() => {
-    // ... (Your existing calculatedLogEntry logic with DB fields - NO CHANGES NEEDED, but ensure findBestCityMatch is called correctly)
-     if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
+    if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
         return null;
     }
     const data = blockData.value;
@@ -235,18 +296,17 @@ const calculatedLogEntry = computed(() => {
     const scenarioKey = selectedScenarioForLog.value;
     const chosenReport = reportData.value[scenarioKey];
     const chosenETA = scenarioETAs.value[scenarioKey].normal;
+
+    // --- Calculate Primary City (SIMPLER VERSION for original parser) ---
     let primary_city = null;
     if (extractedAddresses.value.length > 0) {
         const cityCounts = {};
         extractedAddresses.value.forEach(stop => {
             const addressParts = stop.address.split(' ');
-            if (addressParts.length >= 2) {
-                const potentialCity = addressParts.slice(-2).join(' ');
-                const cityMatchResult = findBestCityMatch(potentialCity); // Call the function
-                if (cityMatchResult) {
-                    const matchedCity = cityMatchResult.target;
-                    cityCounts[matchedCity] = (cityCounts[matchedCity] || 0) + 1;
-                }
+            // Assumes city is the last word after simple parsing
+            const city = addressParts[addressParts.length - 1]; 
+            if (city && city.length > 2) { // Basic check
+                 cityCounts[city] = (cityCounts[city] || 0) + 1;
             }
         });
         let maxCount = 0;
@@ -256,11 +316,12 @@ const calculatedLogEntry = computed(() => {
                 primary_city = city;
             }
         }
-        console.log("🏙️ Primary City Calculated:", primary_city, "Counts:", cityCounts);
+        console.log("🏙️ Primary City Calculated (Simple):", primary_city, "Counts:", cityCounts);
     }
+    // --- End City Calculation ---
+
     const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
-    // IMPORTANT: Replace with your actual UUID
-    const user_id = 'c130d2a8-6f96-48bc-b69a-68692797b5e6';
+    const user_id = 'c130d2a8-6f96-48bc-b69a-68692797b5e6'; // Your UUID
     const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
     let despues_del_bloque_hrs = 0;
     try {
@@ -303,204 +364,17 @@ const calculatedLogEntry = computed(() => {
 });
 
 // ============================================
-// OCR HELPER FUNCTIONS (v3.x logic - RESTORED)
+// BACKEND COMMUNICATION & UI HELPERS (Restored)
 // ============================================
-
-// PASTE THESE FUNCTIONS BACK INTO <script setup>
-
-async function preprocessImage(imageFile) {
-  // ... (Your preprocessImage function from v3.0 - with cropping)
-  return new Promise((resolve) => {
-    const img = new Image(); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-    img.onload = () => {
-      const cropLeft = Math.floor(img.width * 0.20); const newWidth = img.width - cropLeft;
-      canvas.width = newWidth; canvas.height = img.height;
-      ctx.drawImage(img, cropLeft, 0, newWidth, img.height, 0, 0, newWidth, img.height);
-      const imageData = ctx.getImageData(0, 0, newWidth, img.height); const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        const contrast = avg > 128 ? 255 : 0; data[i] = contrast; data[i + 1] = contrast; data[i + 2] = contrast;
-      }
-      ctx.putImageData(imageData, 0, 0);
-      canvas.toBlob((blob) => { resolve(new File([blob], 'preprocessed.png', { type: 'image/png' })); });
-    };
-    img.src = URL.createObjectURL(imageFile);
-  });
-}
-
-function correctStreetType(address) {
-  // ... (Your correctStreetType function from v3.0)
-  const words = address.split(' ');
-  const correctedWords = words.map(word => {
-    const upper = word.toUpperCase().replace(/[.,]/g, '');
-    return STREET_TYPE_CORRECTIONS[upper] || word;
-  });
-  return correctedWords.join(' ');
-}
-
-function cleanOCRNoise(text) {
-  // ... (Your cleanOCRNoise function from v3.0)
-  let cleaned = text
-    .replace(/Scheduled\s+\d{1,2}:\d{2}\s*-?\s*\d{1,2}:\d{2}\s*(AM|PM)/gi, '')
-    .replace(/Deliver\s+\d+\s+package/gi, '')
-    .replace(/#\s*A-\d+\.\d+A/gi, '')
-    .replace(/⏱️|📍|🗺️/g, '');
-  return cleaned;
-}
-
-function findBestCityMatch(text) {
-   // ... (Your findBestCityMatch function from previous fix)
-   const cleanText = text.toUpperCase().trim();
-   if (cleanText.length < 3) return null;
-   const matches = stringSimilarity.findBestMatch(cleanText, KNOWN_CITIES);
-   if (matches.bestMatch.rating >= 0.6) {
-       return matches.bestMatch;
-   }
-   return null;
-}
-
-function calculateConfidence(address, city) {
-  // ... (Your calculateConfidence function from v3.0)
-   let score = 0;
-   if (/^\d{1,6}\s/.test(address)) { score += 30; }
-   const hasValidType = VALID_STREET_TYPES.some(type => address.toUpperCase().includes(` ${type}`) );
-   if (hasValidType) { score += 30; }
-   if (city) { score += 20; }
-   if (/\b(N|S|E|W|NORTH|SOUTH|EAST|WEST)\b/i.test(address)) { score += 10; }
-   if (address.length >= 15 && address.length <= 50) { score += 10; }
-   return score;
-}
-
-// ============================================
-// CORE OCR PIPELINE FUNCTIONS (v3.2 logic - RESTORED)
-// ============================================
-
-// PASTE THESE FUNCTIONS BACK INTO <script setup>
-
-function extractAddresses(rawText) {
-  // ... (Your extractAddresses function from v3.2 hybrid - RESTORED)
-  const addresses = [];
-  let lastKnownCity = 'ORLANDO';
-  const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
-  let match;
-  while ((match = pattern.exec(rawText)) !== null) {
-    const stopNumber = parseInt(match[1]);
-    let textBlock = match[2];
-    textBlock = cleanOCRNoise(textBlock);
-    const addressMatch = textBlock.match(/(\d{1,6})\s+([A-Z0-9].*)/i);
-    if (addressMatch) {
-      let street = correctStreetType(addressMatch[0].trim());
-      let city = null;
-      const lines = textBlock.split('\n');
-      for (const line of lines) {
-        const cityMatch = findBestCityMatch(line);
-        if (cityMatch && cityMatch.rating > 0.7) {
-          city = cityMatch.target;
-          break;
-        }
-      }
-      if (city) { lastKnownCity = city; } else { city = lastKnownCity; }
-      const confidence = calculateConfidence(street, city);
-      addresses.push({
-        stop: stopNumber, address: street, city: city, confidence: confidence,
-        needsReview: confidence < 80 // Add needsReview flag here
-      });
-    }
-  }
-  return addresses;
-}
-
-async function processFlexScreenshot(imageFile) {
-   // ... (Your processFlexScreenshot function from v3.2 - RESTORED)
-  try {
-    console.log('🚀 Iniciando OCR v3.2...');
-    const processedImage = await preprocessImage(imageFile);
-    const result = await Tesseract.recognize(processedImage, 'eng', {
-      tessedit_pageseg_mode: 6,
-      logger: info => { if (info.status === 'recognizing text') { console.log(`Tesseract: ${Math.round(info.progress * 100)}%`); } }
-    });
-    console.log('📝 Texto OCR completo:', result.data.text);
-    // Note: cleanOCRNoise is now called inside extractAddresses
-    const addresses = extractAddresses(result.data.text);
-    const filteredAddresses = addresses
-      .filter(addr => addr.confidence >= 40)
-      .sort((a, b) => a.stop - b.stop);
-    return {
-      success: true, addresses: filteredAddresses, rawText: result.data.text,
-      stats: { /* ... stats calculation ... */ }
-    };
-  } catch (error) {
-    console.error('❌ OCR Error:', error);
-    return { success: false, error: error.message, addresses: [] };
-  }
-}
-
-// ============================================
-// UI INTERACTION FUNCTIONS (handleFileChange, sendToBackend, etc.)
-// ============================================
-
-async function handleFileChange(event) {
-    // ... (Your handleFileChange function, ensure it calls processFlexScreenshot and maps needsReview)
-    const files = event.target.files;
-    if (!files || files.length === 0) { selectedFileNames.value = []; return; }
-    selectedFileNames.value = Array.from(files).map(f => f.name);
-    isProcessing.value = true;
-    extractedAddresses.value = [];
-    backendResponse.value = null;
-    let allParsedStops = [];
-    try {
-      for (const file of files) {
-        const result = await processFlexScreenshot(file); // Call the correct pipeline
-        if (result.success) {
-          const stopsFromFile = result.addresses.map(addr => ({
-            number: addr.stop,
-            address: `${addr.address} ${addr.city || ''}`.trim().toUpperCase(),
-            isDowntown: false,
-            confidence: addr.confidence,
-            needsReview: addr.needsReview // Pass the flag
-          }));
-          allParsedStops.push(...stopsFromFile);
-        } else { console.error("Fallo el OCR v3.2:", result.error); }
-      }
-      const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
-      let maxStopNumber = 0; let minStopNumber = Infinity;
-      uniqueStopsMap.forEach(stop => {
-        if (stop.number > maxStopNumber) maxStopNumber = stop.number;
-        if (stop.number < minStopNumber) minStopNumber = stop.number;
-      });
-      const fullListWithGaps = [];
-      if (maxStopNumber > 0) {
-        minStopNumber = Math.max(2, minStopNumber); // Start from 2 or the actual min if > 2
-        for (let i = minStopNumber; i <= maxStopNumber; i++) {
-          if (uniqueStopsMap.has(i)) {
-            fullListWithGaps.push(uniqueStopsMap.get(i));
-          } else {
-            fullListWithGaps.push({ number: i, address: '', isDowntown: false, confidence: 0, needsReview: true }); // Mark gaps for review
-          }
-        }
-      }
-      extractedAddresses.value = fullListWithGaps;
-      console.log('📊 Direcciones encontradas:', allParsedStops);
-      console.log(`📍 Rango de paradas: ${minStopNumber} - ${maxStopNumber}`);
-      console.log('✅ Lista final con gaps:', extractedAddresses.value);
-
-    } catch (error) {
-      console.error("Error en handleFileChange:", error);
-      alert("Hubo un error procesando las imágenes. Revisa la consola.");
-    } finally {
-      isProcessing.value = false;
-      if (fileInputRef.value) { fileInputRef.value.value = ''; }
-    }
-}
 
 function sanitizeAddress(address) {
-    // ... (Your sanitizeAddress function - NO CHANGES NEEDED)
+    // --- Restored sanitizeAddress ---
     if (!address) return '';
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 async function sendToBackend() {
-    // ... (Your sendToBackend function - NO CHANGES NEEDED)
+    // --- Restored sendToBackend ---
       const addressesToSend = extractedAddresses.value.map(stop => stop.address);
       const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
       if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
@@ -526,7 +400,7 @@ async function sendToBackend() {
 }
 
 async function saveToLogbook() {
-    // ... (Your saveToLogbook function - NO CHANGES NEEDED)
+    // --- Restored saveToLogbook ---
     if (!calculatedLogEntry.value) { alert("No hay datos calculados para guardar."); return; }
     isSaving.value = true; saveStatus.value = null;
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -545,13 +419,14 @@ async function saveToLogbook() {
     } finally { isSaving.value = false; }
 }
 
-// UI Helpers
+// UI Helpers (Restored, simple version)
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() {
     const nextNumber = extractedAddresses.value.length > 0
         ? Math.max(...extractedAddresses.value.map(s => s.number)) + 1
-        : 2; // Start at 2 if list is empty
-    extractedAddresses.value.push({ number: nextNumber, address: '', isDowntown: false, confidence: 0, needsReview: true });
+        : 2; 
+    // Add gap without confidence/needsReview
+    extractedAddresses.value.push({ number: nextNumber, address: '', isDowntown: false }); 
 }
 function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)); }
 
