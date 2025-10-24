@@ -153,49 +153,65 @@ app.post('/api/optimize-route', async (req, res) => {
 
 
 // --- 3. NUEVO ENDPOINT PARA GUARDAR EN BITÁCORA ---
+
 app.post('/api/log-route', async (req, res) => {
     const logData = req.body;
-    console.log('📦 Recibiendo datos para guardar en bitácora:', logData);
+    console.log('📦 Recibiendo datos v2 para guardar en bitácora:', logData);
 
-    // Mapeamos los nombres del JS a los nombres de la BD
+    // Mapeamos los nombres del JS a los nombres de la BD (lowercase)
     const dataToInsert = {
-        "Fecha": logData.fecha,
-        "Vehiculo": logData.vehiculo,
-        "Warehouse": logData.warehouse,
-        "Hora": logData.hora,
-        "Duracion_horas": logData.duracion_horas,
-        "Pago": logData.pago,
-        "pago_por_hora": logData.pago_por_hora,
-        "Antes_del_bloque": logData.antes_del_bloque,
-        "Despues_del_bloque": logData.despues_del_bloque,
-        "Tiempo_total": logData.tiempo_total,
-        "Pago_real_por_hora": logData.pago_real_por_hora,
-        "Conmute_1": logData.commute_1,
-        "Conmute_2": logData.commute_2,
-        "Millas_de_trabajo": logData.millas_de_trabajo,
-        "Millas_totales": logData.millas_totales,
-        "Millas_por_hora": logData.millas_por_hora,
-        "Gasto_de_gasolina": logData.gasto_de_gasolina,
-        "Desgaste_vehiculo": logData.desgaste_vehiculo,
-        "Tax": logData.tax,
-        "Claim_por_milla": logData.claim_por_milla
+        // --- Existing fields (lowercase) ---
+        fecha: logData.fecha,
+        vehiculo: logData.vehiculo,
+        warehouse: logData.warehouse,
+        hora: logData.hora,
+        duracion_horas: logData.duracion_horas,
+        pago: logData.pago,
+        pago_por_hora: logData.pago_por_hora,
+        antes_del_bloque: logData.antes_del_bloque,
+        despues_del_bloque: logData.despues_del_bloque,
+        tiempo_total: logData.tiempo_total,
+        pago_real_por_hora: logData.pago_real_por_hora,
+        conmute_1: logData.conmute_1, // This is the manual commute 1 distance
+        conmute_2: logData.conmute_2, // API distance: last stop -> home
+        millas_de_trabajo: logData.millas_de_trabajo, // API distance: WH -> first + between stops
+        millas_totales: logData.millas_totales,
+        millas_por_hora: logData.millas_por_hora,
+        gasto_de_gasolina: logData.gasto_de_gasolina,
+        desgaste_vehiculo: logData.desgaste_vehiculo,
+        tax: logData.tax,
+        claim_por_milla: logData.claim_por_milla,
+
+        // --- NEW fields (lowercase) ---
+        user_id: logData.user_id,             // Temporary UUID or null
+        primary_city: logData.primary_city,   // Most frequent city
+        status: 1,                            // Always save as 'active' initially
+        first_stop: logData.first_stop       // API distance: WH -> first stop
     };
+
+    // Remove null/undefined values to allow DB defaults if any (like status)
+    Object.keys(dataToInsert).forEach(key => {
+        if (dataToInsert[key] === null || dataToInsert[key] === undefined) {
+            delete dataToInsert[key];
+        }
+    });
 
     try {
         const { data, error } = await supabase
-            .from('routes') // El nombre de tu tabla
+            .from('routes') // Your table name
             .insert([dataToInsert])
-            .select(); // .select() devuelve el registro insertado
+            .select(); // Returns the inserted record
 
         if (error) {
-            console.error('❌ Error de Supabase:', error.message);
+            console.error('❌ Error de Supabase al insertar:', error.message);
             throw error;
         }
 
-        console.log('💾 ¡Ruta guardada en Supabase con éxito!:', data);
+        console.log('💾 ¡Ruta v2 guardada en Supabase con éxito!:', data);
         res.status(200).json({ success: true, message: 'Ruta guardada en bitácora.', data: data });
 
     } catch (error) {
+        console.error('❌ Error general en /api/log-route:', error.message);
         res.status(500).json({ success: false, message: 'Error al guardar en Supabase.', error: error.message });
     }
 });

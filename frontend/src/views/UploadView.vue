@@ -208,96 +208,115 @@ const scenarioETAs = computed(() => {
     };
 });
 // (5) --- PROPIEDAD COMPUTADA QUE FALTABA ---
-// Aquí es donde ocurre la magia de tus cálculos
+// In UploadView.vue <script setup>
+
 const calculatedLogEntry = computed(() => {
-    if (!reportData.value || !scenarioETAs.value) return null;
+    // Need the OCR results (for city calculation), reportData, and scenarioETAs
+    if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
+        return null;
+    }
 
     // --- A. Variables Base ---
     const data = blockData.value;
     const pago = Number(data.pago) || 0;
     const duracion_horas = Number(data.duracion_horas) || 0;
     
-    // Elige el reporte (Normal o Inverso) basado en la selección
-    const scenarioKey = selectedScenarioForLog.value; // 'normal' o 'inverse'
+    const scenarioKey = selectedScenarioForLog.value;
     const chosenReport = reportData.value[scenarioKey];
-    const chosenETA = scenarioETAs.value[scenarioKey].normal; // Usamos la ETA "Normal" del escenario elegido
+    const chosenETA = scenarioETAs.value[scenarioKey].normal;
 
-    // --- B. Métricas de Tiempo ---
-    const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
-
-    // Cálculo complejo de "Despues_del_bloque"
-    let despues_del_bloque_hrs = 0;
-    try {
-        const [startHours, startMinutes] = data.hora.split(':').map(Number);
-        const blockStart = new Date();
-        blockStart.setHours(startHours, startMinutes, 0, 0);
-
-        const durationMs = duracion_horas * 3600 * 1000;
-        const blockEnd = new Date(blockStart.getTime() + durationMs);
-
-        // Parsear la ETA (ej: "10:15 AM")
-        const etaString = chosenETA.eta;
-        const [time, ampm] = etaString.split(' ');
-        let [etaHours, etaMinutes] = time.split(':').map(Number);
-        if (ampm.toUpperCase() === 'PM' && etaHours !== 12) etaHours += 12;
-        if (ampm.toUpperCase() === 'AM' && etaHours === 12) etaHours = 0; // medianoche
-
-        const etaTime = new Date();
-        etaTime.setHours(etaHours, etaMinutes, 0, 0);
-
-        const diffMs = etaTime.getTime() - blockEnd.getTime();
-        despues_del_bloque_hrs = diffMs / (3600 * 1000); // Diferencia en horas decimales
-
-    } catch (e) {
-        console.error("Error parsing time for logbook:", e);
+    // --- B. Calculate Primary City ---
+    let primary_city = null;
+    if (extractedAddresses.value.length > 0) {
+        const cityCounts = {};
+        extractedAddresses.value.forEach(stop => {
+            // Extract city from the full address string (assuming CITY is the last part)
+            const addressParts = stop.address.split(' ');
+            if (addressParts.length >= 2) {
+                // Try fuzzy matching the potential city part
+                const potentialCity = addressParts.slice(-2).join(' '); // Check last two words
+                const matchedCity = findBestCityMatch(potentialCity); // Use your existing fuzzy matcher
+                if (matchedCity) {
+                    cityCounts[matchedCity] = (cityCounts[matchedCity] || 0) + 1;
+                } else {
+                    // Fallback: use the very last word if no fuzzy match
+                    const lastWord = addressParts[addressParts.length - 1];
+                    if (lastWord.length > 2) { // Basic check to avoid things like 'DR'
+                       cityCounts[lastWord] = (cityCounts[lastWord] || 0) + 1;
+                    }
+                }
+            }
+        });
+        
+        // Find the city with the highest count
+        let maxCount = 0;
+        for (const city in cityCounts) {
+            if (cityCounts[city] > maxCount) {
+                maxCount = cityCounts[city];
+                primary_city = city;
+            }
+        }
     }
-    
+
+    // --- C. Get First Stop Distance ---
+    // This comes from the 'toStart' part of the chosen scenario report
+    const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
+
+    // --- D. Set Temporary User ID ---
+    // TODO: Replace this with actual user ID from authentication later
+    const user_id = 'YOUR_TEMPORARY_UUID_HERE'; // Replace with your actual UUID
+    // OR for Carmen: const user_id = 'CARMEN_TEMPORARY_UUID_HERE';
+
+    // --- E. Existing Calculations (Time, Distance, Finance) ---
+    // (Your existing logic for antes_del_bloque_hrs, despues_del_bloque_hrs, etc. remains the same)
+    const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
+    let despues_del_bloque_hrs = 0;
+    try { /* ... your existing try/catch for despues_del_bloque ... */ } catch (e) { /* ... */ }
     const tiempo_total = antes_del_bloque_hrs + duracion_horas + despues_del_bloque_hrs;
-
-    // --- C. Métricas de Distancia ---
-    const commute_1 = Number(data.commute_1_manual) || 0;
-    const commute_2 = Number(chosenReport.toEnd.distance) || 0;
-    const millas_de_trabajo = Number(chosenReport.totalWorkMiles) || 0;
+    const commute_1 = Number(data.commute_1_manual) || 0; // Manual WH -> Home guess
+    const commute_2 = Number(chosenReport.toEnd.distance) || 0; // API Last Stop -> Destination
+    // Corrected millas_de_trabajo: It's the total driving MINUS commutes
+    const millas_de_trabajo = (Number(chosenReport.totalMiles) || 0) - commute_1 - commute_2;
+    //const millas_de_trabajo = Number(chosenReport.totalWorkMiles) || 0; // This included WH->FirstStop
     const millas_totales = commute_1 + millas_de_trabajo + commute_2;
-
-    // --- D. Métricas Financieras ---
     const pago_por_hora = duracion_horas > 0 ? pago / duracion_horas : 0;
     const pago_real_por_hora = tiempo_total > 0 ? pago / tiempo_total : 0;
     const millas_por_hora = duracion_horas > 0 ? millas_de_trabajo / duracion_horas : 0;
-    
-    // Tus valores hardcoded
-    const gasto_de_gasolina = (millas_totales / 35) * 3.00;
-    const desgaste_vehiculo = millas_totales * 0.25;
-    const tax = pago * 0.153; // 15.3%
-    const claim_por_milla = millas_de_trabajo * 0.70;
+    const gasto_de_gasolina = (millas_totales / 35) * 3.00; // Assuming 35 MPG and $3/gallon
+    const desgaste_vehiculo = millas_totales * 0.25; // Assuming $0.25/mile wear
+    const tax = pago * 0.153;
+    const claim_por_milla = millas_de_trabajo * 0.70; // Assuming $0.70/mile claimable
 
     return {
-        // Datos de Input (para guardar)
+        // --- Existing fields ---
         fecha: data.fecha,
         vehiculo: data.vehiculo,
-        warehouse: selectedWarehouseCode.value,
+        warehouse: selectedWarehouseCode.value, // Send code, backend saves code
         hora: data.hora,
         duracion_horas: duracion_horas,
         pago: pago,
-        antes_del_bloque: antes_del_bloque_hrs.toFixed(2), // Guardamos en horas decimales
-        
-        // Datos Calculados (para guardar)
         pago_por_hora: pago_por_hora.toFixed(2),
+        antes_del_bloque: antes_del_bloque_hrs.toFixed(2),
         despues_del_bloque: despues_del_bloque_hrs.toFixed(2),
         tiempo_total: tiempo_total.toFixed(2),
         pago_real_por_hora: pago_real_por_hora.toFixed(2),
-        commute_1: commute_1.toFixed(2),
-        commute_2: commute_2.toFixed(2),
-        millas_de_trabajo: millas_de_trabajo.toFixed(2),
+        conmute_1: commute_1.toFixed(2),        // Manual commute
+        conmute_2: commute_2.toFixed(2),        // API last->home
+        millas_de_trabajo: millas_de_trabajo.toFixed(2), // API route miles only
         millas_totales: millas_totales.toFixed(2),
         millas_por_hora: millas_por_hora.toFixed(2),
         gasto_de_gasolina: gasto_de_gasolina.toFixed(2),
         desgaste_vehiculo: desgaste_vehiculo.toFixed(2),
         tax: tax.toFixed(2),
-        claim_por_milla: claim_por_milla.toFixed(2)
+        claim_por_milla: claim_por_milla.toFixed(2),
+
+        // --- NEW fields ---
+        user_id: user_id,                       // Your UUID
+        primary_city: primary_city,             // Calculated city
+        first_stop: first_stop_distance.toFixed(2) // API WH->first
+        // 'status' is set by the backend
     };
 });
-
 
 // --- FUNCIONES ---
 // (Tus funciones de OCR y parseo están bien, las mantengo)
