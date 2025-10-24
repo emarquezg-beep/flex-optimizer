@@ -15,6 +15,11 @@ const isSaving = ref(false);
 const saveStatus = ref(null);
 const fileInputRef = ref(null);
 const selectedFileNames = ref([]);
+const USERS = [
+  { name: 'Ernesto', id: 'b5a04a69-1e96-47c4-a0c8-972fec54c21d' },
+  { name: 'Carmen Cecilia', id: 'b3aaad3a-5835-4796-aca7-ea634e150b5d' }
+];
+const selectedUserId = ref(USERS[0].id); // Default to Ernesto
 
 const fileInputLabel = computed(() => {
   return isProcessing.value ? 'Processing...' : 'Choose Screenshots or Drag Here';
@@ -331,6 +336,9 @@ const calculatedLogEntry = computed(() => {
     const scenarioKey = selectedScenarioForLog.value;
     const chosenReport = reportData.value[scenarioKey];
     const chosenETA = scenarioETAs.value[scenarioKey].normal;
+    // Reads the ID from the reactive variable linked to the dropdown
+    const user_id = selectedUserId.value; 
+    // const user_id = 'c130d2a8-6f96-48bc-b69a-68692797b5e6'; // DELETE or comment out the old hardcoded line
 
     // --- Calculate Primary City (SIMPLER VERSION for original parser) ---
     let primary_city = null;
@@ -749,7 +757,19 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
             <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
             
             <h3>📓 Logbook Block Data</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="user-select">Select User</label>
+                    <select id="user-select" v-model="selectedUserId">
+                        <option v-for="user in USERS" :key="user.id" :value="user.id">
+                            {{ user.name }}
+                        </option>
+                    </select>
+                </div>
+                 <div class="form-group"></div>
+            </div>
             <div class="logbook-scenario-selector">
+              
               <strong>Use data from scenario:</strong>
               <label><input type="radio" v-model="selectedScenarioForLog" value="normal"> Normal</label>
               <label><input type="radio" v-model="selectedScenarioForLog" value="inverse"> Inverse</label>
