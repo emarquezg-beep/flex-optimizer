@@ -330,38 +330,91 @@ const calculatedLogEntry = computed(() => {
     if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
         return null;
     }
+    
     const data = blockData.value;
     const pago = Number(data.pago) || 0;
     const duracion_horas = Number(data.duracion_horas) || 0;
     const scenarioKey = selectedScenarioForLog.value;
+    
+    // ✅ VALIDATE scenario exists
     const chosenReport = reportData.value[scenarioKey];
-    const chosenETA = scenarioETAs.value[scenarioKey].normal;
-    // Reads the ID from the reactive variable linked to the dropdown
-    const user_id = selectedUserId.value; 
-    // const user_id = 'c130d2a8-6f96-48bc-b69a-68692797b5e6'; // DELETE or comment out the old hardcoded line
-
-    // --- Calculate Primary City (SIMPLER VERSION for original parser) ---
-    let primary_city = null;
-    if (extractedAddresses.value.length > 0) {
-        const cityCounts = {};
-        extractedAddresses.value.forEach(stop => {
-            const addressParts = stop.address.split(' ');
-            // Assumes city is the last word after simple parsing
-            const city = addressParts[addressParts.length - 1]; 
-            if (city && city.length > 2) { // Basic check
-                 cityCounts[city] = (cityCounts[city] || 0) + 1;
-            }
-        });
-        let maxCount = 0;
-        for (const city in cityCounts) {
-            if (cityCounts[city] > maxCount) {
-                maxCount = cityCounts[city];
-                primary_city = city;
+    if (!chosenReport) {
+        console.error(`Scenario "${scenarioKey}" not found in reportData`);
+        return null;
+    }
+    
+    const chosenETA = scenarioETAs.value[scenarioKey]?.normal;
+    if (!chosenETA) {
+        console.error(`ETA for scenario "${scenarioKey}" not found`);
+        return null;
+    }
+    
+    const user_id = selectedUserId.value;
+    
+   
+// --- Calculate Primary City (IMPROVED) ---
+let primary_city = null;
+if (extractedAddresses.value.length > 0) {
+    const cityCounts = {};
+    
+    extractedAddresses.value.forEach(stop => {
+        if (!stop.address) return;
+        
+        // Remove common suffixes and parse
+        let addr = stop.address.toUpperCase();
+        
+        // Remove apartment indicators
+        addr = addr.replace(/\b(APT|UNIT|#)\s*\d+[A-Z]?\b/gi, '');
+        
+        // Remove state abbreviations at end
+        addr = addr.replace(/\b(FL|FLORIDA)\s*$/i, '');
+        
+        // Split and get potential city (usually second-to-last or last word)
+        const parts = addr.trim().split(/\s+/);
+        
+        // Common pattern: "123 MAIN ST ORLANDO" or "123 MAIN ST ORLANDO FL"
+        // City is usually after street name
+        let potentialCity = null;
+        
+        if (parts.length >= 3) {
+            // Try to find city (skip numbers and short words)
+            for (let i = parts.length - 1; i >= 0; i--) {
+                const word = parts[i];
+                // Skip if: number, or common street suffix, or too short
+                if (!/^\d+$/.test(word) && 
+                    !/^(ST|RD|AVE|BLVD|DR|LN|CT|WAY|PL|TER|CIR)$/i.test(word) &&
+                    word.length > 2) {
+                    potentialCity = word;
+                    break;
+                }
             }
         }
-        console.log("🏙️ Primary City Calculated (Simple):", primary_city, "Counts:", cityCounts);
+        
+        if (potentialCity && potentialCity.length > 2) {
+            cityCounts[potentialCity] = (cityCounts[potentialCity] || 0) + 1;
+        }
+    });
+    
+    // Find most common city
+    let maxCount = 0;
+    for (const city in cityCounts) {
+        if (cityCounts[city] > maxCount) {
+            maxCount = cityCounts[city];
+            primary_city = city;
+        }
     }
-    // --- End City Calculation ---
+    
+    // Capitalize properly (title case)
+    if (primary_city) {
+        primary_city = primary_city
+            .split(' ')
+            .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+            .join(' ');
+    }
+    
+    console.log("🏙️ Primary City Calculated:", primary_city, "Counts:", cityCounts);
+}
+// --- End City Calculation ---
 
     const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
     
@@ -698,41 +751,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.inverse.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.normal.totalDuration }} min)</span></div>
               <div class="eta-scenario"><span class="eta-label pessimistic">Pessimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
             </div>
-          <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
-            <div class="scenario-table">
-              <h4>📊 Final Comparison</h4>
-              <table>
-                <tbody>
-                  <tr><td>Normal Route (1 → End)</td><td>{{ reportData.normal.totalMiles }} mi</td><td>-</td></tr>
-                  <tr class="highlight">
-                    <td><strong>Inverse Route (End → 1)</strong></td>
-                    <td><strong>{{ reportData.inverse.totalMiles }} mi</strong></td>
-                    <td><strong class="savings">{{ reportData.savings >= 0 ? `-${reportData.savings}` : `+${Math.abs(reportData.savings)}` }} mi</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <hr>
-            <div class="result-block">
-              <h4>➡️ Normal Route Breakdown</h4>
-              <p>To 1st Stop: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
-              <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
-                <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
-                  <span class="calc-details">({{ segment.stopsCount }} stops | {{ segment.aptCount }} apts | {{ segment.downtownCount }} DT)</span>
-                </p>
-              </div>
-              <hr class="dotted-hr">
-              <p class="total-time"><strong>Total Work: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
-              <p>To Final Destination: <strong>{{ reportData.normal.toEnd.duration }} min - {{ reportData.normal.toEnd.distance }} mi</strong></p>
-              <hr class="dotted-hr">
-              <p class="total-time grand-total"><strong>Total Route: {{ reportData.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
-            </div>
-            <div v-if="scenarioETAs?.normal" class="result-block eta-block">
-              <h4>⏱️ Arrival Estimates (Normal Route)</h4>
-              <div class="eta-scenario"><span class="eta-label optimistic">Optimistic:</span><strong class="eta-time">{{ scenarioETAs.normal.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.optimistic.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.normal.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.normal.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label pessimistic">Pessimistic:</span><strong class="eta-time">{{ scenarioETAs.normal.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.pessimistic.totalDuration }} min)</span></div>
-            </div>
+
             <hr>
             <div class="result-block inverse-block">
               <h4>⬅️ Inverse Route Breakdown</h4>
@@ -805,7 +824,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               {{ saveStatus.message }}
             </div>
           </div> 
-        </div> </div> </div> </div> </div></div> </template>
+        </div> </div> </div> </div> </div> </template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
