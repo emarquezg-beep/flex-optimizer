@@ -752,27 +752,6 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               <div class="eta-scenario"><span class="eta-label pessimistic">Pessimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
             </div>
 
-            <hr>
-            <div class="result-block inverse-block">
-              <h4>⬅️ Inverse Route Breakdown</h4>
-              <p>To Last Stop: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
-              <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
-                <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
-                  <span class="calc-details">({{ segment.stopsCount }} stops | {{ segment.aptCount }} apts | {{ segment.downtownCount }} DT)</span>
-                </p>
-              </div>
-              <hr class="dotted-hr">
-              <p class="total-time"><strong>Total Work: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
-              <p>From 1st Stop to Destination: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
-              <hr class="dotted-hr">
-              <p class="total-time grand-total"><strong>Total Route: {{ reportData.inverse.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
-            </div>
-            <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
-              <h4>⏱️ Arrival Estimates (Inverse Route)</h4>
-              <div class="eta-scenario"><span class="eta-label optimistic">Optimistic:</span><strong class="eta-time">{{ scenarioETAs.inverse.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.optimistic.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.inverse.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.normal.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label pessimistic">Pessimistic:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
-            </div>
             <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
             
             <h3>📓 Logbook Block Data</h3>
