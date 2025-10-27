@@ -1125,14 +1125,14 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 
   /* Hacemos la fuente de la dirección más pequeña para que quepa más texto */
   .address-input {
-    font-size: 0.7em;  /* <-- ESTA ES LA CLAVE! */
+    font-size: 0.5em;  /* <-- ESTA ES LA CLAVE! */
     padding: 10px 8px; /* Ajustamos un poco el padding */
   }
 
   /* Achicamos un poco los elementos de los lados */
   .stop-number-input {
-    width: 30px;
-    font-size: 0.6em;
+    width: 35px;
+    font-size: 0.5em;
   }
 
   .downtown-label {
