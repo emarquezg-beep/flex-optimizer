@@ -183,9 +183,7 @@ app.post('/api/log-route', async (req, res) => {
         claim_por_milla: logData.claim_por_milla,
         route_score: logData.route_score,
         numero_paradas: logData.numero_paradas,
-        esfuerzo_fisico: logData.esfuerzo_fisico,
-        esfuerzo_mental: logData.esfuerzo_mental,
-        condiciones_climaticas: logData.condiciones_climaticas,
+       
         
         // --- NEW fields (lowercase) ---
         user_id: logData.user_id,             // Temporary UUID or null
