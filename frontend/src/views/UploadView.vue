@@ -71,6 +71,20 @@ watch(selectedWarehouseCode, (newCode) => {
 // ORIGINAL (Simpler) OCR Logic from `main`
 // ============================================
 
+const jsonInput = ref(''); // Para el nuevo <textarea>
+
+function resetAllInputs() {
+  console.log('Resetting all inputs...');
+  extractedAddresses.value = [];
+  backendResponse.value = null;
+  selectedFileNames.value = [];
+  jsonInput.value = ''; // Limpiar el textarea también
+  isProcessing.value = false;
+  if (fileInputRef.value) {
+    fileInputRef.value.value = ''; // Limpiar el input de archivo
+  }
+}
+
 function preprocessImage(file) {
   // --- This is your original v1.x/v2.0 preprocessing ---
   return new Promise((resolve) => {
@@ -113,6 +127,58 @@ function parseAddresses(rawText) {
   return stops;
 }
 
+// ... (agrégala en <script setup>)
+
+async function processJsonInput() {
+  if (!jsonInput.value) {
+    alert('Por favor, pega el JSON en el área de texto.');
+    return;
+  }
+
+  isProcessing.value = true;
+  
+  // Usamos un setTimeout para que el UI se actualice a "Processing..."
+  await new Promise(resolve => setTimeout(resolve, 50)); 
+
+  try {
+    // 1. Parsear el JSON
+    const parsedData = JSON.parse(jsonInput.value);
+
+    // 2. Validar que es un array
+    if (!Array.isArray(parsedData)) {
+      throw new Error('El JSON debe ser un array (una lista) de paradas.');
+    }
+
+    // 3. Mapear al formato interno de extractedAddresses
+    const mappedStops = parsedData.map(item => {
+      // AQUÍ ESTÁ LA MAGIA: Combinamos los campos de tu JSON en un solo string "address"
+      const fullAddress = [
+        item.street_address,
+        item.apartment,
+        item.city
+      ].filter(Boolean).join(' ').trim(); // filter(Boolean) elimina nulos o strings vacíos
+
+      return {
+        number: item.stop_number || 0, // Usar 0 o algun default si no existe
+        address: fullAddress,
+        isDowntown: false // Asumimos false por defecto. El usuario puede marcarlo.
+      };
+    });
+
+    // 4. Resetear estados y asignar data
+    resetAllInputs(); // Limpia todo
+    extractedAddresses.value = mappedStops; // Asigna las nuevas paradas
+    
+    console.log('Paradas cargadas desde JSON:', extractedAddresses.value);
+
+  } catch (error) {
+    console.error("Error procesando JSON:", error);
+    alert(`Error al procesar el JSON: ${error.message}`);
+    isProcessing.value = false; // Detener el procesamiento si hay error
+  }
+  // isProcessing se pondrá en false automáticamente por el resetAllInputs si todo va bien
+}
+
 async function handleFileChange(event) {
   // --- File selection logic ---
   const files = event.target.files;
@@ -122,10 +188,9 @@ async function handleFileChange(event) {
   }
   selectedFileNames.value = Array.from(files).map(f => f.name);
 
-  // --- Reset state ---
+   // --- Reset state ---
+  resetAllInputs();
   isProcessing.value = true;
-  extractedAddresses.value = [];
-  backendResponse.value = null;
   let allParsedStops = []; // Array to hold stops from all images
 
   // --- Declare range variables OUTSIDE try ---
@@ -483,18 +548,10 @@ function sanitizeAddress(address) {
 
 function startManualEntry() {
   console.log('Starting manual entry...');
-  // Clear any potential OCR results or selected files
-  extractedAddresses.value = []; 
-  backendResponse.value = null;
-  selectedFileNames.value = [];
-  if (fileInputRef.value) {
-    fileInputRef.value.value = ''; // Clear the file input
-  }
+  resetAllInputs(); // Limpia todo (archivos, JSON, etc.)
   
-  // Initialize with one empty stop (number 2)
+  // Inicia con una parada vacía
   extractedAddresses.value = [{ number: 2, address: '', isDowntown: false }];
-  
-  // No need to set processing flags, the v-if will handle visibility
 }
 
 async function sendToBackend() {
@@ -598,6 +655,27 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         <div v-if="selectedFileNames.length > 0" class="selected-files">
           Selected: {{ selectedFileNames.join(', ') }}
         </div>
+      </div>
+
+<div class="file-input-area">
+        </div>
+
+      <div class="json-paste-container">
+        <textarea 
+          v-model="jsonInput" 
+          placeholder="... O pega el JSON de las paradas aquí"
+          rows="8"
+          class="json-textarea"
+          :disabled="isProcessing"
+        ></textarea>
+        <button @click="processJsonInput" class="button-secondary" :disabled="isProcessing">
+          Procesar JSON
+        </button>
+      </div>
+      <div class="manual-entry-container">
+          <button @click="startManualEntry" class="button-secondary" :disabled="isProcessing">
+              📝 Enter Stops Manually
+          </button>
       </div>
 
       <div class="manual-entry-container">
@@ -974,4 +1052,51 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
     .address-list {
       /* margin-top is already there, looks fine */
     }
+
+    /* --- JSON Paste Area --- */
+.json-paste-container {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.json-textarea {
+  width: 100%;
+  padding: 10px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.9em;
+  background-color: var(--color-background); /* Fondo oscuro */
+  color: var(--color-text-primary); /* Texto claro */
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  resize: vertical;
+}
+
+.json-textarea:disabled {
+  background-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+/* Asumimos que .button-secondary es un estilo global o similar */
+.json-paste-container .button-secondary {
+  width: 100%;
+  text-align: center;
+  padding: 12px;
+  font-weight: 500;
+  font-size: 1em;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.json-paste-container .button-secondary:hover {
+  background-color: var(--color-border);
+}
+.json-paste-container .button-secondary:disabled {
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 </style>
