@@ -133,8 +133,7 @@ function scoreHorario(hora) {
 function scoreCiudad(city) {
   if (!city) return 100;
   const up = city.toUpperCase().trim();
-  return CITY
-_SCORES[up] !== undefined ? CITY_SCORES[up] : 100;
+  return CITY_SCORES[up] !== undefined ? CITY_SCORES[up] : 100;
 }
 
 function scoreCommute1(millas) {
