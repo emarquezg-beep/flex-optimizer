@@ -1,4 +1,11 @@
 <script setup>
+// AGREGAR estos imports al inicio (alrededor de línea 3-4)
+import { computeScoreV5 } from '@/utils/scoring';
+import { 
+  obtenerMensajeConsciente, 
+  getIconForScore, 
+  getColorForScore 
+} from '@/constants/mensajesConscientes';
 import { ref, computed, watch } from 'vue';
 import Tesseract from 'tesseract.js';
 // We might not need stringSimilarity here if findBestCityMatch isn't used in this version's calculatedLogEntry
@@ -47,6 +54,8 @@ const destinations = ref([
 const selectedWarehouseCode = ref(warehouses.value[0].code);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
+
+const mostrarDetalles = ref(false);
 
 const selectedScenarioForLog = ref('normal');
 const blockData = ref({
@@ -460,6 +469,7 @@ if (extractedAddresses.value.length > 0) {
         }
     });
     
+
     // Find most common city
     let maxCount = 0;
     for (const city in cityCounts) {
@@ -510,6 +520,7 @@ if (extractedAddresses.value.length > 0) {
     const desgaste_vehiculo = millas_totales * 0.25;
     const tax = pago * 0.153;
     const claim_por_milla = millas_de_trabajo * 0.70;
+    const numero_paradas = extractedAddresses.value.filter(s => s.address && s.address.trim() !== '').length;
     // Inside calculatedLogEntry computed property
 
     // ... (all the calculations for commute_1, commute_2, millas_de_trabajo, etc.)
@@ -532,8 +543,28 @@ if (extractedAddresses.value.length > 0) {
         millas_totales: millas_totales.toFixed(2), millas_por_hora: millas_por_hora.toFixed(2),
         gasto_de_gasolina: gasto_de_gasolina.toFixed(2), desgaste_vehiculo: desgaste_vehiculo.toFixed(2),
         tax: tax.toFixed(2), claim_por_milla: claim_por_milla.toFixed(2),
-        user_id: user_id, primary_city: primary_city, first_stop: first_stop_distance.toFixed(2)
+        user_id: user_id, primary_city: primary_city, first_stop: first_stop_distance.toFixed(2), numero_paradas: numero_paradas
     };
+});
+
+const routeScore = computed(() => {
+  if (!calculatedLogEntry.value) return null;
+  
+  const scoreResult = computeScoreV5(calculatedLogEntry.value);
+  const mensaje = obtenerMensajeConsciente(scoreResult.total);
+  
+  return {
+    ...scoreResult,
+    mensaje,
+    icon: getIconForScore(scoreResult.total),
+    color: getColorForScore(scoreResult.total),
+    categoria: mensaje.categoria
+  };
+});
+
+const chosenETA = computed(() => {
+  if (!scenarioETAs.value || !selectedScenarioForLog.value) return null;
+  return scenarioETAs.value[selectedScenarioForLog.value]?.normal;
 });
 
 // ============================================
@@ -834,57 +865,243 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               <div class="eta-scenario"><span class="eta-label pessimistic">Pessimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
             </div>
 
-            <div v-if="reportData && calculatedLogEntry" class="logbook-form-container">
-            
-            <h3>📓 Logbook Block Data</h3>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="user-select">Select User</label>
-                    <select id="user-select" v-model="selectedUserId">
-                        <option v-for="user in USERS" :key="user.id" :value="user.id">
-                            {{ user.name }}
-                        </option>
-                    </select>
-                </div>
-                 <div class="form-group"></div>
-            </div>
-            <div class="logbook-scenario-selector">
-              
-              <strong>Use data from scenario:</strong>
-              <label><input type="radio" v-model="selectedScenarioForLog" value="normal"> Normal</label>
-              <label><input type="radio" v-model="selectedScenarioForLog" value="inverse"> Inverse</label>
-            </div>
+<!-- LOGBOOK FORM CON NUEVO DISEÑO -->
+<div v-if="reportData && calculatedLogEntry && routeScore" class="logbook-form-container">
+  
+  <!-- RESUMEN CONSCIENTE (SIEMPRE VISIBLE) -->
+  <div class="resumen-consciente">
+    
+    <!-- Header con Score -->
+    <div class="score-header">
+      <div class="score-badge" :style="{ backgroundColor: routeScore.color }">
+        <span class="score-icon">{{ routeScore.icon }}</span>
+        <div class="score-info">
+          <span class="score-value">{{ routeScore.total }}/100</span>
+          <span class="score-label">{{ routeScore.categoria }}</span>
+        </div>
+      </div>
+    </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Estimated Warehouse Delay (min)</label>
-                    <input type="number" v-model.number="blockData.retraso_almacen" step="5">
-                </div>
-                <div class="form-group"></div> </div>
+    <!-- Métricas Clave -->
+    <div class="metricas-clave">
+      <div class="metrica">
+        <div class="metrica-icon">⏱️</div>
+        <div class="metrica-content">
+          <span class="metrica-label">Hora Estimada de Llegada</span>
+          <span class="metrica-value">{{ chosenETA?.eta || 'N/A' }}</span>
+        </div>
+      </div>
+      
+      <div class="metrica">
+        <div class="metrica-icon">🛣️</div>
+        <div class="metrica-content">
+          <span class="metrica-label">Millas Totales a Conducir</span>
+          <span class="metrica-value">{{ calculatedLogEntry.millas_totales }} mi</span>
+        </div>
+      </div>
+      
+      <div class="metrica">
+        <div class="metrica-icon">💰</div>
+        <div class="metrica-content">
+          <span class="metrica-label">Pago Real por Hora</span>
+          <span class="metrica-value">${{ calculatedLogEntry.pago_real_por_hora }}/h</span>
+        </div>
+      </div>
+    </div>
 
-            <div class="logbook-summary">
-              <h4>Calculated Summary (to Save)</h4>
-              <p><strong>Base Pay/Hour:</strong> ${{ calculatedLogEntry.pago_por_hora }}</p>
-              <p><strong>Work Miles:</strong> {{ calculatedLogEntry.millas_de_trabajo }} mi</p>
-              <p><strong>Commute 2 (API):</strong> {{ calculatedLogEntry.commute_2 }} mi</p>
-              <p><strong>Total Miles:</strong> {{ calculatedLogEntry.millas_totales }} mi</p>
-              <hr>
-              <p><strong>"After Block" Time:</strong> {{ calculatedLogEntry.despues_del_bloque }} hrs</p>
-              <p><strong>Total Time Invested:</strong> {{ calculatedLogEntry.tiempo_total }} hrs</p>
-              <p><strong>ACTUAL PAY PER HOUR:</strong> ${{ calculatedLogEntry.pago_real_por_hora }}</p>
-              <hr>
-              <p><strong>Gas Expense:</strong> -${{ calculatedLogEntry.gasto_de_gasolina }}</p>
-              <p><strong>Vehicle Wear:</strong> -${{ calculatedLogEntry.desgaste_vehiculo }}</p>
-              <p><strong>Taxes:</strong> -${{ calculatedLogEntry.tax }}</p>
-              <p><strong>Mileage Claim:</strong> +${{ calculatedLogEntry.claim_por_milla }}</p>
-              </div>
-            <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
-              {{ isSaving ? 'Saving...' : '💾 Save to Logbook' }}
-            </button>
-            <div v-if="saveStatus" :class="['save-status', saveStatus.success ? 'success' : 'error']">
-              {{ saveStatus.message }}
-            </div>
-          </div> 
+    <!-- Mensaje Consciente -->
+    <div class="mensaje-consciente">
+      <blockquote class="frase">
+        "{{ routeScore.mensaje.frase }}"
+        <cite>— {{ routeScore.mensaje.autor }}</cite>
+      </blockquote>
+      
+      <div class="accion">
+        <strong>💡 Reflexión:</strong>
+        <p>{{ routeScore.mensaje.accion }}</p>
+      </div>
+    </div>
+
+    <!-- Botón Expandir Detalles -->
+    <button 
+      @click="mostrarDetalles = !mostrarDetalles" 
+      class="button-toggle-details"
+    >
+      {{ mostrarDetalles ? '▲ Ocultar Detalles Técnicos' : '▼ Mostrar Detalles Técnicos' }}
+    </button>
+  </div>
+
+  <!-- DETALLES EXPANDIBLES -->
+  <transition name="expand">
+    <div v-if="mostrarDetalles" class="detalles-tecnicos">
+      
+      <!-- User & Scenario Selection -->
+      <h3>📋 Datos del Bloque</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="user-select">Conductor</label>
+          <select id="user-select" v-model="selectedUserId">
+            <option v-for="user in USERS" :key="user.id" :value="user.id">
+              {{ user.name }}
+            </option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Escenario Usado</label>
+          <div class="scenario-pills">
+            <label class="pill-option">
+              <input type="radio" v-model="selectedScenarioForLog" value="normal">
+              <span>Normal</span>
+            </label>
+            <label class="pill-option">
+              <input type="radio" v-model="selectedScenarioForLog" value="inverse">
+              <span>Inversa</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Warehouse Delay -->
+      <div class="form-row">
+        <div class="form-group">
+          <label>Retraso en Almacén (min)</label>
+          <input type="number" v-model.number="blockData.retraso_almacen" step="5">
+        </div>
+        <div class="form-group"></div>
+      </div>
+
+      <!-- Breakdown Detallado -->
+      <div class="breakdown-section">
+        <h4>📊 Desglose Financiero</h4>
+        <div class="breakdown-grid">
+          <div class="breakdown-item">
+            <span class="breakdown-label">Pago Base del Bloque:</span>
+            <span class="breakdown-value">${{ calculatedLogEntry.pago }}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Pago/Hora (Bloque):</span>
+            <span class="breakdown-value">${{ calculatedLogEntry.pago_por_hora }}</span>
+          </div>
+          <div class="breakdown-item negative">
+            <span class="breakdown-label">Gasto de Gasolina:</span>
+            <span class="breakdown-value">-${{ calculatedLogEntry.gasto_de_gasolina }}</span>
+          </div>
+          <div class="breakdown-item negative">
+            <span class="breakdown-label">Desgaste de Vehículo:</span>
+            <span class="breakdown-value">-${{ calculatedLogEntry.desgaste_vehiculo }}</span>
+          </div>
+          <div class="breakdown-item negative">
+            <span class="breakdown-label">Impuestos (15.3%):</span>
+            <span class="breakdown-value">-${{ calculatedLogEntry.tax }}</span>
+          </div>
+          <div class="breakdown-item positive">
+            <span class="breakdown-label">Deducción por Milla:</span>
+            <span class="breakdown-value">+${{ calculatedLogEntry.claim_por_milla }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="breakdown-section">
+        <h4>🛣️ Desglose de Distancias</h4>
+        <div class="breakdown-grid">
+          <div class="breakdown-item">
+            <span class="breakdown-label">Commute 1 (Casa → Warehouse):</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.commute_1 }} mi</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Primera Parada:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.first_stop }} mi</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Millas de Trabajo:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.millas_de_trabajo }} mi</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Millas/Hora (Trabajo):</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.millas_por_hora }} mi/h</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Commute 2 (Última → Destino):</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.commute_2 }} mi</span>
+          </div>
+          <div class="breakdown-item highlight">
+            <span class="breakdown-label">Total de Millas:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.millas_totales }} mi</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="breakdown-section">
+        <h4>⏱️ Desglose de Tiempos</h4>
+        <div class="breakdown-grid">
+          <div class="breakdown-item">
+            <span class="breakdown-label">Antes del Bloque:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.antes_del_bloque }} h</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Duración del Bloque:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.duracion_horas }} h</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Después del Bloque:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.despues_del_bloque }} h</span>
+          </div>
+          <div class="breakdown-item highlight">
+            <span class="breakdown-label">Tiempo Total Invertido:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.tiempo_total }} h</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="breakdown-section">
+        <h4>📍 Información Adicional</h4>
+        <div class="breakdown-grid">
+          <div class="breakdown-item">
+            <span class="breakdown-label">Ciudad Principal:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.primary_city || 'N/A' }}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Warehouse:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.warehouse }}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Vehículo:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.vehiculo }}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Número de Paradas:</span>
+            <span class="breakdown-value">{{ calculatedLogEntry.numero_paradas }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Red Flags Section -->
+      <div v-if="routeScore.redFlags && routeScore.redFlags.length > 0" class="breakdown-section red-flags">
+        <h4>⚠️ Alertas Detectadas</h4>
+        <div class="flags-list">
+          <div 
+            v-for="(flag, index) in routeScore.redFlags" 
+            :key="index"
+            :class="['flag-item', flag.nivel.toLowerCase()]"
+          >
+            <span class="flag-badge">{{ flag.nivel }}</span>
+            <span class="flag-mensaje">{{ flag.mensaje }}</span>
+            <span class="flag-penalty">{{ flag.penalizacion }} pts</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Botón de Guardar -->
+  <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
+    {{ isSaving ? 'Guardando...' : '💾 Guardar en Bitácora' }}
+  </button>
+  
+  <div v-if="saveStatus" :class="['save-status', saveStatus.success ? 'success' : 'error']">
+    {{ saveStatus.message }}
+  </div>
+</div>
         </div> </div> </div> </div> </div> </template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
@@ -1167,5 +1384,378 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   background-color: var(--color-border);
   color: var(--color-text-primary);
   border-color: var(--color-accent);
+}
+/* ========================================
+   RESUMEN CONSCIENTE
+   ======================================== */
+
+.resumen-consciente {
+  background: linear-gradient(135deg, var(--color-surface) 0%, rgba(42, 62, 80, 0.5) 100%);
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 20px;
+}
+
+.score-header {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.score-badge {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 30px;
+  border-radius: 50px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.score-icon {
+  font-size: 3em;
+}
+
+.score-info {
+  display: flex;
+  flex-direction: column;
+  color: white;
+}
+
+.score-value {
+  font-size: 2em;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.score-label {
+  font-size: 0.9em;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Métricas Clave */
+.metricas-clave {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.metrica {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  transition: transform 0.2s ease;
+}
+
+.metrica:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+}
+
+.metrica-icon {
+  font-size: 2.5em;
+  opacity: 0.8;
+}
+
+.metrica-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.metrica-label {
+  font-size: 0.85em;
+  color: var(--color-text-secondary);
+  margin-bottom: 5px;
+}
+
+.metrica-value {
+  font-size: 1.4em;
+  font-weight: bold;
+  color: var(--color-text-primary);
+}
+
+/* Mensaje Consciente */
+.mensaje-consciente {
+  background: linear-gradient(135deg, rgba(165, 201, 151, 0.1) 0%, rgba(165, 201, 151, 0.05) 100%);
+  border-left: 4px solid var(--color-accent);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.frase {
+  font-style: italic;
+  color: var(--color-text-primary);
+  font-size: 1.15em;
+  line-height: 1.7;
+  margin: 0 0 15px 0;
+  padding: 0;
+  border: none;
+}
+
+.frase cite {
+  display: block;
+  margin-top: 12px;
+  font-size: 0.9em;
+  color: var(--color-accent);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.accion {
+  background-color: rgba(165, 201, 151, 0.15);
+  padding: 15px;
+  border-radius: 6px;
+  margin-top: 15px;
+}
+
+.accion strong {
+  color: var(--color-accent);
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.95em;
+}
+
+.accion p {
+  margin: 0;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  font-size: 1.05em;
+}
+
+/* Botón Toggle */
+.button-toggle-details {
+  width: 100%;
+  padding: 12px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95em;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.button-toggle-details:hover {
+  background-color: var(--color-border);
+  border-color: var(--color-primary);
+}
+
+/* ========================================
+   DETALLES TÉCNICOS
+   ======================================== */
+
+.detalles-tecnicos {
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 25px;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+.detalles-tecnicos h3 {
+  color: var(--color-primary);
+  margin-top: 0;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.detalles-tecnicos h4 {
+  color: var(--color-accent);
+  margin-top: 25px;
+  margin-bottom: 15px;
+  font-size: 1.1em;
+}
+
+/* Scenario Pills */
+.scenario-pills {
+  display: flex;
+  gap: 10px;
+}
+
+.pill-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 15px;
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pill-option input[type="radio"] {
+  display: none;
+}
+
+.pill-option:has(input:checked) {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.pill-option:hover {
+  border-color: var(--color-primary);
+}
+
+/* Breakdown Sections */
+.breakdown-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.breakdown-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-border);
+}
+
+.breakdown-label {
+  font-size: 0.95em;
+  color: var(--color-text-secondary);
+}
+
+.breakdown-value {
+  font-weight: bold;
+  font-size: 1.1em;
+  color: var(--color-text-primary);
+}
+
+.breakdown-item.negative .breakdown-value {
+  color: #ff5722;
+}
+
+.breakdown-item.positive .breakdown-value {
+  color: var(--color-accent);
+}
+
+.breakdown-item.highlight {
+  background-color: rgba(165, 201, 151, 0.1);
+  border-color: var(--color-accent);
+}
+
+.breakdown-item.highlight .breakdown-value {
+  color: var(--color-accent);
+  font-size: 1.2em;
+}
+
+/* Red Flags */
+.red-flags {
+  background-color: rgba(255, 87, 34, 0.05);
+  border: 1px solid rgba(255, 87, 34, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.flags-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flag-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border-left: 4px solid;
+}
+
+.flag-item.critico {
+  border-left-color: #dc3545;
+}
+
+.flag-item.severo {
+  border-left-color: #ff9800;
+}
+
+.flag-item.advertencia {
+  border-left-color: #ffc107;
+}
+
+.flag-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75em;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.flag-item.critico .flag-badge {
+  background-color: #dc3545;
+  color: white;
+}
+
+.flag-item.severo .flag-badge {
+  background-color: #ff9800;
+  color: white;
+}
+
+.flag-item.advertencia .flag-badge {
+  background-color: #ffc107;
+  color: #333;
+}
+
+.flag-mensaje {
+  flex: 1;
+  color: var(--color-text-primary);
+  font-size: 0.95em;
+}
+
+.flag-penalty {
+  font-weight: bold;
+  color: #ff5722;
+  font-size: 0.9em;
+}
+
+/* Expand Transition */
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.3s ease;
+  max-height: 3000px;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 </style>
