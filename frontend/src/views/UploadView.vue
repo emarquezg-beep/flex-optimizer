@@ -501,7 +501,7 @@ if (extractedAddresses.value.length > 0) {
     const tiempo_total = antes_del_bloque_hrs + duracion_horas + despues_del_bloque_hrs;
     const commute_1 = Number(data.commute_1_manual) || 0;
     const commute_2 = Number(chosenReport.toEnd.distance) || 0;
-    const millas_de_trabajo = (Number(chosenReport.totalMiles) || 0) - commute_1 - commute_2;
+    const millas_de_trabajo = Number(chosenReport.totalWorkMiles) || 0;
     const millas_totales = commute_1 + millas_de_trabajo + commute_2;
     const pago_por_hora = duracion_horas > 0 ? pago / duracion_horas : 0;
     const pago_real_por_hora = tiempo_total > 0 ? pago / tiempo_total : 0;
