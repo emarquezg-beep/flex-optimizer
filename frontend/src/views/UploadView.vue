@@ -1,6 +1,6 @@
 <script setup>
 // AGREGAR estos imports al inicio (alrededor de línea 3-4)
-import { computeScoreV5 } from '@/utils/scoring.js';
+import { computeScoreV5 } from '@/utils/scoring';
 import { 
   obtenerMensajeConsciente, 
   getIconForScore, 
