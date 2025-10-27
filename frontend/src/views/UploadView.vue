@@ -1131,8 +1131,8 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 
   /* Achicamos un poco los elementos de los lados */
   .stop-number-input {
-    width: 40px;
-    font-size: 0.9em;
+    width: 30px;
+    font-size: 0.6em;
   }
 
   .downtown-label {
