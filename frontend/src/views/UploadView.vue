@@ -64,7 +64,7 @@ const blockData = ref({
   hora: '07:00',
   duracion_horas: DURACION_OPTIONS[1],
   pago: 0,
-  antes_del_bloque: 30,
+  antes_del_bloque: 45,
   commute_1_manual: warehouses.value[0].commuteMiles,
   retraso_almacen: 20
 });
@@ -82,7 +82,38 @@ watch(selectedWarehouseCode, (newCode) => {
 
 const jsonInput = ref(''); // Para el nuevo <textarea>
 
-function resetAllInputs() {
+function calculateActualDelay() {
+  try {
+    const now = new Date();
+    // Asegura que la hora del bloque tenga un valor
+    if (!blockData.value.hora) {
+      alert("Por favor, establece primero la 'Start Time (24h)' del bloque.");
+      return;
+    }
+    
+    const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
+    
+    const blockStartTime = new Date(); // Fecha de hoy
+    blockStartTime.setHours(startHours, startMinutes, 0, 0); // Hora del bloque
+
+    // Calcular diferencia en milisegundos
+    const diffMs = now.getTime() - blockStartTime.getTime();
+    
+    // Convertir a minutos (max(0, ...) evita retrasos negativos si se calcula antes)
+    const actualDelayMinutes = Math.max(0, Math.round(diffMs / 60000)); 
+    
+    // Actualizar el ref de blockData
+    blockData.value.retraso_almacen = actualDelayMinutes;
+    
+    console.log(`⏱️ Retraso 'en caliente' calculado: ${actualDelayMinutes} minutos`);
+    alert(`Retraso calculado y actualizado a: ${actualDelayMinutes} minutos.`);
+    
+  } catch (e) {
+      console.error("Error calculating actual prep time:", e);
+      alert(`Error al calcular la hora: ${e.message}. Asegúrate que 'Start Time' sea válido.`);
+  }
+}
+  function resetAllInputs() {
   console.log('Resetting all inputs...');
   extractedAddresses.value = [];
   backendResponse.value = null;
@@ -597,27 +628,7 @@ async function sendToBackend() {
       if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
       const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
       const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-      try {
-        const now = new Date();
-        const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
-        const blockStartTime = new Date(); // Today's date
-        blockStartTime.setHours(startHours, startMinutes, 0, 0); // Set to block start time
-
-        // Calculate difference in milliseconds
-        const diffMs = now.getTime() - blockStartTime.getTime();
-        
-        // Convert to minutes, ensure it's not negative (if evaluated before block start)
-        const actualDelayMinutes = Math.max(0, Math.round(diffMs / 60000)); 
-        
-        // Update the blockData ref - this will trigger computed properties
-        blockData.value.retraso_almacen = actualDelayMinutes;
-        
-        console.log(`⏱️ Actual prep time calculated: ${actualDelayMinutes} minutes`);
-        
-      } catch (e) {
-          console.error("Error calculating actual prep time:", e);
-          // Keep the default or previously entered value if parsing fails
-      }
+ 
       backendResponse.value = { status: 'loading' };
       try {
         const response = await fetch(`${backendUrl}/api/optimize-route`, {
@@ -782,8 +793,16 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
                     <label>Commute 1 (Miles)</label>
                     <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
                 </div>
-            </div>
+                <!-- Warehouse Delay -->
+                 <div class="form-group">
+                    <label class="label-with-button">
+                      <span>Warehouse Delay (min)</span>
+                      <button @click.prevent="calculateActualDelay" class="button-tertiary">Ahora</button>
+                    </label>
+                    <input type="number" v-model.number="blockData.retraso_almacen" step="5">
+                  </div>
         </div>
+</div>
 
         <div class="address-list">
           <h2>📝 Review and Edit Stops ({{ extractedAddresses.length }})</h2>
@@ -959,15 +978,6 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
             </label>
           </div>
         </div>
-      </div>
-
-      <!-- Warehouse Delay -->
-      <div class="form-row">
-        <div class="form-group">
-          <label>Retraso en Almacén (min)</label>
-          <input type="number" v-model.number="blockData.retraso_almacen" step="5">
-        </div>
-        <div class="form-group"></div>
       </div>
 
       <!-- Breakdown Detallado -->
@@ -1757,5 +1767,28 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   padding-bottom: 0;
   margin-top: 0;
   margin-bottom: 0;
+}
+/* --- Estilos para el botón 'Ahora' en el label --- */
+.label-with-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.button-tertiary {
+  padding: 3px 8px;
+  font-size: 0.8em;
+  font-weight: 500;
+  background-color: var(--color-surface);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.button-tertiary:hover {
+  background-color: rgba(165, 201, 151, 0.1);
+  color: var(--color-text-primary);
 }
 </style>
