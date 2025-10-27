@@ -1099,4 +1099,48 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   cursor: not-allowed;
   opacity: 0.6;
 }
+/* ============================================ */
+/* =            ESTILOS PARA MÓVIL            = */
+/* ============================================ */
+@media (max-width: 768px) {
+
+  /* --- 1. Arregla el formulario "Block Details" --- */
+  /* Forzamos a que los grupos de campos se apilen verticalmente */
+  .form-row {
+    flex-direction: column; /* Apila los campos */
+    gap: 15px; /* Mantiene el espacio entre ellos */
+  }
+  
+  /* El .form-group ya tiene 'flex: 1', 
+     así que tomará 100% de ancho automáticamente.
+     ¡Esto arregla el campo "Vehicle"! */
+
+
+  /* --- 2. Arregla la lista de direcciones --- */
+  
+  /* Reducimos el tamaño de todo en la fila de la dirección */
+  .editable-item {
+    gap: 8px; /* Un poco menos de espacio entre elementos */
+  }
+
+  /* Hacemos la fuente de la dirección más pequeña para que quepa más texto */
+  .address-input {
+    font-size: 0.9em;  /* <-- ESTA ES LA CLAVE! */
+    padding: 10px 8px; /* Ajustamos un poco el padding */
+  }
+
+  /* Achicamos un poco los elementos de los lados */
+  .stop-number-input {
+    width: 40px;
+    font-size: 0.9em;
+  }
+
+  .downtown-label {
+    font-size: 0.8em;
+  }
+
+  .button-delete {
+    padding: 8px;
+  }
+}
 </style>
