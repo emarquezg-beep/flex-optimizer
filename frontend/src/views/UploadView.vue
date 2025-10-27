@@ -660,6 +660,16 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 <div class="file-input-area">
         </div>
 
+        <div class="gem-link-container">
+        <a 
+          href="https://gemini.google.com/gem/11PCFo5tGT1kWc0fd9PvoPz6uQryQUzTu?usp=sharing" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          class="gem-link"
+        >
+          🤖 Abrir el Gem para procesar direcciones
+        </a>
+      </div>
       <div class="json-paste-container">
         <textarea 
           v-model="jsonInput" 
@@ -1136,5 +1146,26 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   .button-delete {
     padding: 8px;
   }
+}
+/* --- Link al Gem --- */
+.gem-link-container {
+  margin-bottom: 20px;
+  text-align: center;
+}
+.gem-link {
+  display: inline-block;
+  padding: 10px 15px;
+  background-color: var(--color-surface);
+  color: var(--color-accent); /* Usamos el color 'accent' para que resalte */
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.gem-link:hover {
+  background-color: var(--color-border);
+  color: var(--color-text-primary);
+  border-color: var(--color-accent);
 }
 </style>
