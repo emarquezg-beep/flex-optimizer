@@ -102,7 +102,7 @@ app.post('/api/optimize-route', async (req, res) => {
     const firstStop = addresses[1];
     const lastStop = addresses[addresses.length - 2];
     const finalDestination = addresses[addresses.length - 1];
-    const workStops = addresses.slice(1, -1);
+    const workStops = addresses.slice(2, -1);
 
     console.log('✅ v1.2: Calculando informe de ruta por segmentos...');
 
@@ -181,7 +181,12 @@ app.post('/api/log-route', async (req, res) => {
         desgaste_vehiculo: logData.desgaste_vehiculo,
         tax: logData.tax,
         claim_por_milla: logData.claim_por_milla,
-
+        route_score: logData.route_score,
+        numero_paradas: logData.numero_paradas,
+        esfuerzo_fisico: logData.esfuerzo_fisico,
+        esfuerzo_mental: logData.esfuerzo_mental,
+        condiciones_climaticas: logData.condiciones_climaticas,
+        
         // --- NEW fields (lowercase) ---
         user_id: logData.user_id,             // Temporary UUID or null
         primary_city: logData.primary_city,   // Most frequent city
