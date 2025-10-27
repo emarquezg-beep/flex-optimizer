@@ -678,12 +678,6 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           </button>
       </div>
 
-      <div class="manual-entry-container">
-          <button @click="startManualEntry" class="button-secondary" :disabled="isProcessing">
-              📝 Enter Stops Manually
-          </button>
-      </div>
-
       <div v-if="isProcessing" class="status"><h3>Processing images...</h3></div>
       
       <div v-if="extractedAddresses.length > 0 && !isProcessing">
