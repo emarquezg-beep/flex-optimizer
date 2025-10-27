@@ -644,14 +644,46 @@ async function sendToBackend() {
 }
 
 async function saveToLogbook() {
-    // --- Restored saveToLogbook ---
-    if (!calculatedLogEntry.value) { alert("No hay datos calculados para guardar."); return; }
-    isSaving.value = true; saveStatus.value = null;
+    // 1. Agregamos una validación para asegurar que el score también exista
+    if (!calculatedLogEntry.value || !routeScore.value) { 
+        alert("No hay datos calculados o score para guardar."); 
+        return; 
+    }
+    
+    isSaving.value = true; 
+    saveStatus.value = null;
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+    // --- ¡AQUÍ OCURRE LA MAGIA! ---
+    
+    // 2. Creamos un nuevo objeto 'dataToSend'.
+    //    El '...' copia TODAS las propiedades de 'calculatedLogEntry.value' 
+    //    (como pago, millas_totales, vehiculo, etc.) dentro de este nuevo objeto.
+    const dataToSend = { ...calculatedLogEntry.value };
+
+    // 3. A ese NUEVO objeto, le agregamos la propiedad 'route_score'.
+    //    (Este nombre 'route_score' debe ser idéntico al de tu columna en Supabase).
+    dataToSend.route_score = routeScore.value.total;
+
+    // Ahora 'dataToSend' es un objeto que contiene TODO:
+    // { 
+    //   pago: 75.5, 
+    //   millas_totales: 68.74, 
+    //   vehiculo: 'Pontiac', 
+    //   ... (etc) ...
+    //   route_score: 5  // <-- ¡El nuevo campo!
+    // }
+    // --- FIN DE LA MAGIA ---
+
     try {
         const response = await fetch(`${backendUrl}/api/log-route`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(calculatedLogEntry.value)
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            // 4. En lugar de enviar solo 'calculatedLogEntry.value',
+            //    enviamos nuestro nuevo objeto combinado 'dataToSend'.
+            body: JSON.stringify(dataToSend)
         });
+        
         const result = await response.json();
         if (response.ok && result.success) {
             console.log("Respuesta del servidor:", result);
