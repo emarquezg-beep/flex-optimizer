@@ -617,70 +617,70 @@ function startManualEntry() {
 }
 
 async function sendToBackend() {
-    // --- Restored sendToBackend ---
-      const addressesToSend = extractedAddresses.value.map(stop => stop.address);
-      const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
-      if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
-      const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
-      if (!warehouse) { alert('Error: Warehouse no encontrado.'); return; }
-      const warehouseAddress = sanitizeAddress(warehouse.address);
-      const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
-      if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
-      const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
-      const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
- 
-      backendResponse.value = { status: 'loading' };
-      try {
-        const response = await fetch(`${backendUrl}/api/optimize-route`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addresses: fullRoute }),
-        });
-        const result = await response.json();
-        backendResponse.value = result;
-        if (!response.ok) { throw new Error(result.message || `Error ${response.status}`); }
-      } catch (error) {
-        console.error("Error calling backend:", error);
-        backendResponse.value = { error: `Error: ${error.message || 'No se pudo conectar al servidor.'}` };
+    const addressesToSend = extractedAddresses.value.map(stop => stop.address);
+    const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
+    if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
+    const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+    if (!warehouse) { alert('Error: Warehouse no encontrado.'); return; }
+    const warehouseAddress = sanitizeAddress(warehouse.address);
+    const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
+    if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
+    const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+    backendResponse.value = { status: 'loading' };
+    try {
+      const response = await fetch(`${backendUrl}/api/optimize-route`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addresses: fullRoute }),
+      });
+      const result = await response.json();
+      
+      // 🆕 ASIGNAR RESULTADO (CON O SIN ERRORES)
+      backendResponse.value = result;
+      
+      // 🆕 SI HAY ERRORES, HACER SCROLL AUTOMÁTICO A LA ADVERTENCIA
+      if (result.hasErrors) {
+        console.error('❌ Errores detectados en la ruta:', result.failedAddresses);
+        // Esperar un tick para que el DOM se actualice
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const errorSection = document.querySelector('.address-errors');
+        if (errorSection) {
+          errorSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }
+      
+      if (!response.ok && !result.hasErrors) { 
+        throw new Error(result.message || `Error ${response.status}`); 
+      }
+    } catch (error) {
+      console.error("Error calling backend:", error);
+      backendResponse.value = { error: `Error: ${error.message || 'No se pudo conectar al servidor.'}`, hasErrors: true };
+    }
 }
 
 async function saveToLogbook() {
-    // 1. Agregamos una validación para asegurar que el score también exista
+    // 🆕 VALIDAR QUE NO HAYA ERRORES DE DIRECCIONES
+    if (backendResponse.value?.hasErrors) {
+        alert("❌ No puedes guardar la ruta porque hay direcciones inválidas. Por favor, corrígelas primero.");
+        return;
+    }
+    
     if (!calculatedLogEntry.value || !routeScore.value) { 
         alert("No hay datos calculados o score para guardar."); 
         return; 
     }
     
+    // ... (resto de tu código sin cambios)
     isSaving.value = true; 
     saveStatus.value = null;
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
-    // --- ¡AQUÍ OCURRE LA MAGIA! ---
-    
-    // 2. Creamos un nuevo objeto 'dataToSend'.
-    //    El '...' copia TODAS las propiedades de 'calculatedLogEntry.value' 
-    //    (como pago, millas_totales, vehiculo, etc.) dentro de este nuevo objeto.
     const dataToSend = { ...calculatedLogEntry.value };
-
-    // 3. A ese NUEVO objeto, le agregamos la propiedad 'route_score'.
-    //    (Este nombre 'route_score' debe ser idéntico al de tu columna en Supabase).
     dataToSend.route_score = routeScore.value.total;
-
-    // Ahora 'dataToSend' es un objeto que contiene TODO:
-    // { 
-    //   pago: 75.5, 
-    //   millas_totales: 68.74, 
-    //   vehiculo: 'Pontiac', 
-    //   ... (etc) ...
-    //   route_score: 5  // <-- ¡El nuevo campo!
-    // }
-    // --- FIN DE LA MAGIA ---
 
     try {
         const response = await fetch(`${backendUrl}/api/log-route`, {
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            // 4. En lugar de enviar solo 'calculatedLogEntry.value',
-            //    enviamos nuestro nuevo objeto combinado 'dataToSend'.
             body: JSON.stringify(dataToSend)
         });
         
@@ -925,7 +925,44 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               <div class="eta-scenario"><span class="eta-label pessimistic">Pessimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
             </div>
 
-<!-- LOGBOOK FORM CON NUEVO DISEÑO -->
+
+<!-- 🆕 SECCIÓN DE ERRORES DE DIRECCIONES -->
+<div v-if="backendResponse?.hasErrors && backendResponse?.failedAddresses" class="address-errors">
+  <h3>⚠️ Advertencia: Direcciones No Encontradas</h3>
+  <p class="error-intro">
+    Google Maps no pudo encontrar rutas para las siguientes direcciones. 
+    Por favor, verifica que estén escritas correctamente antes de continuar.
+  </p>
+  
+  <div class="error-list">
+    <div 
+      v-for="(failed, index) in backendResponse.failedAddresses" 
+      :key="index"
+      class="error-item"
+    >
+      <div class="error-header">
+        <span class="error-icon">🚫</span>
+        <strong>{{ failed.type }}</strong>
+      </div>
+      <div class="error-details">
+        <p><strong>Desde:</strong> {{ failed.from }}</p>
+        <p><strong>Hasta:</strong> {{ failed.to }}</p>
+        <p v-if="failed.waypoints && failed.waypoints.length > 0">
+          <strong>Waypoints:</strong> {{ failed.waypoints.join(', ') }}
+        </p>
+        <p class="error-type">
+          <strong>Tipo de Error:</strong> 
+          <span class="error-badge">{{ failed.errorType }}</span>
+        </p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="error-actions">
+    <p>✏️ <strong>Acción requerida:</strong> Corrige las direcciones arriba y vuelve a hacer clic en "Evaluate Scenarios".</p>
+  </div>
+</div>
+            <!-- LOGBOOK FORM CON NUEVO DISEÑO -->
 <div v-if="reportData && calculatedLogEntry && routeScore" class="logbook-form-container">
   
   <!-- RESUMEN CONSCIENTE (SIEMPRE VISIBLE) -->
@@ -1824,5 +1861,128 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 .button-tertiary:hover {
   background-color: rgba(165, 201, 151, 0.1);
   color: var(--color-text-primary);
+}
+/* ========================================
+   ERRORES DE DIRECCIONES
+   ======================================== */
+
+.address-errors {
+  background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%);
+  border: 2px solid #dc3545;
+  border-radius: 12px;
+  padding: 25px;
+  margin: 20px 0;
+  animation: pulseError 2s ease-in-out infinite;
+}
+
+@keyframes pulseError {
+  0%, 100% { border-color: #dc3545; }
+  50% { border-color: #ff5722; }
+}
+
+.address-errors h3 {
+  color: #dc3545;
+  margin: 0 0 15px 0;
+  font-size: 1.3em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.error-intro {
+  color: var(--color-text-primary);
+  margin-bottom: 20px;
+  font-size: 1.05em;
+  line-height: 1.6;
+}
+
+.error-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.error-item {
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.error-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.error-icon {
+  font-size: 1.5em;
+}
+
+.error-header strong {
+  color: #dc3545;
+  font-size: 1.1em;
+}
+
+.error-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.error-details p {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 0.95em;
+}
+
+.error-details strong {
+  color: var(--color-text-secondary);
+  margin-right: 8px;
+}
+
+.error-type {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.error-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background-color: rgba(220, 53, 69, 0.2);
+  border: 1px solid #dc3545;
+  border-radius: 12px;
+  font-size: 0.85em;
+  font-weight: bold;
+  color: #ff5722;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.error-actions {
+  background-color: rgba(255, 193, 7, 0.1);
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 20px;
+}
+
+.error-actions p {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 1.05em;
+  line-height: 1.6;
+}
+
+/* Modificar el botón de guardar cuando hay errores */
+.button-save-log:disabled {
+  background-color: #6c2a32 !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
 }
 </style>
