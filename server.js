@@ -1,10 +1,10 @@
-// server.js (v1.5)
+// server.js (v1.6 - Error Detection)
 
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Client } = require('@googlemaps/google-maps-services-js');
-const { createClient } = require('@supabase/supabase-js'); // <-- 1. IMPORTAR SUPABASE
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = 3000;
@@ -12,20 +12,15 @@ const PORT = 3000;
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
-  'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app', // (Podrías borrar esta)
-  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app' // ¡La URL de tu rama v2.0!
+  'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app'
 ];
 
-// 2. LA FUNCIÓN MEJORADA (que limpia el slash)
 const corsOptions = {
   origin: function (origin, callback) {
-    
-    // --- INICIO DEL CÓDIGO DE DEPURACIÓN ---
-    // ¡ESTO NOS DIRÁ LA VERDAD!
     console.log("--- INICIO DEPURACIÓN CORS ---");
     console.log("Origen (Navegador):", origin);
     console.log("Lista 'allowedOrigins' (En Memoria del Servidor):", allowedOrigins);
-    // --- FIN DEPURACIÓN ---
     
     let originToTest = origin;
     if (originToTest && originToTest.endsWith('/')) {
@@ -36,7 +31,6 @@ const corsOptions = {
       console.log("RESULTADO: Permitido");
       callback(null, true);
     } else {
-      // Este es el error que ya vemos
       console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
       callback(new Error('No permitido por CORS'));
     }
@@ -46,15 +40,13 @@ app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
-// --- 2. INICIALIZAR CLIENTE SUPABASE ---
-// Asegúrate de añadir estas dos variables a tu archivo .env
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Usa la Service Role Key (secreta)
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 console.log("Conectando a Supabase en:", supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'URL no encontrada');
 
-// --- FUNCIÓN ASISTENTE PARA CALCULAR UN TRAMO (sin cambios) ---
+// --- 🆕 FUNCIÓN MEJORADA CON DETECCIÓN DE ERRORES ---
 async function calculateLeg(origin, destination, waypoints = []) {
     try {
         const response = await mapsClient.directions({
@@ -66,35 +58,73 @@ async function calculateLeg(origin, destination, waypoints = []) {
                 key: process.env.GOOGLE_MAPS_API_KEY,
             },
         });
-        const leg = response.data.routes[0]?.legs[0];
-        if (!leg) return { distance: 0, duration: 0 };
+
+        // 🆕 Verificar si la API devolvió una ruta válida
+        if (response.data.status !== 'OK') {
+            console.error(`❌ Google Maps API Error: ${response.data.status}`);
+            return { 
+                distance: 0, 
+                duration: 0, 
+                error: true,
+                errorType: response.data.status,
+                origin,
+                destination,
+                waypoints
+            };
+        }
+
+        const route = response.data.routes[0];
+        if (!route || !route.legs || route.legs.length === 0) {
+            console.error(`❌ No route found between ${origin} and ${destination}`);
+            return { 
+                distance: 0, 
+                duration: 0, 
+                error: true,
+                errorType: 'NO_ROUTE',
+                origin,
+                destination,
+                waypoints
+            };
+        }
         
         let totalDistance = 0;
         let totalDuration = 0;
-        response.data.routes[0].legs.forEach(l => {
-            totalDistance += l.distance.value;
-            totalDuration += l.duration.value;
+        route.legs.forEach(leg => {
+            totalDistance += leg.distance.value;
+            totalDuration += leg.duration.value;
         });
 
         return {
             distance: (totalDistance / 1609.34).toFixed(2),
-            duration: Math.round(totalDuration / 60)
+            duration: Math.round(totalDuration / 60),
+            error: false
         };
     } catch (error) {
-        console.error(`Error calculando tramo de ${origin} a ${destination}:`, error.response?.data?.error_message || error.message);
-        return { distance: 0, duration: 0, error: true };
+        console.error(`❌ Error calculando tramo de ${origin} a ${destination}:`, 
+                      error.response?.data?.error_message || error.message);
+        return { 
+            distance: 0, 
+            duration: 0, 
+            error: true,
+            errorType: 'NETWORK_ERROR',
+            errorMessage: error.response?.data?.error_message || error.message,
+            origin,
+            destination,
+            waypoints
+        };
     }
 }
 
-// --- ENDPOINT /api/optimize-route (sin cambios) ---
+// --- 🆕 ENDPOINT MEJORADO CON VALIDACIÓN DE ERRORES ---
 app.post('/api/optimize-route', async (req, res) => {
-  // ... (Toda tu lógica de v1.2 para calcular escenarios va aquí, sin cambios)
-  // ...
   let { addresses } = req.body;
   addresses = addresses.filter(addr => addr && addr.trim() !== '');
 
   if (!addresses || addresses.length < 3) {
-    return res.status(400).json({ message: 'Se necesitan al menos Origen, una Parada y un Destino.' });
+    return res.status(400).json({ 
+      message: 'Se necesitan al menos Origen, una Parada y un Destino.',
+      hasErrors: true 
+    });
   }
 
   try {
@@ -104,7 +134,7 @@ app.post('/api/optimize-route', async (req, res) => {
     const finalDestination = addresses[addresses.length - 1];
     const workStops = addresses.slice(2, -1);
 
-    console.log('✅ v1.2: Calculando informe de ruta por segmentos...');
+    console.log('✅ v1.6: Calculando informe de ruta por segmentos...');
 
     const toFirstStopPromise = calculateLeg(origin, firstStop);
     const toFinalDestinationPromise = calculateLeg(lastStop, finalDestination);
@@ -129,13 +159,88 @@ app.post('/api/optimize-route', async (req, res) => {
         ...segmentPromises
     ]);
 
+    // 🆕 DETECTAR ERRORES
+    const failedAddresses = [];
+    
+    if (toFirstStop.error) {
+        failedAddresses.push({
+            type: 'Warehouse → Primera Parada',
+            from: origin,
+            to: firstStop,
+            errorType: toFirstStop.errorType
+        });
+    }
+    
+    if (toFinalDestination.error) {
+        failedAddresses.push({
+            type: 'Última Parada → Destino Final',
+            from: lastStop,
+            to: finalDestination,
+            errorType: toFinalDestination.errorType
+        });
+    }
+    
+    if (toLastStopForInverse.error) {
+        failedAddresses.push({
+            type: 'Warehouse → Última Parada (Ruta Inversa)',
+            from: origin,
+            to: lastStop,
+            errorType: toLastStopForInverse.errorType
+        });
+    }
+    
+    if (fromFirstStopToHome.error) {
+        failedAddresses.push({
+            type: 'Primera Parada → Destino (Ruta Inversa)',
+            from: firstStop,
+            to: finalDestination,
+            errorType: fromFirstStopToHome.errorType
+        });
+    }
+
+    segmentResults.forEach((result, index) => {
+        if (result.error) {
+            const chunk = workStopChunks[index];
+            failedAddresses.push({
+                type: `Segmento ${index + 1}`,
+                from: chunk[0],
+                to: chunk[chunk.length - 1],
+                waypoints: chunk.slice(1, -1),
+                errorType: result.errorType
+            });
+        }
+    });
+
+    // 🆕 SI HAY ERRORES, DEVOLVER RESPUESTA ESPECIAL
+    if (failedAddresses.length > 0) {
+        console.error('❌ Se encontraron direcciones inválidas:', failedAddresses);
+        return res.status(400).json({
+            hasErrors: true,
+            message: 'Algunas direcciones no pudieron ser geocodificadas',
+            failedAddresses: failedAddresses,
+            // Aún enviamos los datos parciales para debugging
+            toFirstStop,
+            segments: segmentResults.map((result, index) => ({
+                ...result,
+                stops: workStopChunks[index]
+            })),
+            toFinalDestination,
+            inverseRouteLegs: {
+                toLastStop: toLastStopForInverse,
+                fromFirstStop: fromFirstStopToHome
+            }
+        });
+    }
+
+    // ✅ TODO OK - RESPUESTA NORMAL
     const segmentsWithStops = segmentResults.map((result, index) => ({
         ...result,
         stops: workStopChunks[index]
     }));
 
-    console.log('🎉 v1.2: Informe calculado con éxito!');
+    console.log('🎉 v1.6: Informe calculado con éxito!');
     res.json({
+        hasErrors: false,
         toFirstStop,
         segments: segmentsWithStops,
         toFinalDestination,
@@ -147,20 +252,20 @@ app.post('/api/optimize-route', async (req, res) => {
 
   } catch (error) {
     console.error("❌ Error en el cálculo de escenarios:", error.message);
-    res.status(500).json({ message: 'Error al calcular los escenarios.' });
+    res.status(500).json({ 
+      hasErrors: true,
+      message: 'Error al calcular los escenarios.',
+      error: error.message 
+    });
   }
 });
 
-
-// --- 3. NUEVO ENDPOINT PARA GUARDAR EN BITÁCORA ---
-
+// --- ENDPOINT LOG-ROUTE (sin cambios) ---
 app.post('/api/log-route', async (req, res) => {
     const logData = req.body;
     console.log('📦 Recibiendo datos v2 para guardar en bitácora:', logData);
 
-    // Mapeamos los nombres del JS a los nombres de la BD (lowercase)
     const dataToInsert = {
-        // --- Existing fields (lowercase) ---
         fecha: logData.fecha,
         vehiculo: logData.vehiculo,
         warehouse: logData.warehouse,
@@ -172,9 +277,9 @@ app.post('/api/log-route', async (req, res) => {
         despues_del_bloque: logData.despues_del_bloque,
         tiempo_total: logData.tiempo_total,
         pago_real_por_hora: logData.pago_real_por_hora,
-        commute_1: logData.commute_1, // This is the manual commute 1 distance
-        commute_2: logData.commute_2, // API distance: last stop -> home
-        millas_de_trabajo: logData.millas_de_trabajo, // API distance: WH -> first + between stops
+        commute_1: logData.commute_1,
+        commute_2: logData.commute_2,
+        millas_de_trabajo: logData.millas_de_trabajo,
         millas_totales: logData.millas_totales,
         millas_por_hora: logData.millas_por_hora,
         gasto_de_gasolina: logData.gasto_de_gasolina,
@@ -183,16 +288,12 @@ app.post('/api/log-route', async (req, res) => {
         claim_por_milla: logData.claim_por_milla,
         route_score: logData.route_score,
         numero_paradas: logData.numero_paradas,
-       
-        
-        // --- NEW fields (lowercase) ---
-        user_id: logData.user_id,             // Temporary UUID or null
-        primary_city: logData.primary_city,   // Most frequent city
-        status: 1,                            // Always save as 'active' initially
-        first_stop: logData.first_stop       // API distance: WH -> first stop
+        user_id: logData.user_id,
+        primary_city: logData.primary_city,
+        status: 1,
+        first_stop: logData.first_stop
     };
 
-    // Remove null/undefined values to allow DB defaults if any (like status)
     Object.keys(dataToInsert).forEach(key => {
         if (dataToInsert[key] === null || dataToInsert[key] === undefined) {
             delete dataToInsert[key];
@@ -201,9 +302,9 @@ app.post('/api/log-route', async (req, res) => {
 
     try {
         const { data, error } = await supabase
-            .from('routes') // Your table name
+            .from('routes')
             .insert([dataToInsert])
-            .select(); // Returns the inserted record
+            .select();
 
         if (error) {
             console.error('❌ Error de Supabase al insertar:', error.message);
@@ -219,7 +320,6 @@ app.post('/api/log-route', async (req, res) => {
     }
 });
 
-
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend v1.5 (con Supabase) corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor backend v1.6 (con detección de errores) corriendo en http://localhost:${PORT}`);
 });
