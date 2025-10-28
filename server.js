@@ -1,4 +1,4 @@
-// server.js (v1.6 - Error Detection)
+// server.js (v1.7 - Segmentos Corregidos + Error Detection)
 
 require('dotenv').config();
 const express = require('express');
@@ -20,7 +20,6 @@ const corsOptions = {
   origin: function (origin, callback) {
     console.log("--- INICIO DEPURACIÓN CORS ---");
     console.log("Origen (Navegador):", origin);
-    console.log("Lista 'allowedOrigins' (En Memoria del Servidor):", allowedOrigins);
     
     let originToTest = origin;
     if (originToTest && originToTest.endsWith('/')) {
@@ -46,7 +45,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 console.log("Conectando a Supabase en:", supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'URL no encontrada');
 
-// --- 🆕 FUNCIÓN MEJORADA CON DETECCIÓN DE ERRORES ---
+// --- FUNCIÓN CON DETECCIÓN DE ERRORES ---
 async function calculateLeg(origin, destination, waypoints = []) {
     try {
         const response = await mapsClient.directions({
@@ -59,7 +58,6 @@ async function calculateLeg(origin, destination, waypoints = []) {
             },
         });
 
-        // 🆕 Verificar si la API devolvió una ruta válida
         if (response.data.status !== 'OK') {
             console.error(`❌ Google Maps API Error: ${response.data.status}`);
             return { 
@@ -115,7 +113,7 @@ async function calculateLeg(origin, destination, waypoints = []) {
     }
 }
 
-// --- 🆕 ENDPOINT MEJORADO CON VALIDACIÓN DE ERRORES ---
+// --- 🆕 ENDPOINT CORREGIDO (TU MÉTODO MANUAL) ---
 app.post('/api/optimize-route', async (req, res) => {
   let { addresses } = req.body;
   addresses = addresses.filter(addr => addr && addr.trim() !== '');
@@ -128,27 +126,50 @@ app.post('/api/optimize-route', async (req, res) => {
   }
 
   try {
-    const origin = addresses[0];
-    const firstStop = addresses[1];
-    const lastStop = addresses[addresses.length - 2];
-    const finalDestination = addresses[addresses.length - 1];
-    const workStops = addresses.slice(2, -1);
+    const origin = addresses[0]; // Warehouse
+    const finalDestination = addresses[addresses.length - 1]; // Último destino
+    
+    // 🆕 CAMBIO CRÍTICO: workStops AHORA INCLUYE la primera parada (índice 1)
+    const workStops = addresses.slice(1, -1); // Desde parada #2 hasta la última parada
+    const firstStop = workStops[0]; // Primera parada (la #2 en tu numeración)
+    const lastStop = workStops[workStops.length - 1]; // Última parada
 
-    console.log('✅ v1.6: Calculando informe de ruta por segmentos...');
+    console.log('✅ v1.7: Calculando con método manual correcto...');
+    console.log(`   Warehouse: ${origin}`);
+    console.log(`   Primera Parada: ${firstStop}`);
+    console.log(`   Última Parada: ${lastStop}`);
+    console.log(`   Total de paradas de trabajo: ${workStops.length}`);
 
+    // Calcular tramos especiales (sin cambios)
     const toFirstStopPromise = calculateLeg(origin, firstStop);
     const toFinalDestinationPromise = calculateLeg(lastStop, finalDestination);
     const toLastStopForInversePromise = calculateLeg(origin, lastStop);
     const fromFirstStopToHomePromise = calculateLeg(firstStop, finalDestination);
 
-    const STOPS_PER_SEGMENT = 9;
-    const workStopChunks = [];
-    for (let i = 0; i < workStops.length; i += STOPS_PER_SEGMENT) {
-        workStopChunks.push(workStops.slice(i, i + STOPS_PER_SEGMENT));
+    // 🆕 SEGMENTACIÓN CORRECTA (COMO TU MÉTODO MANUAL)
+    const STOPS_PER_SEGMENT = 10; // 1 origen + 9 waypoints = 10 paradas por segmento
+    const workStopSegments = [];
+    
+    for (let i = 0; i < workStops.length; i += 9) { // Avanzamos de 9 en 9
+        const segmentStops = workStops.slice(i, i + 10); // Tomamos 10 (1 origen + hasta 9 siguientes)
+        
+        if (segmentStops.length > 0) {
+            workStopSegments.push({
+                origin: segmentStops[0], // Primera parada del segmento
+                destination: segmentStops[segmentStops.length - 1], // Última del segmento
+                waypoints: segmentStops.slice(1, -1) // Intermedias (máximo 9)
+            });
+        }
     }
 
-    const segmentPromises = workStopChunks.map(chunk => 
-        calculateLeg(chunk[0], chunk[chunk.length - 1], chunk.slice(1, -1))
+    console.log(`   Segmentos creados: ${workStopSegments.length}`);
+    workStopSegments.forEach((seg, idx) => {
+        console.log(`   Segmento ${idx + 1}: ${seg.origin} → ${seg.destination} (${seg.waypoints.length} waypoints)`);
+    });
+
+    // Calcular todos los segmentos
+    const segmentPromises = workStopSegments.map(seg => 
+        calculateLeg(seg.origin, seg.destination, seg.waypoints)
     );
     
     const [toFirstStop, toFinalDestination, toLastStopForInverse, fromFirstStopToHome, ...segmentResults] = await Promise.all([
@@ -159,7 +180,7 @@ app.post('/api/optimize-route', async (req, res) => {
         ...segmentPromises
     ]);
 
-    // 🆕 DETECTAR ERRORES
+    // --- DETECTAR ERRORES ---
     const failedAddresses = [];
     
     if (toFirstStop.error) {
@@ -200,29 +221,30 @@ app.post('/api/optimize-route', async (req, res) => {
 
     segmentResults.forEach((result, index) => {
         if (result.error) {
-            const chunk = workStopChunks[index];
+            const seg = workStopSegments[index];
             failedAddresses.push({
                 type: `Segmento ${index + 1}`,
-                from: chunk[0],
-                to: chunk[chunk.length - 1],
-                waypoints: chunk.slice(1, -1),
+                from: seg.origin,
+                to: seg.destination,
+                waypoints: seg.waypoints,
                 errorType: result.errorType
             });
         }
     });
 
-    // 🆕 SI HAY ERRORES, DEVOLVER RESPUESTA ESPECIAL
+    // SI HAY ERRORES, DEVOLVER RESPUESTA ESPECIAL
     if (failedAddresses.length > 0) {
         console.error('❌ Se encontraron direcciones inválidas:', failedAddresses);
         return res.status(400).json({
             hasErrors: true,
             message: 'Algunas direcciones no pudieron ser geocodificadas',
             failedAddresses: failedAddresses,
-            // Aún enviamos los datos parciales para debugging
             toFirstStop,
             segments: segmentResults.map((result, index) => ({
                 ...result,
-                stops: workStopChunks[index]
+                stops: workStopSegments[index] ? 
+                    [workStopSegments[index].origin, ...workStopSegments[index].waypoints, workStopSegments[index].destination] : 
+                    []
             })),
             toFinalDestination,
             inverseRouteLegs: {
@@ -233,12 +255,21 @@ app.post('/api/optimize-route', async (req, res) => {
     }
 
     // ✅ TODO OK - RESPUESTA NORMAL
-    const segmentsWithStops = segmentResults.map((result, index) => ({
-        ...result,
-        stops: workStopChunks[index]
-    }));
+    const segmentsWithStops = segmentResults.map((result, index) => {
+        const seg = workStopSegments[index];
+        return {
+            ...result,
+            stops: [seg.origin, ...seg.waypoints, seg.destination] // Todas las paradas del segmento
+        };
+    });
 
-    console.log('🎉 v1.6: Informe calculado con éxito!');
+    console.log('🎉 v1.7: Cálculo completado correctamente');
+    console.log(`   Warehouse → Primera: ${toFirstStop.distance} mi`);
+    segmentsWithStops.forEach((seg, idx) => {
+        console.log(`   Segmento ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
+    });
+    console.log(`   Última → Destino: ${toFinalDestination.distance} mi`);
+
     res.json({
         hasErrors: false,
         toFirstStop,
@@ -321,5 +352,5 @@ app.post('/api/log-route', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend v1.6 (con detección de errores) corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor backend v1.7 (segmentos corregidos) corriendo en http://localhost:${PORT}`);
 });
