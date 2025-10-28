@@ -788,6 +788,15 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 
         <div class="block-details-container">
             <h3>Block Details</h3>
+            <div class="form-group">
+              <label for="user-select">Conductor</label>
+              <select id="user-select" v-model="selectedUserId">
+                <option v-for="user in USERS" :key="user.id" :value="user.id">
+                  {{ user.name }}
+                </option>
+              </select>
+            </div>
+            
             <div class="form-row">
                 <div class="form-group">
                     <label>Date</label>
@@ -989,14 +998,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
       <!-- User & Scenario Selection -->
       <h3>📋 Datos del Bloque</h3>
       <div class="form-row">
-        <div class="form-group">
-          <label for="user-select">Conductor</label>
-          <select id="user-select" v-model="selectedUserId">
-            <option v-for="user in USERS" :key="user.id" :value="user.id">
-              {{ user.name }}
-            </option>
-          </select>
-        </div>
+
         <div class="form-group">
           <label>Escenario Usado</label>
           <div class="scenario-pills">
