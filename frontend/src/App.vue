@@ -5,6 +5,9 @@
       <img :src="logo" alt="Flex Pilot Logo" class="app-logo" />
     </header>
 
+    <div id="app">
+    <PendingETABanner />  <router-view /> </div>
+
     <main>
       <router-view />
     </main>
@@ -17,6 +20,7 @@
 import BottomNavBar from './components/BottomNavBar.vue';
 // (2) Importa tu logo desde la carpeta assets
 import logo from './assets/logo_FlexPilot.png'; 
+import PendingETABanner from '@/components/PendingETABanner.vue'
 </script>
 
 <style scoped>

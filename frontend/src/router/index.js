@@ -3,6 +3,7 @@ import HomeView from '../views/HomeView.vue';
 import UploadView from '../views/UploadView.vue';
 import LogbookView from '../views/LogbookView.vue';
 import SettingsView from '../views/SettingsView.vue';
+import LiveETAView from '@/views/LiveETAView.vue';
 
 const routes = [
   {
@@ -25,6 +26,12 @@ const routes = [
     name: 'Settings',
     component: SettingsView,
   },
+  {
+  path: '/live-eta',
+  name: 'LiveETA',
+  component: LiveETAView,
+  meta: { title: 'Cálculo en Caliente' }
+}
 ];
 
 const router = createRouter({

@@ -658,6 +658,8 @@ async function sendToBackend() {
     }
 }
 
+// Pega esto SOBREESCRIBIENDO tu función saveToLogbook() existente
+
 async function saveToLogbook() {
     // 🆕 VALIDAR QUE NO HAYA ERRORES DE DIRECCIONES
     if (backendResponse.value?.hasErrors) {
@@ -666,33 +668,47 @@ async function saveToLogbook() {
     }
     
     if (!calculatedLogEntry.value || !routeScore.value) { 
-        alert("No hay datos calculados o score para guardar."); 
+        alert("No hay datos calculados o score para guardar.");
         return; 
     }
     
-    // ... (resto de tu código sin cambios)
     isSaving.value = true; 
     saveStatus.value = null;
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-    const dataToSend = { ...calculatedLogEntry.value };
-    dataToSend.route_score = routeScore.value.total;
+    
+    // --- ⬇️ AQUÍ ESTÁ EL CAMBIO IMPORTANTE ⬇️ ---
+    const dataToSend = { 
+      ...calculatedLogEntry.value,
+      route_score: routeScore.value.total,
+      
+      // AGREGAR ESTOS CAMPOS (Según Fase 6 del Informe)
+      stops_json: extractedAddresses.value, // Array completo sin encriptar //[cite: 496]
+      eta_optimista: scenarioETAs.value[selectedScenarioForLog.value].optimistic.eta, 
+      eta_normal: scenarioETAs.value[selectedScenarioForLog.value].normal.eta, 
+      eta_pesimista: scenarioETAs.value[selectedScenarioForLog.value].pessimistic.eta 
+    };
+    // --- ⬆️ FIN DEL CAMBIO ⬆️ ---
 
     try {
-        const response = await fetch(`${backendUrl}/api/log-route`, {
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify(dataToSend)
+        const response = await fetch(`${backendUrl}/api/log-route`, { //[cite: 500]
+            method: 'POST', //[cite: 501]
+            headers: { 'Content-Type': 'application/json' }, //[cite: 502]
+            body: JSON.stringify(dataToSend) //[cite: 503]
         });
         
-        const result = await response.json();
-        if (response.ok && result.success) {
-            console.log("Respuesta del servidor:", result);
-            saveStatus.value = { success: true, message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` };
-        } else { throw new Error(result.message || 'Error desconocido del servidor.'); }
+        const result = await response.json(); //[cite: 504]
+        if (response.ok && result.success) { //[cite: 505]
+            console.log("Respuesta del servidor:", result); //[cite: 506]
+            saveStatus.value = { success: true, message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` }; //[cite: 507-510]
+        } else { 
+          throw new Error(result.message || 'Error desconocido del servidor.'); //[cite: 513]
+        }
     } catch (error) {
-        console.error("Error al guardar en bitácora:", error);
-        saveStatus.value = { success: false, message: `Error: ${error.message}` };
-    } finally { isSaving.value = false; }
+        console.error("Error al guardar en bitácora:", error); //[cite: 515]
+        saveStatus.value = { success: false, message: `Error: ${error.message}` }; //[cite: 516-518]
+    } finally { 
+      isSaving.value = false; //[cite: 521]
+    }
 }
 
 // UI Helpers (Restored, simple version)
