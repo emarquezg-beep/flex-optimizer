@@ -8,6 +8,11 @@
       <span class="icon">📤</span>
       <span class="label">Nuevo</span>
     </router-link>
+
+    <router-link to="/live-eta" class="nav-item">
+      <span class="icon">🚀</span>
+      <span class="label">En Vivo</span>
+    </router-link>
     <router-link to="/logbook" class="nav-item">
       <span class="icon">📓</span>
       <span class="label">Bitácora</span>
