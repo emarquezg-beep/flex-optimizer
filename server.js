@@ -494,6 +494,11 @@ app.get('/api/active-route/:userId', async (req, res) => {
 });
 
 // 2. POST /api/calculate-live-eta
+
+    console.log('🕐 Servidor timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+    console.log('🕐 Hora servidor (now):', new Date().toString());
+    console.log('🕐 Hora servidor (ISO):', new Date().toISOString());
+
 app.post('/api/calculate-live-eta', async (req, res) => {
   const { routeId, currentStopNumber } = req.body;
   if (!routeId || !currentStopNumber) {
@@ -576,11 +581,13 @@ app.post('/api/calculate-live-eta', async (req, res) => {
       const totalMinutes = baseDriveMinutes + baseStopTime + extraAptTime;
       const now = new Date();
       const etaTime = new Date(now.getTime() + totalMinutes * 60000);
+
       return {
         totalMinutes: Math.round(totalMinutes),
         eta: etaTime.toLocaleTimeString('en-US', {
           hour: 'numeric',
-          minute: '2-digit'
+          minute: '2-digit',
+          timeZone: 'America/New_York' // <-- ESTA ES LA LÍNEA MÁGICA
         })
       };
     };
