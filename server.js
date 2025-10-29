@@ -728,29 +728,41 @@ app.post('/api/skip-eta', async (req, res) => {
 // (Ejecutar ANTES de app.listen)
 
 // Función helper para calcular cuándo borrar stops
-const calculateCleanupTime = (hora, duracionHoras, despuesBloqueHoras) => {
+// REEMPLAZA ESTA FUNCIÓN
+const calculateCleanupTime = (fecha, hora, duracionHoras, despuesBloqueHoras) => {
   try {
+    // fecha: "2025-10-29" (string de la BD)
+    // hora: "16:30" (string de la BD)
     const [hours, minutes] = hora.split(':').map(Number);
-    const startTime = new Date();
+    
+    // USA LA FECHA DE LA RUTA, NO new Date()
+    const startTime = new Date(fecha); 
+    
+    // Establece la hora asumiendo que el servidor es UTC
+    // y la hora guardada es local (ET, ~4-5 horas de diferencia)
+    // "16:30" se guardará como 16:30 UTC en la fecha de la ruta
+    // Lo cual es incorrecto pero consistente con el bug original.
+    // La clave es usar la FECHA de la ruta.
     startTime.setHours(hours, minutes, 0, 0);
-    // +30min buffer
-    const totalMinutes = (duracionHoras + despuesBloqueHoras) * 60 + 30;
+
+    const totalMinutes = (duracionHoras + despuesBloqueHoras) * 60 + 30; // +30min buffer
     return new Date(startTime.getTime() + totalMinutes * 60000);
   } catch(e) {
     console.error("Error en calculateCleanupTime", e);
-    // Devuelve una fecha en el pasado para no borrar por error
     return new Date(0); 
   }
 };
 
 // Ejecutar cada 5 minutos
+// REEMPLAZA ESTE BLOQUE
 setInterval(async () => {
   try {
     const now = new Date();
     // Obtener rutas activas que ya deberian haberse completado
+    // AÑADIMOS "fecha" AL SELECT
     const { data: activeRoutes, error } = await supabase
       .from('routes')
-      .select('id, hora, duracion_horas, despues_del_bloque')
+      .select('id, fecha, hora, duracion_horas, despues_del_bloque') // <-- CAMBIO AQUÍ
       .eq('status', 1)
       .not('stops_json', 'is', null);
 
@@ -758,7 +770,10 @@ setInterval(async () => {
 
     if (activeRoutes && activeRoutes.length > 0) {
       for (const route of activeRoutes) {
+        
+        // PASAMOS "route.fecha" A LA FUNCIÓN
         const cleanupTime = calculateCleanupTime(
+          route.fecha,  // <-- CAMBIO AQUÍ
           route.hora,
           route.duracion_horas,
           parseFloat(route.despues_del_bloque) || 0
