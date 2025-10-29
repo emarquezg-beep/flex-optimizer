@@ -444,7 +444,8 @@ app.get('/api/active-route/:userId', async (req, res) => {
       .select('*')
       .eq('user_id', userId)
       .eq('status', 1)
-      .order('created_at', { ascending: false })
+      .order('fecha', { ascending: false }) // <-- CAMBIADO
+      .order('hora', { ascending: false })  // <-- AÑADIDO
       .limit(1)
       .single();
 
