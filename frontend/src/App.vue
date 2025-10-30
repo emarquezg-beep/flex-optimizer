@@ -6,8 +6,7 @@
     </header>
 
     <div id="app">
-      <PendingETABanner />  
-    </div>
+    <PendingETABanner />  <router-view /> </div>
 
     <main>
       <router-view />
