@@ -36,13 +36,13 @@ const VEHICULO_OPTIONS = ['Pontiac', 'Trax', 'Kia', 'Otro Carro'];
 const DURACION_OPTIONS = [3, 3.5, 4, 4.5, 5];
 
 const warehouses = ref([
-  { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL', commuteMiles: 24 },
-  { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL', commuteMiles: 18 },
+  { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL', commuteMiles: 23 },
+  { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL', commuteMiles: 28 },
   { code: 'DMO3', address: '1216 S Orange Blossom Trl Orlando, FL', commuteMiles: 20 },
-  { code: 'DFL4', address: '4401 Seaboard Rd Orlando, FL', commuteMiles: 22 },
-  { code: 'DFL8', address: '7453 Republic Dr Groveland, FL', commuteMiles: 35 },
-  { code: 'DMO4', address: '2400 Mason Ave Daytona Beach, FL', commuteMiles: 55 },
-  { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL', commuteMiles: 15 },
+  { code: 'DFL4', address: '4401 Seaboard Rd Orlando, FL', commuteMiles: 18 },
+  { code: 'DFL8', address: '7453 Republic Dr Groveland, FL', commuteMiles: 47 },
+  { code: 'DMO4', address: '2400 Mason Ave Daytona Beach, FL', commuteMiles: 50 },
+  { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL', commuteMiles: 24 },
 ]);
 
 const destinations = ref([

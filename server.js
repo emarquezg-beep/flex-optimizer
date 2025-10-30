@@ -509,6 +509,9 @@ app.get('/api/active-route/:userId', async (req, res) => {
     console.log('🕐 Hora servidor (now):', new Date().toString());
     console.log('🕐 Hora servidor (ISO):', new Date().toISOString());
 
+// REEMPLAZA TU ENDPOINT /api/calculate-live-eta CON ESTE:
+
+// 2. POST /api/calculate-live-eta (CON SEGMENTACIÓN)
 app.post('/api/calculate-live-eta', async (req, res) => {
   const { routeId, currentStopNumber } = req.body;
   if (!routeId || !currentStopNumber) {
@@ -518,7 +521,7 @@ app.post('/api/calculate-live-eta', async (req, res) => {
   }
 
   try {
-    // 1. Obtener ruta de BD
+    // 1. Obtener ruta y 2. Desencriptar paradas (Sin cambios)
     const { data: route, error } = await supabase
       .from('routes')
       .select('*')
@@ -529,12 +532,12 @@ app.post('/api/calculate-live-eta', async (req, res) => {
     if (error) {
       throw new Error('Ruta no encontrada o ya finalizada');
     }
-    // 2. Desencriptar paradas
     const allStops = decryptStops(route.stops_json);
     if (!allStops) {
       throw new Error('Error desencriptando paradas');
     }
-    // 3. Filtrar paradas
+    
+    // 3. Filtrar paradas (Sin cambios)
     const remainingStops = allStops.filter(
       stop => stop.number >= currentStopNumber && stop.address
     );
@@ -547,92 +550,125 @@ app.post('/api/calculate-live-eta', async (req, res) => {
     console.log(`Recalculando desde parada ${currentStopNumber}`);
     console.log(`Paradas restantes: ${remainingStops.length} `);
     
-    // 4. Construir ruta
-    const currentStopAddress = remainingStops[0].address;
-    // NOTA: Asumimos 'Casa' como destino. Idealmente, esto debería sacarse de la BD o un .env
-    const finalDestinationAddress = '513 Alafaya Woods Blvd Oviedo, FL';
+    // --- 4. 🆕 CONSTRUIR RUTA SEGMENTADA ---
     
-    const destinationForCalc = finalDestinationAddress;
-    // Los waypoints son TODAS las paradas restantes EXCEPTO la actual (que es el origen)
-    const waypointsForCalc = remainingStops.slice(1).map(s => s.address);
+    // Lista de todos los puntos a visitar: 
+    // [ParadaActual, SiguienteParada, ..., UltimaParada, Casa]
+    const finalDestinationAddress = '513 Alafaya Woods Blvd Oviedo, FL';
+    const allRemainingPoints = remainingStops.map(s => s.address);
+    allRemainingPoints.push(finalDestinationAddress);
 
+    // Límite de Google: 1 Origen + 25 Waypoints + 1 Destino = 27 puntos
+    // Usamos 26 por seguridad (1 Origen + 24 Waypoints + 1 Destino)
+    const STOPS_PER_SEGMENT = 26; 
+    const routeSegments = [];
 
-    // 5. Llamar a Google Maps API
-    const routeResult = await calculateLeg(
-      currentStopAddress,
-      destinationForCalc, // Destino final (Casa)
-      waypointsForCalc // Paradas intermedias de trabajo
-    );
+    for (let i = 0; i < allRemainingPoints.length; i += (STOPS_PER_SEGMENT - 1)) {
+        const segmentPoints = allRemainingPoints.slice(i, i + STOPS_PER_SEGMENT);
+        
+        if (segmentPoints.length > 0) {
+            // Si es el último segmento y solo tiene 1 punto,
+            // ya fue el destino del segmento anterior.
+            if (segmentPoints.length === 1 && i > 0) {
+               break; 
+            }
 
-    if (routeResult.error) {
-      throw new Error('Error calculando ruta con Google Maps');
+            routeSegments.push({
+                origin: segmentPoints[0],
+                destination: segmentPoints[segmentPoints.length - 1],
+                waypoints: segmentPoints.slice(1, -1) // Waypoints intermedios
+            });
+        }
     }
 
-    // 6. Calcular ETAs
-    const baseDriveMinutes = parseFloat(routeResult.duration) || 0;
+    // 5. 🆕 LLAMAR A GOOGLE MAPS API POR SEGMENTOS
+    const segmentPromises = routeSegments.map(seg => 
+        calculateLeg(seg.origin, seg.destination, seg.waypoints)
+    );
     
-    const stopCount = remainingStops.length;
+    const segmentResults = await Promise.all(segmentPromises);
+
+    // 6. 🆕 CALCULAR TOTALES Y ETAs
+    let totalDistance = 0;
+    let totalDuration = 0;
+    let hasError = false;
+
+    segmentResults.forEach(res => {
+      if (res.error) hasError = true;
+      totalDuration += res.duration;
+      totalDistance += parseFloat(res.distance);
+    });
+
+    if (hasError) {
+      throw new Error('Error calculando un segmento de la ruta con Google Maps');
+    }
+    
+    // A partir de aquí, la lógica es la misma que antes, 
+    // pero usando los totales de los segmentos.
+    
+    const baseDriveMinutes = totalDuration; // Tiempo total de conducción (trabajo + commute)
+    const remainingMiles = totalDistance;
+    
+    // Contar paradas de TRABAJO (sin incluir la casa)
+    const stopCount = remainingStops.length; 
     let aptCount = 0;
     let downtownCount = 0;
     remainingStops.forEach(stop => {
       if (stop.isDowntown) {
         downtownCount++;
-        aptCount++; // Downtown cuenta como apt también
+        aptCount++; 
       } else if (stop.address && stop.address.match(/APT|UNIT|#/i)) {
         aptCount++;
       }
     });
     const regularApts = aptCount - downtownCount;
 
-    // Función helper para calcular ETA
-        const calculateETA = (multiplier) => {
-            const baseStopTime = stopCount * multiplier;
-            const extraAptTime = (regularApts * 1.5) + (downtownCount * 4.5);
-            const totalMinutes = baseDriveMinutes + baseStopTime + extraAptTime;
-            
-            // Obtener hora actual en Eastern Time
-            const now = DateTime.now().setZone('America/New_York');
-            const etaTime = now.plus({ minutes: totalMinutes });
-            
-            return {
-                totalMinutes: Math.round(totalMinutes),
-                eta: etaTime.toLocaleString(DateTime.TIME_SIMPLE), // "8:30 PM"
-                etaISO: etaTime.toISO() // Para debugging
-            };
-        };
+    // Función helper (con la corrección de zona horaria que hicimos antes)
+    const calculateETA = (multiplier) => {
+      const baseStopTime = stopCount * multiplier;
+      const extraAptTime = (regularApts * 1.5) + (downtownCount * 4.5);
+      // Total = (Drive + Commute) + (Tiempo de Paradas)
+      const totalMinutes = baseDriveMinutes + baseStopTime + extraAptTime; 
+      const now = new Date();
+      const etaTime = new Date(now.getTime() + totalMinutes * 60000);
+      return {
+        totalMinutes: Math.round(totalMinutes),
+        eta: etaTime.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZone: 'America/New_York' 
+        })
+      };
+    };
 
-        const liveETAs = {
-            optimistic: calculateETA(0.90),
-            normal: calculateETA(1.10),
-            pessimistic: calculateETA(1.50)
-        };
+    const liveETAs = {
+      optimistic: calculateETA(0.90),
+      normal: calculateETA(1.10),
+      pessimistic: calculateETA(1.50)
+    };
 
-        console.log('✅ ETAs recalculados (Eastern Time):', {
-            currentTime: DateTime.now().setZone('America/New_York').toLocaleString(DateTime.DATETIME_SHORT),
-            etas: liveETAs
-        });
+    console.log('✅ ETAs recalculados (segmentados):', liveETAs);
+    res.json({
+      success: true,
+      currentStop: currentStopNumber,
+      remainingStops: remainingStops.length,
+      remainingMiles: remainingMiles.toFixed(2), // 🆕 Enviamos las millas totales
+      etas: liveETAs,
+      breakdown: {
+        baseDriveMinutes: Math.round(baseDriveMinutes),
+        stopCount,
+        aptCount,
+        downtownCount
+      }
+    });
 
-        res.json({
-            success: true,
-            currentStop: currentStopNumber,
-            remainingStops: remainingStops.length,
-            remainingMiles: routeResult.distance,
-            etas: liveETAs,
-            breakdown: {
-                baseDriveMinutes,
-                stopCount,
-                aptCount,
-                downtownCount
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ Error en calculate-live-eta:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
+  } catch (error) {
+    console.error('❌ Error en calculate-live-eta:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 // 3. POST /api/complete-route
