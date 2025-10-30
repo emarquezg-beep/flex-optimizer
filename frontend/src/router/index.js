@@ -4,7 +4,7 @@ const routes = [
   {
     path: '/',
     name: 'Home',
-    component: () => import('@/views/HomeView.vue'), // Lazy load
+    component: () => import('@/views/HomeView.vue'),
     meta: { title: 'Inicio' }
   },
   {
@@ -20,16 +20,16 @@ const routes = [
     meta: { title: 'En Vivo' }
   },
   {
-    path: '/reportes',
-    name: 'Reportes',
-    component: () => import('@/views/ReportesView.vue'),
-    meta: { title: 'Reportes' }
+    path: '/logbook',
+    name: 'Logbook',
+    component: () => import('@/views/LogbookView.vue'),
+    meta: { title: 'Bitácora' }
   },
   {
-    path: '/bitacora',
-    name: 'Bitacora',
-    component: () => import('@/views/BitacoraView.vue'),
-    meta: { title: 'Bitácora' }
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('@/views/SettingsView.vue'),
+    meta: { title: 'Ajustes' }
   }
 ]
 
@@ -45,7 +45,6 @@ const router = createRouter({
   }
 })
 
-// Update document title
 router.beforeEach((to, from, next) => {
   document.title = `${to.meta.title || 'Flex Pilot'} | Flex Optimizer`
   next()

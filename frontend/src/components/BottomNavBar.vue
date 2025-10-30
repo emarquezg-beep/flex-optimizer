@@ -1,16 +1,16 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Home, BarChart3, Flame, BookOpen, Settings } from 'lucide-vue-next'
+import { Home, Flame, BookOpen, Settings, Upload } from 'lucide-vue-next'
 
 const route = useRoute()
 
 const navItems = [
   { name: 'Home', path: '/', icon: Home },
-  { name: 'Reportes', path: '/reportes', icon: BarChart3 },
+  { name: 'Upload', path: '/upload', icon: Upload },
   { name: 'En Vivo', path: '/live-eta', icon: Flame },
-  { name: 'Bitácora', path: '/bitacora', icon: BookOpen },
-  { name: 'Ajustes', path: '/ajustes', icon: Settings }
+  { name: 'Bitácora', path: '/logbook', icon: BookOpen },
+  { name: 'Ajustes', path: '/settings', icon: Settings }
 ]
 
 const isActive = (path) => {
@@ -103,7 +103,7 @@ const isActive = (path) => {
   }
 }
 
-/* Active indicator (opcional - línea superior) */
+/* Active indicator */
 .nav-item--active::before {
   content: '';
   position: absolute;
