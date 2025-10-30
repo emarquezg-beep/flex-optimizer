@@ -57,9 +57,16 @@ const customDestination = ref('');
 
 const mostrarDetalles = ref(false);
 
+const getLocalDateString = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 const selectedScenarioForLog = ref('normal');
 const blockData = ref({
-  fecha: new Date().toISOString().split('T')[0],
+  fecha: getLocalDateString(), // <-- USA LA FUNCIÓN HELPER
   vehiculo: VEHICULO_OPTIONS[0],
   hora: '07:00',
   duracion_horas: DURACION_OPTIONS[1],

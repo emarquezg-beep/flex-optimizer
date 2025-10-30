@@ -751,7 +751,9 @@ const calculateCleanupTime = (fecha, hora, duracionHoras, despuesBloqueHoras) =>
     // "16:30" se guardará como 16:30 UTC en la fecha de la ruta
     // Lo cual es incorrecto pero consistente con el bug original.
     // La clave es usar la FECHA de la ruta.
-    startTime.setHours(hours, minutes, 0, 0);
+    //startTime.setHours(hours, minutes, 0, 0);
+    // ESTA ES LA LÍNEA CORREGIDA (HACK TEMPORAL)
+    startTime.setHours(hours + 4, minutes, 0, 0); // HACK: Suma +4h para ajustar de EDT a UTC
 
     const totalMinutes = (duracionHoras + despuesBloqueHoras) * 60 + 30; // +30min buffer
     return new Date(startTime.getTime() + totalMinutes * 60000);
