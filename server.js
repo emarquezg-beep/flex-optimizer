@@ -1,5 +1,6 @@
 // server.js (v3.0 - Implementación de ETA en Caliente)
 
+const { DateTime } = require('luxon');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -42,6 +43,15 @@ const corsOptions = {
     }
   }
 };
+
+// Verificación de timezone al iniciar
+console.log('=================================================');
+console.log('🌍 SERVER TIMEZONE INFO:');
+console.log('   System TZ:', process.env.TZ || 'Not set');
+console.log('   Node.js TZ:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+console.log('   Current Time (Luxon):', DateTime.now().setZone('America/New_York').toLocaleString(DateTime.DATETIME_FULL));
+console.log('   Current Time (Native):', new Date().toString());
+console.log('=================================================');
 app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
@@ -575,51 +585,54 @@ app.post('/api/calculate-live-eta', async (req, res) => {
     const regularApts = aptCount - downtownCount;
 
     // Función helper para calcular ETA
-    const calculateETA = (multiplier) => {
-      const baseStopTime = stopCount * multiplier;
-      const extraAptTime = (regularApts * 1.5) + (downtownCount * 4.5);
-      const totalMinutes = baseDriveMinutes + baseStopTime + extraAptTime;
-      const now = new Date();
-      const etaTime = new Date(now.getTime() + totalMinutes * 60000);
+        const calculateETA = (multiplier) => {
+            const baseStopTime = stopCount * multiplier;
+            const extraAptTime = (regularApts * 1.5) + (downtownCount * 4.5);
+            const totalMinutes = baseDriveMinutes + baseStopTime + extraAptTime;
+            
+            // Obtener hora actual en Eastern Time
+            const now = DateTime.now().setZone('America/New_York');
+            const etaTime = now.plus({ minutes: totalMinutes });
+            
+            return {
+                totalMinutes: Math.round(totalMinutes),
+                eta: etaTime.toLocaleString(DateTime.TIME_SIMPLE), // "8:30 PM"
+                etaISO: etaTime.toISO() // Para debugging
+            };
+        };
 
-      return {
-        totalMinutes: Math.round(totalMinutes),
-        eta: etaTime.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZone: 'America/New_York' // <-- ESTA ES LA LÍNEA MÁGICA
-        })
-      };
-    };
+        const liveETAs = {
+            optimistic: calculateETA(0.90),
+            normal: calculateETA(1.10),
+            pessimistic: calculateETA(1.50)
+        };
 
-    const liveETAs = {
-      optimistic: calculateETA(0.90),
-      normal: calculateETA(1.10),
-      pessimistic: calculateETA(1.50)
-    };
+        console.log('✅ ETAs recalculados (Eastern Time):', {
+            currentTime: DateTime.now().setZone('America/New_York').toLocaleString(DateTime.DATETIME_SHORT),
+            etas: liveETAs
+        });
 
-    console.log('✅ ETAs recalculados:', liveETAs);
-    res.json({
-      success: true,
-      currentStop: currentStopNumber,
-      remainingStops: remainingStops.length,
-      remainingMiles: routeResult.distance,
-      etas: liveETAs,
-      breakdown: {
-        baseDriveMinutes: Math.round(baseDriveMinutes),
-        stopCount,
-        aptCount,
-        downtownCount
-      }
-    });
+        res.json({
+            success: true,
+            currentStop: currentStopNumber,
+            remainingStops: remainingStops.length,
+            remainingMiles: routeResult.distance,
+            etas: liveETAs,
+            breakdown: {
+                baseDriveMinutes,
+                stopCount,
+                aptCount,
+                downtownCount
+            }
+        });
 
-  } catch (error) {
-    console.error('❌ Error en calculate-live-eta:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+    } catch (error) {
+        console.error('❌ Error en calculate-live-eta:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
 });
 
 // 3. POST /api/complete-route
@@ -736,78 +749,104 @@ app.post('/api/skip-eta', async (req, res) => {
 // (Ejecutar ANTES de app.listen)
 
 // Función helper para calcular cuándo borrar stops
-// REEMPLAZA ESTA FUNCIÓN
-const calculateCleanupTime = (fecha, hora, duracionHoras, despuesBloqueHoras) => {
-  try {
-    // fecha: "2025-10-29" (string de la BD)
-    // hora: "16:30" (string de la BD)
-    const [hours, minutes] = hora.split(':').map(Number);
-    
-    // USA LA FECHA DE LA RUTA, NO new Date()
-    const startTime = new Date(fecha); 
-    
-    // Establece la hora asumiendo que el servidor es UTC
-    // y la hora guardada es local (ET, ~4-5 horas de diferencia)
-    // "16:30" se guardará como 16:30 UTC en la fecha de la ruta
-    // Lo cual es incorrecto pero consistente con el bug original.
-    // La clave es usar la FECHA de la ruta.
-    //startTime.setHours(hours, minutes, 0, 0);
-    // ESTA ES LA LÍNEA CORREGIDA (HACK TEMPORAL)
-    startTime.setHours(hours + 4, minutes, 0, 0); // HACK: Suma +4h para ajustar de EDT a UTC
-
-    const totalMinutes = (duracionHoras + despuesBloqueHoras) * 60 + 30; // +30min buffer
-    return new Date(startTime.getTime() + totalMinutes * 60000);
-  } catch(e) {
-    console.error("Error en calculateCleanupTime", e);
-    return new Date(0); 
-  }
+// 🆕 Función mejorada con Luxon
+const calculateCleanupTime = (hora, duracionHoras, despuesBloqueHoras) => {
+    try {
+        const [hours, minutes] = hora.split(':').map(Number);
+        
+        // Crear fecha/hora en Eastern Time explícitamente
+        let startTime = DateTime.now()
+            .setZone('America/New_York')
+            .set({ 
+                hour: hours, 
+                minute: minutes, 
+                second: 0, 
+                millisecond: 0 
+            });
+        
+        // Calcular tiempo total hasta cleanup (duración + después + 30min buffer)
+        const totalMinutes = (duracionHoras + despuesBloqueHoras) * 60 + 30;
+        
+        // Sumar los minutos y retornar como Date nativo (para Supabase)
+        const cleanupTime = startTime.plus({ minutes: totalMinutes });
+        
+        console.log(`🧹 Cleanup calculado: ${cleanupTime.toLocaleString(DateTime.DATETIME_FULL)}`);
+        
+        return cleanupTime.toJSDate(); // Convertir a Date para comparación
+    } catch (error) {
+        console.error('❌ Error calculando cleanup time:', error);
+        // Fallback: 6 horas desde ahora
+        return DateTime.now()
+            .setZone('America/New_York')
+            .plus({ hours: 6 })
+            .toJSDate();
+    }
 };
 
 // Ejecutar cada 5 minutos
 // REEMPLAZA ESTE BLOQUE
+// ⏰ CRON JOB MEJORADO CON LUXON
 setInterval(async () => {
-  try {
-    const now = new Date();
-    // Obtener rutas activas que ya deberian haberse completado
-    // AÑADIMOS "fecha" AL SELECT
-    const { data: activeRoutes, error } = await supabase
-      .from('routes')
-      .select('id, fecha, hora, duracion_horas, despues_del_bloque') // <-- CAMBIO AQUÍ
-      .eq('status', 1)
-      .not('stops_json', 'is', null);
-
-    if (error) throw error;
-
-    if (activeRoutes && activeRoutes.length > 0) {
-      for (const route of activeRoutes) {
+    try {
+        const now = DateTime.now().setZone('America/New_York');
         
-        // PASAMOS "route.fecha" A LA FUNCIÓN
-        const cleanupTime = calculateCleanupTime(
-          route.fecha,  // <-- CAMBIO AQUÍ
-          route.hora,
-          route.duracion_horas,
-          parseFloat(route.despues_del_bloque) || 0
-        );
+        console.log(`🧹 [Cleanup] Ejecutando a las ${now.toLocaleString(DateTime.DATETIME_SHORT)}`);
         
-        if (now >= cleanupTime) {
-          // Borrar stops_json y cambiar status a 0
-          await supabase
+        // Obtener rutas activas que aún tienen stops_json
+        const { data: activeRoutes, error } = await supabase
             .from('routes')
-            .update({
-              status: 0,
-              stops_json: null
-            })
-            .eq('id', route.id);
-          console.log(`🧹 Auto-cleanup: Ruta ${route.id} finalizada automáticamente`);
+            .select('id, hora, duracion_horas, despues_del_bloque, fecha')
+            .eq('status', 1)
+            .not('stops_json', 'is', null);
+
+        if (error) throw error;
+
+        if (activeRoutes && activeRoutes.length > 0) {
+            console.log(`🔍 [Cleanup] Encontradas ${activeRoutes.length} rutas activas con stops_json`);
+            
+            for (const route of activeRoutes) {
+                const cleanupTime = calculateCleanupTime(
+                    route.hora,
+                    route.duracion_horas || 0,
+                    parseFloat(route.despues_del_bloque) || 0
+                );
+
+                const cleanupTimeLuxon = DateTime.fromJSDate(cleanupTime).setZone('America/New_York');
+                
+                console.log(`📋 [Cleanup] Ruta ${route.id}:`);
+                console.log(`   - Inicio: ${route.hora}`);
+                console.log(`   - Cleanup programado: ${cleanupTimeLuxon.toLocaleString(DateTime.DATETIME_SHORT)}`);
+                console.log(`   - Hora actual: ${now.toLocaleString(DateTime.DATETIME_SHORT)}`);
+
+                if (now >= cleanupTimeLuxon) {
+                    // Borrar stops_json y cambiar status a 0
+                    const { error: updateError } = await supabase
+                        .from('routes')
+                        .update({ 
+                            status: 0,
+                            stops_json: null 
+                        })
+                        .eq('id', route.id);
+
+                    if (updateError) {
+                        console.error(`❌ [Cleanup] Error actualizando ruta ${route.id}:`, updateError);
+                    } else {
+                        console.log(`✅ [Cleanup] Ruta ${route.id} finalizada automáticamente`);
+                    }
+                } else {
+                    const minutesRemaining = cleanupTimeLuxon.diff(now, 'minutes').minutes;
+                    console.log(`⏳ [Cleanup] Ruta ${route.id} aún activa (faltan ${Math.round(minutesRemaining)} min)`);
+                }
+            }
+        } else {
+            console.log('ℹ️ [Cleanup] No hay rutas activas con stops_json');
         }
-      }
+    } catch (error) {
+        console.error('❌ [Cleanup] Error en cron job:', error);
     }
-  } catch (error) {
-    console.error('❌ Error en cron job de cleanup:', error);
-  }
 }, 5 * 60 * 1000); // Cada 5 minutos
 
-console.log('🧹 Cron job de cleanup iniciado (cada 5 minutos)');
+console.log('⏰ Cron job de cleanup iniciado (cada 5 minutos) usando Eastern Time');
 // --- Fin FASE 5 ---
 
 
