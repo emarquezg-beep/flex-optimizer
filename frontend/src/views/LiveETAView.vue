@@ -80,6 +80,8 @@ async function calculateLiveETA() {
   }
 }
 
+// REEMPLAZA ESTA FUNCIÓN COMPLETA
+
 async function completeRoute() {
   if (!etaRealInput.value || !etaRealInput.value.trim()) {
     alert('Por favor, ingresa la hora real de llegada (ej: 5:11 PM)');
@@ -108,13 +110,19 @@ async function completeRoute() {
         success: true,
         message: ' ¡Ruta completada! ETA real guardado.'
       };
-      // Limpiar estado
+      
+      // --- INICIO DE LA CORRECCIÓN ---
+      // Limpiar estado (con limpieza de "completionStatus")
       setTimeout(() => {
         hasActiveRoute.value = false;
         activeRoute.value = null;
         liveETAs.value = null;
         etaRealInput.value = "";
+        currentStopInput.value = ""; // Limpiar también este input
+        completionStatus.value = null; // Ocultar el mensaje de éxito
       }, 2000);
+      // --- FIN DE LA CORRECCIÓN ---
+
     } else {
       throw new Error(result.message || 'Error completando ruta');
     }
