@@ -1,37 +1,110 @@
+<script setup>
+import { ref } from 'vue'
+import BottomNavBar from '@/components/BottomNavBar.vue'
+import PendingETABanner from '@/components/PendingETABanner.vue'
+
+// Si tienes logo
+const logo = ref('/logo.svg') // Ajusta la ruta según tu proyecto
+</script>
+
 <template>
   <div id="app-shell">
     <header class="app-header">
-      <img :src="logo" alt="Flex Pilot Logo" class="app-logo" />
+      <img v-if="logo" :src="logo" alt="Flex Pilot Logo" class="app-logo" />
+      <h1 v-else class="app-title">Flex Pilot</h1>
     </header>
     
-    <main class="app-content">
+    <main class="app-main">
       <PendingETABanner />
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </main>
     
     <BottomNavBar />
   </div>
 </template>
 
-<script setup>
-import BottomNavBar from './components/BottomNavBar.vue';
-// (2) Importa tu logo desde la carpeta assets
-import logo from './assets/logo_FlexPilot.png'; 
-import PendingETABanner from '@/components/PendingETABanner.vue'
-</script>
-
 <style scoped>
-/* (3) Estilos para el header y el logo */
+#app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+}
+
+/* ==================== HEADER ==================== */
 .app-header {
-  padding: 10px 20px;
-  background-color: var(--color-bg-light); /* Fondo blanco */
-  text-align: center;
-  border-bottom: 1px solid var(--color-border); /* Línea divisoria sutil */
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-4);
+  background-color: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-secondary);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .app-logo {
-  height: 40px; /* Ajusta esta altura como prefieras */
+  height: 32px;
   width: auto;
-  vertical-align: middle;
+  object-fit: contain;
+}
+
+.app-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  margin: 0;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ==================== MAIN CONTENT ==================== */
+.app-main {
+  flex: 1;
+  position: relative;
+  overflow-x: hidden;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ==================== PAGE TRANSITIONS ==================== */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.3s var(--ease-out);
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+  .app-header {
+    height: 48px;
+  }
+
+  .app-logo {
+    height: 28px;
+  }
+
+  .app-title {
+    font-size: var(--text-lg);
+  }
 }
 </style>
