@@ -1,17 +1,14 @@
 <template>
   <div id="app-shell">
-    
     <header class="app-header">
       <img :src="logo" alt="Flex Pilot Logo" class="app-logo" />
     </header>
-
-    <div id="app">
-    <PendingETABanner />  <router-view /> </div>
-
-    <main>
+    
+    <main class="app-content">
+      <PendingETABanner />
       <router-view />
     </main>
-
+    
     <BottomNavBar />
   </div>
 </template>
