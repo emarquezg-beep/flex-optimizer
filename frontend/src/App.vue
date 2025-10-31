@@ -4,7 +4,7 @@ import BottomNavBar from '@/components/BottomNavBar.vue'
 import PendingETABanner from '@/components/PendingETABanner.vue'
 
 // Si tienes logo
-const logo = ref('/logo.svg') // Ajusta la ruta según tu proyecto
+const logo = ref('src/assets/logo.svg') // Ajusta la ruta según tu proyecto
 </script>
 
 <template>
