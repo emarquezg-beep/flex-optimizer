@@ -261,3 +261,73 @@ select {
   background-size: 12px;
   padding-right: var(--space-8);
 }
+
+/* ==================== MEJORAS VISUALES v4 ==================== */
+
+/* Cards y contenedores */
+.file-input-area,
+.json-paste-container,
+.manual-entry-container,
+.gem-link-container {
+  background-color: var(--bg-secondary) !important;
+  border: 2px dashed var(--border-primary) !important;
+  border-radius: var(--radius-md) !important;
+  padding: var(--space-6) !important;
+  transition: all var(--transition-base) !important;
+}
+
+.file-input-area:hover,
+.json-paste-container:hover {
+  border-color: var(--brand-primary) !important;
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* Textareas */
+.json-textarea {
+  background-color: var(--color-white) !important;
+  border: 1px solid var(--color-border) !important;
+  color: var(--color-text-primary) !important;
+  padding: var(--space-3) !important;
+  border-radius: var(--radius-base) !important;
+  min-height: 120px !important;
+}
+
+.json-textarea:focus {
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  outline: none !important;
+}
+
+/* Botones primarios - más contraste */
+.button-primary,
+button.button-primary,
+.button-map {
+  background-color: var(--brand-primary) !important;
+  color: white !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.button-primary:hover,
+.button-map:hover {
+  background-color: #2563eb !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Botones secundarios */
+.button-secondary,
+.button-add,
+.button-reorder {
+  background-color: white !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid var(--color-border) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.button-secondary:hover,
+.button-add:hover,
+.button-reorder:hover {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
