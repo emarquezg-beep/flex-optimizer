@@ -4,15 +4,14 @@ import BottomNavBar from '@/components/BottomNavBar.vue'
 import PendingETABanner from '@/components/PendingETABanner.vue'
 
 // Si tienes logo
-const logo = ref('frontend/src/assets/logo.svg') // Ajusta la ruta según tu proyecto
+import logo from '@/assets/logo.svg' // Ajusta la ruta según tu proyecto
 </script>
 
 <template>
   <div id="app-shell">
-    <header class="app-header">
-      <img v-if="logo" :src="logo" alt="Flex Pilot Logo" class="app-logo" />
-      <h1 v-else class="app-title">Flex Pilot</h1>
-    </header>
+  <header class="app-header">
+    <img :src="logo" alt="Flex Pilot Logo" class="app-logo" />
+  </header>
     
     <main class="app-main">
       <PendingETABanner />
