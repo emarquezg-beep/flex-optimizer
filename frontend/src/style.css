@@ -331,3 +331,8 @@ button.button-primary,
   border-color: var(--brand-primary) !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
 }
+.view-container,
+.uploader-container,
+.content-container {
+  padding-bottom: 100px !important; /* Espacio extra para el nav */
+}
