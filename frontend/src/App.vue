@@ -28,6 +28,7 @@ const logo = ref('/logo.svg') // Ajusta la ruta según tu proyecto
 </template>
 
 <style scoped>
+
 #app-shell {
   min-height: 100vh;
   display: flex;
@@ -53,9 +54,17 @@ const logo = ref('/logo.svg') // Ajusta la ruta según tu proyecto
 }
 
 .app-logo {
-  height: 32px;
+  height: 32px;  /* ✅ Tamaño ideal */
   width: auto;
+  max-width: 120px;
   object-fit: contain;
+}
+
+/* Responsive mobile */
+@media (max-width: 768px) {
+  .app-logo {
+    height: 28px;
+  }
 }
 
 .app-title {
