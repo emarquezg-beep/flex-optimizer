@@ -22,9 +22,61 @@ const isCompleting = ref(false)
 const completionStatus = ref(null)
 
 onMounted(async () => {
-  await loadActiveRoute()
+  await autoDetectActiveRoute()
 })
-
+// 🆕 FUNCIÓN HELPER: Intentar cargar ruta de un usuario específico
+async function tryLoadRoute(userId) {
+  try {
+    console.log(`🔍 Intentando cargar ruta para: ${USERS.find(u => u.id === userId)?.name}`)
+    
+    const response = await fetch(`${backendUrl}/api/active-route/${userId}`)
+    const result = await response.json()
+    
+    if (result.hasActiveRoute) {
+      console.log(`✅ Ruta activa encontrada para: ${USERS.find(u => u.id === userId)?.name}`)
+      selectedUserId.value = userId
+      hasActiveRoute.value = true
+      activeRoute.value = result.route
+      return true
+    }
+    
+    console.log(`❌ No hay ruta activa para: ${USERS.find(u => u.id === userId)?.name}`)
+    return false
+    
+  } catch (error) {
+    console.error(`❌ Error cargando ruta para userId ${userId}:`, error)
+    return false
+  }
+}
+// 🆕 FUNCIÓN: Auto-detectar qué usuario tiene ruta activa
+async function autoDetectActiveRoute() {
+  isLoading.value = true
+  hasActiveRoute.value = false
+  activeRoute.value = null
+  
+  try {
+    console.log('🔄 Buscando ruta activa para cualquier usuario...')
+    
+    // Intentar con cada usuario en orden
+    for (const user of USERS) {
+      const found = await tryLoadRoute(user.id)
+      if (found) {
+        console.log(`🎯 Usando ruta de: ${user.name}`)
+        break // Salir del loop si encontró una ruta
+      }
+    }
+    
+    if (!hasActiveRoute.value) {
+      console.log('ℹ️ No hay rutas activas para ningún usuario')
+    }
+    
+  } catch (error) {
+    console.error('❌ Error en auto-detección:', error)
+    hasActiveRoute.value = false
+  } finally {
+    isLoading.value = false
+  }
+}
 async function loadActiveRoute() {
   isLoading.value = true
   try {
