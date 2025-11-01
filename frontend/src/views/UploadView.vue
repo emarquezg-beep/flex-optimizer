@@ -887,7 +887,23 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         </div> 
         
         <button @click="sendToBackend" class="button-map button-primary">Evaluate Scenarios</button>
-
+<!-- 🐛 DEBUG BOX TEMPORAL - REMOVER DESPUÉS -->
+<div v-if="backendResponse" style="margin: 20px; padding: 20px; background: #ffe6e6; border: 3px solid #ff0000; border-radius: 8px;">
+  <h3 style="color: #ff0000;">🐛 DEBUG INFO</h3>
+  <div style="font-size: 14px; line-height: 1.8;">
+    <p><strong>backendResponse existe:</strong> {{ !!backendResponse }}</p>
+    <p><strong>backendResponse.status:</strong> {{ backendResponse?.status }}</p>
+    <p><strong>backendResponse.hasErrors:</strong> {{ backendResponse?.hasErrors }}</p>
+    <p><strong>backendResponse.segments:</strong> {{ backendResponse?.segments?.length }}</p>
+    <p><strong>reportData existe:</strong> {{ !!reportData }}</p>
+    <p><strong>calculatedLogEntry existe:</strong> {{ !!calculatedLogEntry }}</p>
+  </div>
+  
+  <details style="margin-top: 15px;">
+    <summary style="cursor: pointer; font-weight: bold;">📦 Ver backendResponse completo</summary>
+    <pre style="overflow: auto; max-height: 300px; background: white; padding: 10px; border-radius: 4px; font-size: 11px;">{{ JSON.stringify(backendResponse, null, 2) }}</pre>
+  </details>
+</div>
         <div v-if="backendResponse">
           <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
           
