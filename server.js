@@ -448,7 +448,13 @@ app.post('/api/log-route', async (req, res) => {
 // 1. GET /api/active-route/:userId
 app.get('/api/active-route/:userId', async (req, res) => {
   const { userId } = req.params;
-  
+    // 🔥 LOGS CRÍTICOS
+  console.log('═══════════════════════════════════════');
+  console.log('🔍 [active-route] INICIANDO BÚSQUEDA');
+  console.log('📋 User ID recibido:', userId);
+  console.log('📋 User ID tipo:', typeof userId);
+  console.log('📋 User ID length:', userId.length);
+  console.log('═══════════════════════════════════════');
   try {
     // 🔥 SIMPLE: Traer la ruta más reciente con status=1
     const { data, error } = await supabase
