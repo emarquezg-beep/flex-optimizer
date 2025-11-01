@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Home, TrendingUp, MapPin, Clock, Navigation } from 'lucide-vue-next'
+import { Home, TrendingUp, MapPin, Clock, Navigation, Flame } from 'lucide-vue-next'
 import { BaseButton, BaseCard, BaseInput } from '@/components/base'
 
 const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -181,7 +181,7 @@ const canComplete = computed(() => {
     <div v-else class="content-container">
       
       <!-- Route Header Card -->
-      <BaseCard padding="lg" class="route-header-card">
+      <BaseCard padding="lg" class="route-header-card" elevated>
         <div class="route-badge">
           <div class="badge-icon-wrapper">
             <Flame :size="32" class="badge-icon" />
@@ -221,8 +221,8 @@ const canComplete = computed(() => {
         </div>
       </BaseCard>
 
-      <!-- Progress Bar (if calculated) -->
-      <BaseCard v-if="liveETAs" padding="md" class="progress-card">
+      <!-- Progress Bar -->
+      <BaseCard v-if="liveETAs" padding="md" class="progress-card" elevated>
         <div class="progress-header">
           <span class="progress-label">Progreso de Ruta</span>
           <span class="progress-percentage">{{ routeProgress }}%</span>
@@ -312,7 +312,7 @@ const canComplete = computed(() => {
             </div>
           </div>
 
-          <!-- Technical Details (Collapsible) -->
+          <!-- Technical Details -->
           <details class="tech-details">
             <summary class="tech-summary">Ver detalles técnicos</summary>
             <div class="tech-grid">
@@ -371,7 +371,7 @@ const canComplete = computed(() => {
             v-model="etaRealInput"
             type="text"
             placeholder="Ej: 5:11 PM"
-            label="¿A qué hora llegaste realmente? 🏠"
+            label="¿A qué hora llegaste realmente? 🏁"
             :disabled="isCompleting || !canComplete"
             :helper-text="canComplete ? 'Formato: 5:11 PM o 11:30 AM' : ''"
           />
@@ -398,7 +398,6 @@ const canComplete = computed(() => {
         </div>
       </BaseCard>
 
-      <!-- Bottom Spacer -->
       <div class="bottom-spacer"></div>
     </div>
   </div>
@@ -450,7 +449,7 @@ const canComplete = computed(() => {
 
 .loading-text {
   font-size: var(--text-base);
-  color: var(--text-secondary);
+  color: var(--text-secondary); /* 🔥 Nuevo gris oscuro */
 }
 
 /* ==================== EMPTY STATE ==================== */
@@ -479,7 +478,7 @@ const canComplete = computed(() => {
 
 .empty-description {
   font-size: var(--text-base);
-  color: var(--text-secondary);
+  color: var(--text-secondary); /* 🔥 Mejor contraste */
   max-width: 320px;
   margin: 0;
 }
@@ -501,6 +500,7 @@ const canComplete = computed(() => {
   background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
   border-radius: var(--radius-lg);
   flex-shrink: 0;
+  box-shadow: var(--shadow-md); /* 🆕 */
 }
 
 .badge-icon {
@@ -521,7 +521,7 @@ const canComplete = computed(() => {
 
 .route-subtitle {
   font-size: var(--text-sm);
-  color: var(--text-secondary);
+  color: var(--text-secondary); /* 🔥 Mejor contraste */
   margin: 0;
 }
 
@@ -576,7 +576,7 @@ const canComplete = computed(() => {
 .progress-label {
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
-  color: var(--text-secondary);
+  color: var(--text-secondary); /* 🔥 */
 }
 
 .progress-percentage {
@@ -591,6 +591,7 @@ const canComplete = computed(() => {
   border-radius: var(--radius-full);
   overflow: hidden;
   margin-bottom: var(--space-2);
+  box-shadow: inset var(--shadow-xs); /* 🆕 */
 }
 
 .progress-bar-fill {
@@ -598,6 +599,7 @@ const canComplete = computed(() => {
   background: linear-gradient(90deg, var(--brand-accent), var(--brand-primary));
   border-radius: var(--radius-full);
   transition: width 0.5s var(--ease-out);
+  box-shadow: var(--shadow-sm); /* 🆕 */
 }
 
 .progress-detail {
@@ -621,7 +623,7 @@ const canComplete = computed(() => {
 
 .section-description {
   font-size: var(--text-sm);
-  color: var(--text-secondary);
+  color: var(--text-secondary); /* 🔥 Mejor contraste */
   line-height: var(--leading-relaxed);
   margin: 0;
 }
@@ -670,10 +672,10 @@ const canComplete = computed(() => {
   align-items: center;
   gap: var(--space-2);
   font-size: var(--text-sm);
-  color: var(--text-secondary);
+  color: var(--text-secondary); /* 🔥 */
 }
 
-/* ==================== ETA CARDS GRID ==================== */
+/* 🔥 ETA CARDS - MEJORADO */
 .eta-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -687,12 +689,13 @@ const canComplete = computed(() => {
   border: 2px solid;
   text-align: center;
   transition: all var(--transition-base);
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--bg-primary); /* 🔥 Fondo blanco */
+  box-shadow: var(--shadow-sm); /* 🆕 */
 }
 
 .eta-card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md); /* 🔥 */
 }
 
 .eta-card-header {
@@ -754,8 +757,10 @@ const canComplete = computed(() => {
 .tech-details {
   margin-top: var(--space-4);
   padding: var(--space-4);
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--bg-secondary);
   border-radius: var(--radius-base);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-xs); /* 🆕 */
 }
 
 .tech-summary {
@@ -787,8 +792,9 @@ const canComplete = computed(() => {
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-3);
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-primary);
   border-radius: var(--radius-sm);
+  border: 1px solid var(--border-secondary);
 }
 
 .tech-label {
@@ -805,16 +811,17 @@ const canComplete = computed(() => {
 /* ==================== PREDICTIONS BOX ==================== */
 .predictions-box {
   padding: var(--space-4);
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-secondary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: var(--radius-base);
   margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-xs); /* 🆕 */
 }
 
 .predictions-title {
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
-  color: var(--text-secondary);
+  color: var(--text-secondary); /* 🔥 */
   margin: 0 0 var(--space-3) 0;
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
@@ -867,6 +874,7 @@ const canComplete = computed(() => {
   font-weight: var(--font-medium);
   text-align: center;
   animation: slideDown 0.3s var(--ease-out);
+  box-shadow: var(--shadow-sm); /* 🆕 */
 }
 
 @keyframes slideDown {

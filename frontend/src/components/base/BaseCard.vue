@@ -8,7 +8,9 @@ const props = defineProps({
     validator: (value) => ['none', 'sm', 'md', 'lg'].includes(value)
   },
   hoverable: Boolean,
-  clickable: Boolean
+  clickable: Boolean,
+  elevated: Boolean, // 🆕 Para cards con más elevación
+  flat: Boolean      // 🆕 Para cards sin sombra
 })
 
 const cardClasses = computed(() => {
@@ -16,6 +18,8 @@ const cardClasses = computed(() => {
   classes.push(`base-card--padding-${props.padding}`)
   if (props.hoverable) classes.push('base-card--hoverable')
   if (props.clickable) classes.push('base-card--clickable')
+  if (props.elevated) classes.push('base-card--elevated')
+  if (props.flat) classes.push('base-card--flat')
   return classes
 })
 </script>
@@ -27,12 +31,14 @@ const cardClasses = computed(() => {
 </template>
 
 <style scoped>
+/* 🔥 Base card con sombra mejorada */
 .base-card {
   background-color: var(--bg-secondary);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   transition: all var(--transition-base);
   overflow: hidden;
+  border: 1px solid transparent;
 }
 
 /* Padding variants */
@@ -52,10 +58,11 @@ const cardClasses = computed(() => {
   padding: var(--space-6);
 }
 
-/* Hoverable */
+/* 🔥 Hoverable con efecto de elevación mejorado */
 .base-card--hoverable:hover {
   box-shadow: var(--shadow-card-hover);
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  border-color: var(--border-primary);
 }
 
 /* Clickable */
@@ -65,5 +72,30 @@ const cardClasses = computed(() => {
 
 .base-card--clickable:active {
   transform: scale(0.99);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 🆕 Elevated variant */
+.base-card--elevated {
+  box-shadow: var(--shadow-elevated);
+  background-color: var(--bg-primary); /* Fondo blanco para más contraste */
+}
+
+.base-card--elevated.base-card--hoverable:hover {
+  box-shadow: var(--shadow-xl);
+  transform: translateY(-4px);
+}
+
+/* 🆕 Flat variant (sin sombra) */
+.base-card--flat {
+  box-shadow: none;
+  border: 1px solid var(--border-primary);
+  background-color: var(--bg-primary);
+}
+
+.base-card--flat.base-card--hoverable:hover {
+  border-color: var(--brand-primary);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
 }
 </style>
