@@ -8,7 +8,7 @@ const USERS = [
   { name: 'Ernesto', id: 'b5a04a69-1e96-47c4-a0c8-972fec54c21d' },
   { name: 'Carmen Cecilia', id: 'b3aaad3a-5835-4796-aca7-ea634e150b5d' }
 ]
-const selectedUserId = ref(USERS[0].id)
+const selectedUserId = ref(USERS[1].id)
 
 // Estados
 const isLoading = ref(true)
