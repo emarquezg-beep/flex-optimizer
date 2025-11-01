@@ -446,56 +446,83 @@ app.post('/api/log-route', async (req, res) => {
 // --- 🆕 FASE 4: Nuevos Endpoints ---
 
 // 1. GET /api/active-route/:userId
+// ✅ CÓDIGO NUEVO (FIXED)
 app.get('/api/active-route/:userId', async (req, res) => {
   const { userId } = req.params;
+  
+  console.log(`🔍 [active-route] Buscando ruta activa para user: ${userId}`);
+  
   try {
+    // 🔥 Obtener fecha de HOY en Eastern Time
+    const today = DateTime.now()
+      .setZone('America/New_York')
+      .toISODate(); // Formato: 2025-11-01
+    
+    console.log(`📅 [active-route] Fecha hoy (ET): ${today}`);
+    
     const { data, error } = await supabase
       .from('routes')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 1)
-      .order('fecha', { ascending: false }) // <-- CAMBIADO
-      .order('hora', { ascending: false })  // <-- AÑADIDO
-      .limit(1)
-      .single();
+      .eq('fecha', today) // 🔥 BUSCAR SOLO HOY
+      .order('hora', { ascending: false })
+      .limit(1);
+
+    console.log(`📊 [active-route] Resultados encontrados:`, data?.length || 0);
 
     if (error) {
-      if (error.code === 'PGRST116') { // No rows found
+      // PGRST116 = No rows found (esto es NORMAL si no hay ruta)
+      if (error.code === 'PGRST116') {
+        console.log('ℹ️ [active-route] No hay ruta activa HOY');
         return res.json({
           hasActiveRoute: false,
-          message: 'No tienes ruta activa'
+          message: 'No tienes ruta activa hoy'
         });
       }
       throw error;
     }
 
+    // Si no encontró nada, devolver false
+    if (!data || data.length === 0) {
+      console.log('ℹ️ [active-route] No hay ruta activa');
+      return res.json({
+        hasActiveRoute: false,
+        message: 'No tienes ruta activa'
+      });
+    }
+
+    // Tomar la primera ruta (debería ser la única del día)
+    const route = data[0];
+    console.log(`✅ [active-route] Ruta encontrada: ID ${route.id}`);
+
     // Desencriptar paradas
-    const stops = data.stops_json ? decryptStops(data.stops_json) : [];
-    if (data.stops_json && !stops) {
-      console.error('❌ Error desencriptando stops de ruta:', data.id);
-      // Continuar sin paradas, pero reportar error
+    const stops = route.stops_json ? decryptStops(route.stops_json) : [];
+    if (route.stops_json && !stops) {
+      console.error('❌ [active-route] Error desencriptando stops de ruta:', route.id);
     }
 
     res.json({
       hasActiveRoute: true,
       route: {
-        id: data.id,
-        fecha: data.fecha,
-        warehouse: data.warehouse,
-        hora: data.hora,
-        duracion_horas: data.duracion_horas,
-        numero_paradas: data.numero_paradas,
-        primary_city: data.primary_city,
-        eta_optimista: data.eta_optimista,
-        eta_normal: data.eta_normal,
-        eta_pesimista: data.eta_pesimista,
-        stops: stops, // Array desencriptado
-        millas_totales: data.millas_totales,
-        pago: data.pago
+        id: route.id,
+        fecha: route.fecha,
+        warehouse: route.warehouse,
+        hora: route.hora,
+        duracion_horas: route.duracion_horas,
+        numero_paradas: route.numero_paradas,
+        primary_city: route.primary_city,
+        eta_optimista: route.eta_optimista,
+        eta_normal: route.eta_normal,
+        eta_pesimista: route.eta_pesimista,
+        stops: stops,
+        millas_totales: route.millas_totales,
+        pago: route.pago
       }
     });
+    
   } catch (error) {
-    console.error('❌ Error obteniendo ruta activa:', error);
+    console.error('❌ [active-route] Error:', error);
     res.status(500).json({
       hasActiveRoute: false,
       error: error.message
