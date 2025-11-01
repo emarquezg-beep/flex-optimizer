@@ -446,61 +446,31 @@ app.post('/api/log-route', async (req, res) => {
 // --- 🆕 FASE 4: Nuevos Endpoints ---
 
 // 1. GET /api/active-route/:userId
-// ✅ CÓDIGO NUEVO (FIXED)
 app.get('/api/active-route/:userId', async (req, res) => {
   const { userId } = req.params;
   
-  console.log(`🔍 [active-route] Buscando ruta activa para user: ${userId}`);
-  
   try {
-    // 🔥 Obtener fecha de HOY en Eastern Time
-    const today = DateTime.now()
-      .setZone('America/New_York')
-      .toISODate(); // Formato: 2025-11-01
-    
-    console.log(`📅 [active-route] Fecha hoy (ET): ${today}`);
-    
+    // 🔥 SIMPLE: Traer la ruta más reciente con status=1
     const { data, error } = await supabase
       .from('routes')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 1)
-      .eq('fecha', today) // 🔥 BUSCAR SOLO HOY
+      .order('fecha', { ascending: false })
       .order('hora', { ascending: false })
       .limit(1);
 
-    console.log(`📊 [active-route] Resultados encontrados:`, data?.length || 0);
+    if (error) throw error;
 
-    if (error) {
-      // PGRST116 = No rows found (esto es NORMAL si no hay ruta)
-      if (error.code === 'PGRST116') {
-        console.log('ℹ️ [active-route] No hay ruta activa HOY');
-        return res.json({
-          hasActiveRoute: false,
-          message: 'No tienes ruta activa hoy'
-        });
-      }
-      throw error;
-    }
-
-    // Si no encontró nada, devolver false
     if (!data || data.length === 0) {
-      console.log('ℹ️ [active-route] No hay ruta activa');
       return res.json({
         hasActiveRoute: false,
         message: 'No tienes ruta activa'
       });
     }
 
-    // Tomar la primera ruta (debería ser la única del día)
     const route = data[0];
-    console.log(`✅ [active-route] Ruta encontrada: ID ${route.id}`);
-
-    // Desencriptar paradas
     const stops = route.stops_json ? decryptStops(route.stops_json) : [];
-    if (route.stops_json && !stops) {
-      console.error('❌ [active-route] Error desencriptando stops de ruta:', route.id);
-    }
 
     res.json({
       hasActiveRoute: true,
