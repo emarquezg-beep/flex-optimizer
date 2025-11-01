@@ -583,6 +583,268 @@ app.post('/api/calculate-live-eta', async (req, res) => {
             });
         }
     }
+    // ========================================
+// SCHEDULED BLOCKS ENDPOINTS - v4.1
+// ========================================
+
+// 1. GET /api/scheduled-blocks/:userId - Obtener bloques de un usuario
+app.get('/api/scheduled-blocks/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { status, startDate, endDate } = req.query;
+  
+  try {
+    let query = supabase
+      .from('scheduled_blocks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('fecha', { ascending: true })
+      .order('hora', { ascending: true });
+    
+    // Filtros opcionales
+    if (status) {
+      query = query.eq('status', status);
+    }
+    
+    if (startDate) {
+      query = query.gte('fecha', startDate);
+    }
+    
+    if (endDate) {
+      query = query.lte('fecha', endDate);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    
+    console.log(`✅ Bloques obtenidos para user ${userId}:`, data?.length || 0);
+    res.json({ success: true, blocks: data || [] });
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo bloques:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 2. POST /api/scheduled-blocks - Crear nuevo bloque
+app.post('/api/scheduled-blocks', async (req, res) => {
+  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehiculo, notes } = req.body;
+  
+  // Validación
+  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan campos requeridos' 
+    });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .insert([{
+        user_id,
+        fecha,
+        hora,
+        duracion_horas,
+        pago,
+        warehouse,
+        vehiculo,
+        notes,
+        status: 'scheduled'
+      }])
+      .select();
+    
+    if (error) {
+      // Error de constraint (bloque duplicado)
+      if (error.code === '23505') {
+        return res.status(400).json({
+          success: false,
+          error: 'Ya existe un bloque agendado a esa hora'
+        });
+      }
+      throw error;
+    }
+    
+    console.log('✅ Bloque creado:', data[0].id);
+    res.json({ success: true, block: data[0] });
+    
+  } catch (error) {
+    console.error('❌ Error creando bloque:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 3. PUT /api/scheduled-blocks/:blockId - Actualizar bloque
+app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
+  const { blockId } = req.params;
+  const updates = req.body;
+  
+  // No permitir cambiar user_id ni created_at
+  delete updates.user_id;
+  delete updates.created_at;
+  
+  try {
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .update(updates)
+      .eq('id', blockId)
+      .select();
+    
+    if (error) throw error;
+    
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bloque no encontrado'
+      });
+    }
+    
+    console.log('✅ Bloque actualizado:', blockId);
+    res.json({ success: true, block: data[0] });
+    
+  } catch (error) {
+    console.error('❌ Error actualizando bloque:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 4. DELETE /api/scheduled-blocks/:blockId - Eliminar/Cancelar bloque
+app.delete('/api/scheduled-blocks/:blockId', async (req, res) => {
+  const { blockId } = req.params;
+  const { soft } = req.query; // ?soft=true para cancelar en lugar de eliminar
+  
+  try {
+    if (soft === 'true') {
+      // Soft delete: Cambiar status a 'cancelled'
+      const { data, error } = await supabase
+        .from('scheduled_blocks')
+        .update({ status: 'cancelled' })
+        .eq('id', blockId)
+        .select();
+      
+      if (error) throw error;
+      
+      console.log('✅ Bloque cancelado:', blockId);
+      res.json({ success: true, message: 'Bloque cancelado', block: data[0] });
+      
+    } else {
+      // Hard delete: Eliminar permanentemente
+      const { error } = await supabase
+        .from('scheduled_blocks')
+        .delete()
+        .eq('id', blockId);
+      
+      if (error) throw error;
+      
+      console.log('✅ Bloque eliminado:', blockId);
+      res.json({ success: true, message: 'Bloque eliminado' });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error eliminando bloque:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 5. POST /api/scheduled-blocks/:blockId/start - Iniciar bloque (vincula con route)
+app.post('/api/scheduled-blocks/:blockId/start', async (req, res) => {
+  const { blockId } = req.params;
+  const { routeId } = req.body;
+  
+  if (!routeId) {
+    return res.status(400).json({
+      success: false,
+      error: 'routeId es requerido'
+    });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .update({
+        status: 'started',
+        route_id: routeId
+      })
+      .eq('id', blockId)
+      .select();
+    
+    if (error) throw error;
+    
+    console.log(`✅ Bloque ${blockId} iniciado con route ${routeId}`);
+    res.json({ success: true, block: data[0] });
+    
+  } catch (error) {
+    console.error('❌ Error iniciando bloque:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 6. GET /api/scheduled-blocks/:userId/week-summary - Resumen semanal
+app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
+  const { userId } = req.params;
+  
+  try {
+    // Obtener fecha de inicio de semana (lunes)
+    const today = DateTime.now().setZone('America/New_York');
+    const startOfWeek = today.startOf('week').toISODate();
+    const endOfWeek = today.endOf('week').toISODate();
+    
+    console.log(`📊 Resumen semanal: ${startOfWeek} a ${endOfWeek}`);
+    
+    // Bloques agendados esta semana
+    const { data: blocks, error: blocksError } = await supabase
+      .from('scheduled_blocks')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('fecha', startOfWeek)
+      .lte('fecha', endOfWeek)
+      .neq('status', 'cancelled');
+    
+    if (blocksError) throw blocksError;
+    
+    // Rutas completadas esta semana
+    const { data: routes, error: routesError } = await supabase
+      .from('routes')
+      .select('duracion_horas, pago, millas_totales')
+      .eq('user_id', userId)
+      .gte('fecha', startOfWeek)
+      .lte('fecha', endOfWeek)
+      .eq('status', 0); // Completadas
+    
+    if (routesError) throw routesError;
+    
+    // Calcular totales
+    const totalHorasAgendadas = blocks.reduce((sum, b) => sum + (b.duracion_horas || 0), 0);
+    const totalPagoAgendado = blocks.reduce((sum, b) => sum + (b.pago || 0), 0);
+    
+    const totalHorasTrabajadas = routes.reduce((sum, r) => sum + (r.duracion_horas || 0), 0);
+    const totalPagoGanado = routes.reduce((sum, r) => sum + (r.pago || 0), 0);
+    const totalMillas = routes.reduce((sum, r) => sum + (r.millas_totales || 0), 0);
+    
+    res.json({
+      success: true,
+      summary: {
+        weekStart: startOfWeek,
+        weekEnd: endOfWeek,
+        scheduled: {
+          blocks: blocks.length,
+          hours: totalHorasAgendadas.toFixed(1),
+          pay: totalPagoAgendado.toFixed(2)
+        },
+        completed: {
+          routes: routes.length,
+          hours: totalHorasTrabajadas.toFixed(1),
+          pay: totalPagoGanado.toFixed(2),
+          miles: totalMillas.toFixed(1)
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en resumen semanal:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
     // 5. 🆕 LLAMAR A GOOGLE MAPS API POR SEGMENTOS
     const segmentPromises = routeSegments.map(seg => 
