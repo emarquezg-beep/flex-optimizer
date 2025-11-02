@@ -637,14 +637,27 @@ const calculatedLogEntry = computed(() => {
       let potentialCity = null;
       
       if (parts.length >= 3) {
-        for (let i = parts.length - 1; i >= 0; i--) {
+        // 🔧 FIX: Capturar las últimas 1-3 palabras que no sean números ni abreviaturas
+        const cityWords = [];
+        
+        for (let i = parts.length - 1; i >= 0 && cityWords.length < 3; i--) {
           const word = parts[i];
-          if (!/^\d+$/.test(word) && 
-              !/^(ST|RD|AVE|BLVD|DR|LN|CT|WAY|PL|TER|CIR)$/i.test(word) &&
-              word.length > 2) {
-            potentialCity = word;
+          
+          // Detener si encontramos números o abreviaturas de calle
+          if (/^\d+$/.test(word) || 
+              /^(ST|RD|AVE|BLVD|DR|LN|CT|WAY|PL|TER|CIR|LOOP|PKWY)$/i.test(word)) {
             break;
           }
+          
+          // Agregar palabras válidas (más de 2 caracteres)
+          if (word.length > 2) {
+            cityWords.unshift(word); // Agregar al inicio para mantener orden
+          }
+        }
+        
+        // Unir las palabras encontradas
+        if (cityWords.length > 0) {
+          potentialCity = cityWords.join(' ');
         }
       }
       
@@ -951,8 +964,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           </div>
         </div>
       </div>
-     </div> 
-
+    </div>
       <!-- 🤖 LINK AL GEM -->
       <div class="gem-link-container">
         <a 
