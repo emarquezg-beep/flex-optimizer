@@ -946,7 +946,6 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         </div>
       </div>
       </div>
-
       <!-- 🤖 LINK AL GEM -->
       <div class="gem-link-container">
         <a 
@@ -985,12 +984,11 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           ✅ {{ extractedAddresses.length }} stops detected
         </div>
 
-        <!-- Botón de evaluación (aparece cuando hay JSON) -->
+        <!-- Botón de evaluación (siempre visible para mejor UX) -->
         <button 
-          v-if="jsonInput.trim() || extractedAddresses.length > 0"
           @click="evaluateRoute" 
           class="button-primary button-evaluate"
-          :disabled="isProcessing"
+          :disabled="isProcessing || (!jsonInput.trim() && extractedAddresses.length === 0)"
         >
           {{ isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios' }}
         </button>
