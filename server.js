@@ -1067,7 +1067,7 @@ app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
     // Bloques completados (rutas con status = 0)
     const { data: completedRoutes, error: routesError } = await supabase
       .from('routes')
-      .select('duracion_horas, pago, total_drive_miles')
+      .select('duracion_horas, pago, millas_totales')
       .eq('user_id', userId)
       .eq('status', 0)
       .gte('fecha', startOfWeek)
@@ -1089,7 +1089,7 @@ app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
     // Calcular totales
     const completedHours = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.duracion_horas) || 0), 0);
     const completedPay = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.pago) || 0), 0);
-    const completedMiles = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.total_drive_miles) || 0), 0);
+    const completedMiles = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.millas_totales) || 0), 0);
     
     const scheduledHours = scheduledBlocks.reduce((sum, b) => sum + (parseFloat(b.duracion_horas) || 0), 0);
     const scheduledPay = scheduledBlocks.reduce((sum, b) => sum + (parseFloat(b.pago) || 0), 0);
