@@ -6,8 +6,8 @@ import { Home, Flame, BookOpen, Settings, Upload } from 'lucide-vue-next'
 const route = useRoute()
 
 const navItems = [
-  { name: 'Home', path: '/', icon: Home },
-  { name: 'Upload', path: '/upload', icon: Upload },
+  { name: 'Home', path: '/', icon: Home }, // 🔥 Ahora apunta a Dashboard
+  { name: 'Upload', path: '/upload', icon: Upload }, // Ahora es solo "Upload"
   { name: 'En Vivo', path: '/live-eta', icon: Flame },
   { name: 'Bitácora', path: '/logbook', icon: BookOpen },
   { name: 'Ajustes', path: '/settings', icon: Settings }

@@ -1,6 +1,7 @@
 <script setup>
 // AGREGAR estos imports al inicio (alrededor de línea 3-4)
 import { computeScoreV5 } from '@/utils/scoring';
+import { useRoute } from 'vue-router';
 import { 
   obtenerMensajeConsciente, 
   getIconForScore, 
@@ -14,7 +15,7 @@ import Tesseract from 'tesseract.js';
 // ============================================
 // BASE VARIABLES AND REFS (Dark Theme/ETA updates)
 // ============================================
-
+const route = useRoute();
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const backendResponse = ref(null);
@@ -174,6 +175,32 @@ function parseAddresses(rawText) {
   return stops;
 }
 
+onMounted(async () => {
+  // ✅ Verificar si viene de un bloque agendado
+  if (route.query.blockId) {
+    console.log('📦 Pre-llenando datos desde bloque agendado:', route.query.blockId)
+    
+    // Pre-llenar blockData desde query params
+    blockData.value = {
+      fecha: route.query.fecha || getLocalDateString(),
+      vehiculo: route.query.vehiculo || VEHICULO_OPTIONS[0],
+      hora: route.query.hora || '07:00',
+      duracion_horas: parseFloat(route.query.duracion) || DURACION_OPTIONS[1],
+      pago: parseFloat(route.query.pago) || 0,
+      antes_del_bloque: 45,
+      commute_1_manual: getCommuteForWarehouse(route.query.warehouse),
+      retraso_almacen: 20
+    }
+    
+    // Pre-seleccionar warehouse
+    const warehouseCode = route.query.warehouse
+    if (warehouseCode) {
+      selectedWarehouseCode.value = warehouseCode
+    }
+    
+    console.log('✅ Datos pre-llenados:', blockData.value)
+  }
+})
 // ... (agrégala en <script setup>)
 
 async function processJsonInput() {
@@ -609,6 +636,12 @@ const chosenETA = computed(() => {
 // BACKEND COMMUNICATION & UI HELPERS (Restored)
 // ============================================
 
+// 🆕 FUNCIÓN HELPER: Obtener commute para warehouse
+function getCommuteForWarehouse(warehouseCode) {
+  const warehouse = warehouses.value.find(w => w.code === warehouseCode)
+  return warehouse ? warehouse.commuteMiles : warehouses.value[0].commuteMiles
+}
+
 function sanitizeAddress(address) {
     // --- Restored sanitizeAddress ---
     if (!address) return '';
@@ -667,8 +700,8 @@ async function sendToBackend() {
 
 // Pega esto SOBREESCRIBIENDO tu función saveToLogbook() existente
 
+// 🆕 MODIFICAR saveToLogbook para vincular con scheduled_block
 async function saveToLogbook() {
-    // 🆕 VALIDAR QUE NO HAYA ERRORES DE DIRECCIONES
     if (backendResponse.value?.hasErrors) {
         alert("❌ No puedes guardar la ruta porque hay direcciones inválidas. Por favor, corrígelas primero.");
         return;
@@ -683,38 +716,71 @@ async function saveToLogbook() {
     saveStatus.value = null;
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
     
-    // --- ⬇️ AQUÍ ESTÁ EL CAMBIO IMPORTANTE ⬇️ ---
     const dataToSend = { 
       ...calculatedLogEntry.value,
       route_score: routeScore.value.total,
-      
-      // AGREGAR ESTOS CAMPOS (Según Fase 6 del Informe)
-      stops_json: extractedAddresses.value, // Array completo sin encriptar //[cite: 496]
+      stops_json: extractedAddresses.value,
       eta_optimista: scenarioETAs.value[selectedScenarioForLog.value].optimistic.eta, 
       eta_normal: scenarioETAs.value[selectedScenarioForLog.value].normal.eta, 
       eta_pesimista: scenarioETAs.value[selectedScenarioForLog.value].pessimistic.eta 
     };
-    // --- ⬆️ FIN DEL CAMBIO ⬆️ ---
 
     try {
-        const response = await fetch(`${backendUrl}/api/log-route`, { //[cite: 500]
-            method: 'POST', //[cite: 501]
-            headers: { 'Content-Type': 'application/json' }, //[cite: 502]
-            body: JSON.stringify(dataToSend) //[cite: 503]
+        // Guardar la ruta
+        const response = await fetch(`${backendUrl}/api/log-route`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dataToSend)
         });
         
-        const result = await response.json(); //[cite: 504]
-        if (response.ok && result.success) { //[cite: 505]
-            console.log("Respuesta del servidor:", result); //[cite: 506]
-            saveStatus.value = { success: true, message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` }; //[cite: 507-510]
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            console.log("✅ Ruta guardada:", result.data[0].id);
+            
+            // 🆕 Si viene de un bloque agendado, vincularlo
+            if (route.query.blockId) {
+                console.log('🔗 Vinculando con bloque agendado:', route.query.blockId);
+                
+                try {
+                    const linkResponse = await fetch(
+                        `${backendUrl}/api/scheduled-blocks/${route.query.blockId}/start`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ routeId: result.data[0].id })
+                        }
+                    );
+                    
+                    const linkResult = await linkResponse.json();
+                    
+                    if (linkResult.success) {
+                        console.log('✅ Bloque vinculado con ruta');
+                    } else {
+                        console.warn('⚠️ No se pudo vincular bloque:', linkResult.error);
+                    }
+                } catch (linkError) {
+                    console.error('❌ Error vinculando bloque:', linkError);
+                    // No fallar la operación principal por esto
+                }
+            }
+            
+            saveStatus.value = { 
+                success: true, 
+                message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` 
+            };
+            
         } else { 
-          throw new Error(result.message || 'Error desconocido del servidor.'); //[cite: 513]
+            throw new Error(result.message || 'Error desconocido del servidor.');
         }
     } catch (error) {
-        console.error("Error al guardar en bitácora:", error); //[cite: 515]
-        saveStatus.value = { success: false, message: `Error: ${error.message}` }; //[cite: 516-518]
+        console.error("❌ Error al guardar en bitácora:", error);
+        saveStatus.value = { 
+            success: false, 
+            message: `Error: ${error.message}` 
+        };
     } finally { 
-      isSaving.value = false; //[cite: 521]
+        isSaving.value = false;
     }
 }
 
