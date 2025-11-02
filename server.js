@@ -21,11 +21,8 @@ const PORT = 3000;
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
-  'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-pvt01to14-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-1zyl30b71-ernestos-projects-d9e7c95d.vercel.app/',
-  'https://flex-optimizer-git-feature-sc-8b70f7-ernestos-projects-d9e7c95d.vercel.app/'
+  'https://flex-optimizer-git-feature-sc-8b70f7-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-fzy130b7l-ernestos-projects-d9e7c95d.vercel.app',
 ];
 const corsOptions = {
   origin: function (origin, callback) {
