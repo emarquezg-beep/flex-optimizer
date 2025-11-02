@@ -668,12 +668,6 @@ const chosenETA = computed(() => {
 // BACKEND COMMUNICATION & UI HELPERS (Restored)
 // ============================================
 
-// 🆕 FUNCIÓN HELPER: Obtener commute para warehouse
-function getCommuteForWarehouse(warehouseCode) {
-  const warehouse = warehouses.value.find(w => w.code === warehouseCode)
-  return warehouse ? warehouse.commuteMiles : warehouses.value[0].commuteMiles
-}
-
 function sanitizeAddress(address) {
     // --- Restored sanitizeAddress ---
     if (!address) return '';
