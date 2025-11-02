@@ -9,7 +9,7 @@ import {
   getIconForScore, 
   getColorForScore 
 } from '@/constants/mensajesConscientes';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import Tesseract from 'tesseract.js';
 
 // ============================================
