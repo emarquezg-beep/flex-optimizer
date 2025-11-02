@@ -480,7 +480,7 @@ const progressPercentage = computed(() => {
 .progress-detail {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
-  text-align: center);
+  text-align: center;
   margin: 0;
 }
 

@@ -1,5 +1,7 @@
 <script setup>
-// AGREGAR estos imports al inicio (alrededor de línea 3-4)
+// ============================================
+// IMPORTS
+// ============================================
 import { computeScoreV5 } from '@/utils/scoring';
 import { useRoute } from 'vue-router';
 import { 
@@ -9,11 +11,9 @@ import {
 } from '@/constants/mensajesConscientes';
 import { ref, computed, watch } from 'vue';
 import Tesseract from 'tesseract.js';
-// We might not need stringSimilarity here if findBestCityMatch isn't used in this version's calculatedLogEntry
-// import stringSimilarity from 'string-similarity'; 
 
 // ============================================
-// BASE VARIABLES AND REFS (Dark Theme/ETA updates)
+// VARIABLES Y REFS
 // ============================================
 const route = useRoute();
 const extractedAddresses = ref([]);
@@ -23,11 +23,12 @@ const isSaving = ref(false);
 const saveStatus = ref(null);
 const fileInputRef = ref(null);
 const selectedFileNames = ref([]);
+
 const USERS = [
   { name: 'Ernesto', id: 'b5a04a69-1e96-47c4-a0c8-972fec54c21d' },
   { name: 'Carmen Cecilia', id: 'b3aaad3a-5835-4796-aca7-ea634e150b5d' }
 ];
-const selectedUserId = ref(USERS[0].id); // Default to Ernesto
+const selectedUserId = ref(USERS[0].id);
 
 const fileInputLabel = computed(() => {
   return isProcessing.value ? 'Processing...' : 'Choose Screenshots or Drag Here';
@@ -55,7 +56,6 @@ const destinations = ref([
 const selectedWarehouseCode = ref(warehouses.value[0].code);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
-
 const mostrarDetalles = ref(false);
 
 const getLocalDateString = () => {
@@ -65,9 +65,10 @@ const getLocalDateString = () => {
   const day = date.getDate().toString().padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+
 const selectedScenarioForLog = ref('normal');
 const blockData = ref({
-  fecha: getLocalDateString(), // <-- USA LA FUNCIÓN HELPER
+  fecha: getLocalDateString(),
   vehiculo: VEHICULO_OPTIONS[0],
   hora: '07:00',
   duracion_horas: DURACION_OPTIONS[1],
@@ -77,6 +78,8 @@ const blockData = ref({
   retraso_almacen: 20
 });
 
+const jsonInput = ref('');
+
 watch(selectedWarehouseCode, (newCode) => {
   const warehouse = warehouses.value.find(w => w.code === newCode);
   if (warehouse) {
@@ -85,123 +88,162 @@ watch(selectedWarehouseCode, (newCode) => {
 });
 
 // ============================================
-// ORIGINAL (Simpler) OCR Logic from `main`
+// FUNCIONES HELPER (ANTES DE onMounted)
 // ============================================
 
-const jsonInput = ref(''); // Para el nuevo <textarea>
+function getCommuteForWarehouse(warehouseCode) {
+  const warehouse = warehouses.value.find(w => w.code === warehouseCode);
+  return warehouse ? warehouse.commuteMiles : warehouses.value[0].commuteMiles;
+}
+
+// ============================================
+// onMounted - PRE-FILL DESDE BLOQUE AGENDADO
+// ============================================
+
+onMounted(() => {
+  console.log('🚀 UploadView montado');
+  console.log('📋 route.query:', route.query);
+  
+  // ✅ Pre-llenar si viene de bloque agendado
+  if (route.query.blockId) {
+    console.log('📦 Pre-llenando desde bloque:', route.query.blockId);
+    
+    try {
+      blockData.value = {
+        fecha: route.query.fecha || getLocalDateString(),
+        vehiculo: route.query.vehiculo || VEHICULO_OPTIONS[0],
+        hora: route.query.hora?.substring(0, 5) || '07:00',
+        duracion_horas: parseFloat(route.query.duracion) || DURACION_OPTIONS[1],
+        pago: parseFloat(route.query.pago) || 0,
+        antes_del_bloque: 45,
+        commute_1_manual: getCommuteForWarehouse(route.query.warehouse),
+        retraso_almacen: 20
+      };
+      
+      const warehouseCode = route.query.warehouse;
+      if (warehouseCode) {
+        selectedWarehouseCode.value = warehouseCode;
+      }
+      
+      console.log('✅ Pre-fill completado:', blockData.value);
+    } catch (error) {
+      console.error('❌ Error en pre-fill:', error);
+    }
+  }
+});
+
+// ============================================
+// FUNCIONES OCR
+// ============================================
 
 function calculateActualDelay() {
   try {
     const now = new Date();
-    // Asegura que la hora del bloque tenga un valor
     if (!blockData.value.hora) {
       alert("Por favor, establece primero la 'Start Time (24h)' del bloque.");
       return;
     }
     
     const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
-    
-    const blockStartTime = new Date(); // Fecha de hoy
-    blockStartTime.setHours(startHours, startMinutes, 0, 0); // Hora del bloque
-
-    // Calcular diferencia en milisegundos
+    const blockStartTime = new Date();
+    blockStartTime.setHours(startHours, startMinutes, 0, 0);
     const diffMs = now.getTime() - blockStartTime.getTime();
-    
-    // Convertir a minutos (max(0, ...) evita retrasos negativos si se calcula antes)
-    const actualDelayMinutes = Math.max(0, Math.round(diffMs / 60000)); 
-    
-    // Actualizar el ref de blockData
+    const actualDelayMinutes = Math.max(0, Math.round(diffMs / 60000));
     blockData.value.retraso_almacen = actualDelayMinutes;
     
-    console.log(`⏱️ Retraso 'en caliente' calculado: ${actualDelayMinutes} minutos`);
-    alert(`Retraso calculado y actualizado a: ${actualDelayMinutes} minutos.`);
-    
+    console.log(`⏱️ Retraso calculado: ${actualDelayMinutes} minutos`);
+    alert(`Retraso calculado: ${actualDelayMinutes} minutos.`);
   } catch (e) {
-      console.error("Error calculating actual prep time:", e);
-      alert(`Error al calcular la hora: ${e.message}. Asegúrate que 'Start Time' sea válido.`);
+    console.error("Error calculating delay:", e);
+    alert(`Error: ${e.message}`);
   }
 }
-  function resetAllInputs() {
+
+function resetAllInputs() {
   console.log('Resetting all inputs...');
   extractedAddresses.value = [];
   backendResponse.value = null;
   selectedFileNames.value = [];
-  jsonInput.value = ''; // Limpiar el textarea también
+  jsonInput.value = '';
   isProcessing.value = false;
   if (fileInputRef.value) {
-    fileInputRef.value.value = ''; // Limpiar el input de archivo
+    fileInputRef.value.value = '';
   }
 }
 
 function preprocessImage(file) {
-  // --- This is your original v1.x/v2.0 preprocessing ---
   return new Promise((resolve) => {
-    const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => {
-    const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
-    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data; const contrast = 2.0; const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = factor * (data[i] - 128) + 128; data[i+1] = factor * (data[i+1] - 128) + 128; data[i+2] = factor * (data[i+2] - 128) + 128;
-      const avg = (data[i] + data[i+1] + data[i+2]) / 3; data[i] = avg; data[i+1] = avg; data[i+2] = avg;
-    }
-    ctx.putImageData(imageData, 0, 0); resolve(canvas.toDataURL('image/png'));
-    }; img.src = e.target.result; }; reader.readAsDataURL(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        const contrast = 2.0;
+        const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = factor * (data[i] - 128) + 128;
+          data[i+1] = factor * (data[i+1] - 128) + 128;
+          data[i+2] = factor * (data[i+2] - 128) + 128;
+          const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+          data[i] = avg;
+          data[i+1] = avg;
+          data[i+2] = avg;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
   });
 }
 
 function parseAddresses(rawText) {
-  // --- This is your original v1.x/v2.0 parsing logic ---
-  const stops = []; const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY']; let lastKnownCity = 'Orlando';
+  const stops = [];
+  const stopWords = ['Deliver', 'Current stop', 'Scheduled', 'ITINERARY'];
+  let lastKnownCity = 'Orlando';
   const pattern = /\((\d+)\)([\s\S]*?)(?=\(\d+\)|$)/g;
   let match;
+  
   while ((match = pattern.exec(rawText)) !== null) {
     const stopNumber = parseInt(match[1]);
     const textBlock = match[2];
-    // Uses the simpler address regex
-    const addressPattern = /(\d{3,5}\s[A-Z].*)/; 
+    const addressPattern = /(\d{3,5}\s[A-Z].*)/;
     const addressMatch = textBlock.match(addressPattern);
+    
     if (addressMatch) {
-      let street = addressMatch[1].trim(); let city = '';
+      let street = addressMatch[1].trim();
+      let city = '';
       const lines = textBlock.substring(textBlock.indexOf(street)).split('\n');
+      
       if (lines.length > 1) {
         let nextLine = lines[1].trim();
-        for (const word of stopWords) { if (nextLine.includes(word)) { nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim(); } }
-        if (nextLine.length > 3) { city = nextLine; lastKnownCity = city; }
+        for (const word of stopWords) {
+          if (nextLine.includes(word)) {
+            nextLine = nextLine.substring(0, nextLine.indexOf(word)).trim();
+          }
+        }
+        if (nextLine.length > 3) {
+          city = nextLine;
+          lastKnownCity = city;
+        }
       }
-      if (!city) { city = lastKnownCity; }
+      
+      if (!city) {
+        city = lastKnownCity;
+      }
+      
       stops.push({ number: stopNumber, address: `${street} ${city}`, isDowntown: false });
     }
   }
   return stops;
 }
-
-onMounted(async () => {
-  // ✅ Verificar si viene de un bloque agendado
-  if (route.query.blockId) {
-    console.log('📦 Pre-llenando datos desde bloque agendado:', route.query.blockId)
-    
-    // Pre-llenar blockData desde query params
-    blockData.value = {
-      fecha: route.query.fecha || getLocalDateString(),
-      vehiculo: route.query.vehiculo || VEHICULO_OPTIONS[0],
-      hora: route.query.hora || '07:00',
-      duracion_horas: parseFloat(route.query.duracion) || DURACION_OPTIONS[1],
-      pago: parseFloat(route.query.pago) || 0,
-      antes_del_bloque: 45,
-      commute_1_manual: getCommuteForWarehouse(route.query.warehouse),
-      retraso_almacen: 20
-    }
-    
-    // Pre-seleccionar warehouse
-    const warehouseCode = route.query.warehouse
-    if (warehouseCode) {
-      selectedWarehouseCode.value = warehouseCode
-    }
-    
-    console.log('✅ Datos pre-llenados:', blockData.value)
-  }
-})
-// ... (agrégala en <script setup>)
 
 async function processJsonInput() {
   if (!jsonInput.value) {
@@ -210,51 +252,41 @@ async function processJsonInput() {
   }
 
   isProcessing.value = true;
-  
-  // Usamos un setTimeout para que el UI se actualice a "Processing..."
-  await new Promise(resolve => setTimeout(resolve, 50)); 
+  await new Promise(resolve => setTimeout(resolve, 50));
 
   try {
-    // 1. Parsear el JSON
     const parsedData = JSON.parse(jsonInput.value);
 
-    // 2. Validar que es un array
     if (!Array.isArray(parsedData)) {
-      throw new Error('El JSON debe ser un array (una lista) de paradas.');
+      throw new Error('El JSON debe ser un array de paradas.');
     }
 
-    // 3. Mapear al formato interno de extractedAddresses
     const mappedStops = parsedData.map(item => {
-      // AQUÍ ESTÁ LA MAGIA: Combinamos los campos de tu JSON en un solo string "address"
       const fullAddress = [
         item.street_address,
         item.apartment,
         item.city
-      ].filter(Boolean).join(' ').trim(); // filter(Boolean) elimina nulos o strings vacíos
+      ].filter(Boolean).join(' ').trim();
 
       return {
-        number: item.stop_number || 0, // Usar 0 o algun default si no existe
+        number: item.stop_number || 0,
         address: fullAddress,
-        isDowntown: false // Asumimos false por defecto. El usuario puede marcarlo.
+        isDowntown: false
       };
     });
 
-    // 4. Resetear estados y asignar data
-    resetAllInputs(); // Limpia todo
-    extractedAddresses.value = mappedStops; // Asigna las nuevas paradas
+    resetAllInputs();
+    extractedAddresses.value = mappedStops;
     
     console.log('Paradas cargadas desde JSON:', extractedAddresses.value);
-
   } catch (error) {
     console.error("Error procesando JSON:", error);
     alert(`Error al procesar el JSON: ${error.message}`);
-    isProcessing.value = false; // Detener el procesamiento si hay error
+    isProcessing.value = false;
   }
-  // isProcessing se pondrá en false automáticamente por el resetAllInputs si todo va bien
 }
 
 async function handleFileChange(event) {
-  // --- File selection logic ---
   const files = event.target.files;
   if (!files || files.length === 0) {
     selectedFileNames.value = [];
@@ -262,353 +294,353 @@ async function handleFileChange(event) {
   }
   selectedFileNames.value = Array.from(files).map(f => f.name);
 
-   // --- Reset state ---
   resetAllInputs();
   isProcessing.value = true;
-  let allParsedStops = []; // Array to hold stops from all images
-
-  // --- Declare range variables OUTSIDE try ---
+  let allParsedStops = [];
   let maxStopNumber = 0;
   let minStopNumber = Infinity;
-  // --- End declarations ---
 
   try {
-    // --- OCR Loop ---
     for (const file of files) {
-      console.log(`📸 Procesando archivo: ${file.name}`); // Log which file is being processed
+      console.log(`📸 Procesando: ${file.name}`);
       const processedImage = await preprocessImage(file);
       const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
-      console.log(`📝 Texto OCR para ${file.name}:`, text); // Log raw OCR text
+      console.log(`📄 Texto OCR:`, text);
       const stopsFromFile = parseAddresses(text);
-      console.log(`🔍 Paradas encontradas en ${file.name}:`, stopsFromFile); // Log parsed stops for this file
+      console.log(`📍 Paradas encontradas:`, stopsFromFile);
       allParsedStops.push(...stopsFromFile);
     }
-    // --- End OCR Loop ---
 
-    console.log('📦 Total de paradas extraídas (antes de gaps):', allParsedStops);
+    console.log('📦 Total paradas extraídas:', allParsedStops);
 
-    // --- Calculate Min/Max Stop Numbers ---
-    // This MUST happen AFTER the loop finishes and BEFORE the gap filling
     const uniqueStopsMap = new Map(allParsedStops.map(stop => [stop.number, stop]));
 
-    // Re-calculate min/max here using the final map
-    minStopNumber = Infinity; // Reset before calculating
-    maxStopNumber = 0;      // Reset before calculating
+    minStopNumber = Infinity;
+    maxStopNumber = 0;
     uniqueStopsMap.forEach(stop => {
       if (stop.number > maxStopNumber) maxStopNumber = stop.number;
       if (stop.number < minStopNumber) minStopNumber = stop.number;
     });
-    console.log(`📍 Rango de paradas detectado: ${minStopNumber} - ${maxStopNumber}`);
-    // --- End Min/Max Calculation ---
+    console.log(`📊 Rango: ${minStopNumber} - ${maxStopNumber}`);
 
-    // --- Gap Filling Logic ---
     const fullListWithGaps = [];
-    if (maxStopNumber > 0 && minStopNumber !== Infinity) { // Check if we found any valid stops
-        const loopStart = 2; // Always start checking from stop #2
-        console.log(`[DEBUG] Gap filling range: ${loopStart} to ${maxStopNumber}`);
+    if (maxStopNumber > 0 && minStopNumber !== Infinity) {
+      const loopStart = 2;
+      console.log(`[DEBUG] Gap filling: ${loopStart} to ${maxStopNumber}`);
 
-        for (let i = loopStart; i <= maxStopNumber; i++) {
-            console.log(`[DEBUG] Checking for stop number: ${i}`);
-            if (uniqueStopsMap.has(i)) {
-                console.log(`[DEBUG] Found stop ${i} in map. Adding it.`);
-                fullListWithGaps.push(uniqueStopsMap.get(i));
-            } else {
-                console.log(`[DEBUG] Stop ${i} NOT found. Adding GAP.`);
-                fullListWithGaps.push({ number: i, address: '', isDowntown: false });
-            }
+      for (let i = loopStart; i <= maxStopNumber; i++) {
+        if (uniqueStopsMap.has(i)) {
+          fullListWithGaps.push(uniqueStopsMap.get(i));
+        } else {
+          fullListWithGaps.push({ number: i, address: '', isDowntown: false });
         }
-    } else {
-        console.log("[DEBUG] No valid stops found by OCR to fill gaps.");
+      }
     }
-    // --- End Gap Filling ---
 
-    console.log('[DEBUG] Final list with gaps (before assignment):', JSON.stringify(fullListWithGaps));
+    console.log('[DEBUG] Lista final con gaps:', fullListWithGaps);
     extractedAddresses.value = fullListWithGaps;
 
   } catch (error) {
     console.error("Error processing images:", error);
-    // Use error.message for a more specific alert
     alert(`Error procesando imágenes: ${error.message || 'Error desconocido'}`);
   } finally {
     isProcessing.value = false;
-    // Reset file input to allow re-uploading the same file
     if (fileInputRef.value) {
       fileInputRef.value.value = '';
     }
   }
 }
-// --- END OF NEW BLOCK ---
 
 // ============================================
-// COMPUTED PROPERTIES (reportData, scenarioETAs, calculatedLogEntry)
+// COMPUTED PROPERTIES
 // ============================================
 
-// --- reportData (No changes needed) ---
 const reportData = computed(() => {
-    // ... (Your existing reportData logic)
-     if (!backendResponse.value || !backendResponse.value.segments) { return null; }
-    const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
-    let totalBlockMiles = 0; let totalBlockDriveDuration = 0; let totalBaseStopTime = 0;
-    let totalExtraStopTime = 0; let totalApartmentCount = 0; let totalDowntownCount = 0;
-    let totalStopCount = 0;
-    const processedSegments = segments.map(seg => {
-        let segmentBaseStopTime = 0; let segmentExtraStopTime = 0; let aptCount = 0;
-        let downtownCount = 0; const currentStopCount = (seg.stops || []).length;
-        totalStopCount += currentStopCount;
-        (seg.stops || []).forEach(addr => {
-            const stopData = extractedAddresses.value.find(s => s.address === addr); // Find based on original parsed address
-            const isDowntown = stopData ? stopData.isDowntown : false;
-            const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
-            segmentBaseStopTime += 1.5;
-            if (isDowntown) { downtownCount++; segmentExtraStopTime += 4.5; }
-            else if (isApartment) { aptCount++; segmentExtraStopTime += 1.5; }
-        });
-        totalBaseStopTime += segmentBaseStopTime; totalExtraStopTime += segmentExtraStopTime;
-        totalApartmentCount += aptCount + downtownCount; totalDowntownCount += downtownCount;
-        totalBlockMiles += parseFloat(seg.distance || 0);
-        totalBlockDriveDuration += parseFloat(seg.duration || 0);
-        return {
-            distance: seg.distance, duration: seg.duration, stopsCount: currentStopCount,
-            aptCount: aptCount, downtownCount: downtownCount
-        };
+  if (!backendResponse.value || !backendResponse.value.segments) {
+    return null;
+  }
+  
+  const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
+  let totalBlockMiles = 0;
+  let totalBlockDriveDuration = 0;
+  let totalBaseStopTime = 0;
+  let totalExtraStopTime = 0;
+  let totalApartmentCount = 0;
+  let totalDowntownCount = 0;
+  let totalStopCount = 0;
+  
+  const processedSegments = segments.map(seg => {
+    let segmentBaseStopTime = 0;
+    let segmentExtraStopTime = 0;
+    let aptCount = 0;
+    let downtownCount = 0;
+    const currentStopCount = (seg.stops || []).length;
+    totalStopCount += currentStopCount;
+    
+    (seg.stops || []).forEach(addr => {
+      const stopData = extractedAddresses.value.find(s => s.address === addr);
+      const isDowntown = stopData ? stopData.isDowntown : false;
+      const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
+      
+      segmentBaseStopTime += 1.5;
+      if (isDowntown) {
+        downtownCount++;
+        segmentExtraStopTime += 4.5;
+      } else if (isApartment) {
+        aptCount++;
+        segmentExtraStopTime += 1.5;
+      }
     });
-    const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
-    const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
-    const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
-    const toFinalDestDur = parseFloat(toFinalDestination.duration || 0);
-    const toLastStopDist = parseFloat(inverseRouteLegs.toLastStop.distance || 0);
-    const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
-    const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
-    const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
-    const totalWorkMiles = toFirstStopDist + totalBlockMiles;
-    const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
-    const totalNormalMiles = totalWorkMiles + toFinalDestDist;
-    const totalNormalDuration = totalWorkDuration + toFinalDestDur;
-    const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
-    const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
-    const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
-    const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
+    
+    totalBaseStopTime += segmentBaseStopTime;
+    totalExtraStopTime += segmentExtraStopTime;
+    totalApartmentCount += aptCount + downtownCount;
+    totalDowntownCount += downtownCount;
+    totalBlockMiles += parseFloat(seg.distance || 0);
+    totalBlockDriveDuration += parseFloat(seg.duration || 0);
+    
     return {
-        savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
-        normal: {
-            toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
-            segments: processedSegments,
-            toEnd: { distance: toFinalDestDist.toFixed(2), duration: Math.round(toFinalDestDur) },
-            totalWorkMiles: totalWorkMiles.toFixed(2),
-            totalWorkDuration: Math.round(totalWorkDuration),
-            totalMiles: totalNormalMiles.toFixed(2),
-            totalDuration: Math.round(totalNormalDuration),
-            baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
-            commuteDuration: toFinalDestDur,
-        },
-        inverse: {
-            toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
-            segments: processedSegments,
-            toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
-            totalWorkMiles: totalInverseWorkMiles.toFixed(2),
-            totalWorkDuration: Math.round(totalInverseWorkDuration),
-            totalMiles: totalInverseMiles.toFixed(2),
-            totalDuration: Math.round(totalInverseDuration),
-            baseDriveDuration: toLastStopDist + totalBlockDriveDuration,
-            commuteDuration: fromFirstStopDur,
-        },
-        stopCount: totalStopCount,
-        apartmentCount: totalApartmentCount,
-        downtownCount: totalDowntownCount,
+      distance: seg.distance,
+      duration: seg.duration,
+      stopsCount: currentStopCount,
+      aptCount: aptCount,
+      downtownCount: downtownCount
     };
+  });
+  
+  const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
+  const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
+  const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
+  const toFinalDestDur = parseFloat(toFinalDestination.duration || 0);
+  const toLastStopDist = parseFloat(inverseRouteLegs.toLastStop.distance || 0);
+  const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
+  const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
+  const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
+  
+  const totalWorkMiles = toFirstStopDist + totalBlockMiles;
+  const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
+  const totalNormalMiles = totalWorkMiles + toFinalDestDist;
+  const totalNormalDuration = totalWorkDuration + toFinalDestDur;
+  const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
+  const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
+  const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
+  const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
+  
+  return {
+    savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
+    normal: {
+      toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
+      segments: processedSegments,
+      toEnd: { distance: toFinalDestDist.toFixed(2), duration: Math.round(toFinalDestDur) },
+      totalWorkMiles: totalWorkMiles.toFixed(2),
+      totalWorkDuration: Math.round(totalWorkDuration),
+      totalMiles: totalNormalMiles.toFixed(2),
+      totalDuration: Math.round(totalNormalDuration),
+      baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
+      commuteDuration: toFinalDestDur,
+    },
+    inverse: {
+      toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
+      segments: processedSegments,
+      toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
+      totalWorkMiles: totalInverseWorkMiles.toFixed(2),
+      totalWorkDuration: Math.round(totalInverseWorkDuration),
+      totalMiles: totalInverseMiles.toFixed(2),
+      totalDuration: Math.round(totalInverseDuration),
+      baseDriveDuration: toLastStopDist + totalBlockDriveDuration,
+      commuteDuration: fromFirstStopDur,
+    },
+    stopCount: totalStopCount,
+    apartmentCount: totalApartmentCount,
+    downtownCount: totalDowntownCount,
+  };
 });
 
-// --- scenarioETAs (With prep time - NO CHANGES NEEDED) ---
 const scenarioETAs = computed(() => {
-    // ... (Your existing scenarioETAs logic with prep time)
-    if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
-         return null;
+  if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
+    return null;
+  }
+  
+  const stopCount = Number(reportData.value.stopCount) || 0;
+  const apartmentCount = Number(reportData.value.apartmentCount) || 0;
+  const downtownCount = Number(reportData.value.downtownCount) || 0;
+  const regularApartmentCount = apartmentCount - downtownCount;
+  
+  const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
+  const blockStartTime = new Date();
+  blockStartTime.setHours(startHours, startMinutes, 0, 0);
+  const prepTimeMinutes = Number(blockData.value.retraso_almacen) || 0;
+  const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000);
+  
+  const calculateScenario = (baseDrive, commute, multiplier) => {
+    const baseStopTime = stopCount * multiplier;
+    const extraAptTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
+    const routeDurationMinutes = (Number(baseDrive) || 0) + baseStopTime + extraAptTime + (Number(commute) || 0);
+    
+    if (isNaN(routeDurationMinutes)) {
+      return { totalDuration: 'N/A', eta: 'Error' };
     }
-    const stopCount = Number(reportData.value.stopCount) || 0;
-    const apartmentCount = Number(reportData.value.apartmentCount) || 0;
-    const downtownCount = Number(reportData.value.downtownCount) || 0;
-    const regularApartmentCount = apartmentCount - downtownCount;
-    const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
-    const blockStartTime = new Date();
-    blockStartTime.setHours(startHours, startMinutes, 0, 0);
-    const prepTimeMinutes = Number(blockData.value.retraso_almacen) || 0;
-    const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000);
-    const calculateScenario = (baseDrive, commute, multiplier) => {
-        const baseStopTime = stopCount * multiplier;
-        const extraAptTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
-        const routeDurationMinutes = (Number(baseDrive) || 0) + baseStopTime + extraAptTime + (Number(commute) || 0);
-        if (isNaN(routeDurationMinutes)) {
-            return { totalDuration: 'N/A', eta: 'Error' };
-        }
-        const eta = new Date(estimatedDepartureTime.getTime() + routeDurationMinutes * 60000);
-        return {
-            totalDuration: Math.round(routeDurationMinutes),
-            eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-        };
-    };
-    const normalBaseDrive = reportData.value.normal.baseDriveDuration;
-    const normalCommute = reportData.value.normal.commuteDuration;
-    const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
-    const inverseCommute = reportData.value.inverse.commuteDuration;
+    
+    const eta = new Date(estimatedDepartureTime.getTime() + routeDurationMinutes * 60000);
     return {
-        normal: {
-            optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
-            normal: calculateScenario(normalBaseDrive, normalCommute, 1.10),
-            pessimistic: calculateScenario(normalBaseDrive, normalCommute, 1.50)
-        },
-        inverse: {
-            optimistic: calculateScenario(inverseBaseDrive, inverseCommute, 0.90),
-            normal: calculateScenario(inverseBaseDrive, inverseCommute, 1.10),
-            pessimistic: calculateScenario(inverseBaseDrive, inverseCommute, 1.50)
-        }
+      totalDuration: Math.round(routeDurationMinutes),
+      eta: eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     };
+  };
+  
+  const normalBaseDrive = reportData.value.normal.baseDriveDuration;
+  const normalCommute = reportData.value.normal.commuteDuration;
+  const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
+  const inverseCommute = reportData.value.inverse.commuteDuration;
+  
+  return {
+    normal: {
+      optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
+      normal: calculateScenario(normalBaseDrive, normalCommute, 1.10),
+      pessimistic: calculateScenario(normalBaseDrive, normalCommute, 1.50)
+    },
+    inverse: {
+      optimistic: calculateScenario(inverseBaseDrive, inverseCommute, 0.90),
+      normal: calculateScenario(inverseBaseDrive, inverseCommute, 1.10),
+      pessimistic: calculateScenario(inverseBaseDrive, inverseCommute, 1.50)
+    }
+  };
 });
 
-// --- calculatedLogEntry (Updated for DB fields, uses simple city logic) ---
 const calculatedLogEntry = computed(() => {
-    if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
-        return null;
-    }
-    
-    const data = blockData.value;
-    const pago = Number(data.pago) || 0;
-    const duracion_horas = Number(data.duracion_horas) || 0;
-    const scenarioKey = selectedScenarioForLog.value;
-    
-    // ✅ VALIDATE scenario exists
-    const chosenReport = reportData.value[scenarioKey];
-    if (!chosenReport) {
-        console.error(`Scenario "${scenarioKey}" not found in reportData`);
-        return null;
-    }
-    
-    const chosenETA = scenarioETAs.value[scenarioKey]?.normal;
-    if (!chosenETA) {
-        console.error(`ETA for scenario "${scenarioKey}" not found`);
-        return null;
-    }
-    
-    const user_id = selectedUserId.value;
-    
-   
-// --- Calculate Primary City (IMPROVED) ---
-let primary_city = null;
-if (extractedAddresses.value.length > 0) {
+  if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
+    return null;
+  }
+  
+  const data = blockData.value;
+  const pago = Number(data.pago) || 0;
+  const duracion_horas = Number(data.duracion_horas) || 0;
+  const scenarioKey = selectedScenarioForLog.value;
+  
+  const chosenReport = reportData.value[scenarioKey];
+  if (!chosenReport) {
+    console.error(`Scenario "${scenarioKey}" not found`);
+    return null;
+  }
+  
+  const chosenETA = scenarioETAs.value[scenarioKey]?.normal;
+  if (!chosenETA) {
+    console.error(`ETA for scenario "${scenarioKey}" not found`);
+    return null;
+  }
+  
+  const user_id = selectedUserId.value;
+  
+  let primary_city = null;
+  if (extractedAddresses.value.length > 0) {
     const cityCounts = {};
     
     extractedAddresses.value.forEach(stop => {
-        if (!stop.address) return;
-        
-        // Remove common suffixes and parse
-        let addr = stop.address.toUpperCase();
-        
-        // Remove apartment indicators
-        addr = addr.replace(/\b(APT|UNIT|#)\s*\d+[A-Z]?\b/gi, '');
-        
-        // Remove state abbreviations at end
-        addr = addr.replace(/\b(FL|FLORIDA)\s*$/i, '');
-        
-        // Split and get potential city (usually second-to-last or last word)
-        const parts = addr.trim().split(/\s+/);
-        
-        // Common pattern: "123 MAIN ST ORLANDO" or "123 MAIN ST ORLANDO FL"
-        // City is usually after street name
-        let potentialCity = null;
-        
-        if (parts.length >= 3) {
-            // Try to find city (skip numbers and short words)
-            for (let i = parts.length - 1; i >= 0; i--) {
-                const word = parts[i];
-                // Skip if: number, or common street suffix, or too short
-                if (!/^\d+$/.test(word) && 
-                    !/^(ST|RD|AVE|BLVD|DR|LN|CT|WAY|PL|TER|CIR)$/i.test(word) &&
-                    word.length > 2) {
-                    potentialCity = word;
-                    break;
-                }
-            }
+      if (!stop.address) return;
+      
+      let addr = stop.address.toUpperCase();
+      addr = addr.replace(/\b(APT|UNIT|#)\s*\d+[A-Z]?\b/gi, '');
+      addr = addr.replace(/\b(FL|FLORIDA)\s*$/i, '');
+      
+      const parts = addr.trim().split(/\s+/);
+      let potentialCity = null;
+      
+      if (parts.length >= 3) {
+        for (let i = parts.length - 1; i >= 0; i--) {
+          const word = parts[i];
+          if (!/^\d+$/.test(word) && 
+              !/^(ST|RD|AVE|BLVD|DR|LN|CT|WAY|PL|TER|CIR)$/i.test(word) &&
+              word.length > 2) {
+            potentialCity = word;
+            break;
+          }
         }
-        
-        if (potentialCity && potentialCity.length > 2) {
-            cityCounts[potentialCity] = (cityCounts[potentialCity] || 0) + 1;
-        }
+      }
+      
+      if (potentialCity && potentialCity.length > 2) {
+        cityCounts[potentialCity] = (cityCounts[potentialCity] || 0) + 1;
+      }
     });
     
-
-    // Find most common city
     let maxCount = 0;
     for (const city in cityCounts) {
-        if (cityCounts[city] > maxCount) {
-            maxCount = cityCounts[city];
-            primary_city = city;
-        }
+      if (cityCounts[city] > maxCount) {
+        maxCount = cityCounts[city];
+        primary_city = city;
+      }
     }
     
-    // Capitalize properly (title case)
     if (primary_city) {
-        primary_city = primary_city
-            .split(' ')
-            .map(word => word.charAt(0) + word.slice(1).toLowerCase())
-            .join(' ');
+      primary_city = primary_city
+        .split(' ')
+        .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+        .join(' ');
     }
     
-    console.log("🏙️ Primary City Calculated:", primary_city, "Counts:", cityCounts);
-}
-// --- End City Calculation ---
-
-    const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
-    
-    const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
-    let despues_del_bloque_hrs = 0;
-    try {
-        const [startHours, startMinutes] = data.hora.split(':').map(Number);
-        const blockStart = new Date(); blockStart.setHours(startHours, startMinutes, 0, 0);
-        const durationMs = duracion_horas * 3600 * 1000;
-        const blockEnd = new Date(blockStart.getTime() + durationMs);
-        const etaString = chosenETA.eta; const [time, ampm] = etaString.split(' ');
-        let [etaHours, etaMinutes] = time.split(':').map(Number);
-        if (ampm.toUpperCase() === 'PM' && etaHours !== 12) etaHours += 12;
-        if (ampm.toUpperCase() === 'AM' && etaHours === 12) etaHours = 0;
-        const etaTime = new Date(); etaTime.setHours(etaHours, etaMinutes, 0, 0);
-        const diffMs = etaTime.getTime() - blockEnd.getTime();
-        despues_del_bloque_hrs = diffMs / (3600 * 1000);
-    } catch (e) { console.error("Error parsing time for logbook:", e); }
-    const tiempo_total = antes_del_bloque_hrs + duracion_horas + despues_del_bloque_hrs;
-    const commute_1 = Number(data.commute_1_manual) || 0;
-    const commute_2 = Number(chosenReport.toEnd.distance) || 0;
-    const millas_de_trabajo = Number(chosenReport.totalWorkMiles) || 0;
-    const millas_totales = commute_1 + millas_de_trabajo + commute_2;
-    const pago_por_hora = duracion_horas > 0 ? pago / duracion_horas : 0;
-    const pago_real_por_hora = tiempo_total > 0 ? pago / tiempo_total : 0;
-    const millas_por_hora = duracion_horas > 0 ? millas_de_trabajo / duracion_horas : 0;
-    const gasto_de_gasolina = (millas_totales / 35) * 3.00;
-    const desgaste_vehiculo = millas_totales * 0.25;
-    const tax = pago * 0.153;
-    const claim_por_milla = millas_de_trabajo * 0.70;
-    const numero_paradas = extractedAddresses.value.filter(s => s.address && s.address.trim() !== '').length;
-    // Inside calculatedLogEntry computed property
-
-    // ... (all the calculations for commute_1, commute_2, millas_de_trabajo, etc.)
-
-// --- REPLACE THIS LOG ---
-    console.log('[DEBUG] Data for Commute 2:', {
-        scenarioKey: scenarioKey,
-        // Log the specific distance property
-        chosenReport_toEnd_distance: chosenReport?.toEnd?.distance, 
-        calculated_commute_2: commute_2 
-    });
-    // --- END LOG ---
-    return {
-        fecha: data.fecha, vehiculo: data.vehiculo, warehouse: selectedWarehouseCode.value,
-        hora: data.hora, duracion_horas: duracion_horas, pago: pago,
-        pago_por_hora: pago_por_hora.toFixed(2), antes_del_bloque: antes_del_bloque_hrs.toFixed(2),
-        despues_del_bloque: despues_del_bloque_hrs.toFixed(2), tiempo_total: tiempo_total.toFixed(2),
-        pago_real_por_hora: pago_real_por_hora.toFixed(2), commute_1: commute_1.toFixed(2),
-        commute_2: commute_2.toFixed(2), millas_de_trabajo: millas_de_trabajo.toFixed(2),
-        millas_totales: millas_totales.toFixed(2), millas_por_hora: millas_por_hora.toFixed(2),
-        gasto_de_gasolina: gasto_de_gasolina.toFixed(2), desgaste_vehiculo: desgaste_vehiculo.toFixed(2),
-        tax: tax.toFixed(2), claim_por_milla: claim_por_milla.toFixed(2),
-        user_id: user_id, primary_city: primary_city, first_stop: first_stop_distance.toFixed(2), numero_paradas: numero_paradas
+    console.log("🏙️ Primary City:", primary_city, "Counts:", cityCounts);
+  }
+  
+  const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
+  
+  const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
+  let despues_del_bloque_hrs = 0;
+  
+  try {
+    const [startHours, startMinutes] = data.hora.split(':').map(Number);
+    const blockStart = new Date();
+    blockStart.setHours(startHours, startMinutes, 0, 0);
+    const durationMs = duracion_horas * 3600 * 1000;
+    const blockEnd = new Date(blockStart.getTime() + durationMs);
+    const etaString = chosenETA.eta;
+    const [time, ampm] = etaString.split(' ');
+    let [etaHours, etaMinutes] = time.split(':').map(Number);
+    if (ampm.toUpperCase() === 'PM' && etaHours !== 12) etaHours += 12;
+    if (ampm.toUpperCase() === 'AM' && etaHours === 12) etaHours = 0;
+    const etaTime = new Date();
+    etaTime.setHours(etaHours, etaMinutes, 0, 0);
+    const diffMs = etaTime.getTime() - blockEnd.getTime();
+    despues_del_bloque_hrs = diffMs / (3600 * 1000);
+  } catch (e) {
+    console.error("Error parsing time:", e);
+  }
+  
+  const tiempo_total = antes_del_bloque_hrs + duracion_horas + despues_del_bloque_hrs;
+  const commute_1 = Number(data.commute_1_manual) || 0;
+  const commute_2 = Number(chosenReport.toEnd.distance) || 0;
+  const millas_de_trabajo = Number(chosenReport.totalWorkMiles) || 0;
+  const millas_totales = commute_1 + millas_de_trabajo + commute_2;
+  const pago_por_hora = duracion_horas > 0 ? pago / duracion_horas : 0;
+  const pago_real_por_hora = tiempo_total > 0 ? pago / tiempo_total : 0;
+  const millas_por_hora = duracion_horas > 0 ? millas_de_trabajo / duracion_horas : 0;
+  const gasto_de_gasolina = (millas_totales / 35) * 3.00;
+  const desgaste_vehiculo = millas_totales * 0.25;
+  const tax = pago * 0.153;
+  const claim_por_milla = millas_de_trabajo * 0.70;
+  const numero_paradas = extractedAddresses.value.filter(s => s.address && s.address.trim() !== '').length;
+  
+  return {
+    fecha: data.fecha,
+    vehiculo: data.vehiculo,
+    warehouse: selectedWarehouseCode.value,
+    hora: data.hora,
+    duracion_horas: duracion_horas,
+    pago: pago,
+    pago_por_hora: pago_por_hora.toFixed(2),
+    antes_del_bloque: antes_del_bloque_hrs.toFixed(2),
+    despues_del_bloque: despues_del_bloque_hrs.toFixed(2),
+    tiempo_total: tiempo_total.toFixed(2),
+    pago_real_por_hora: pago_real_por_hora.toFixed(2),
+    commute_1: commute_1.toFixed(2),
+    commute_2: commute_2.toFixed(2),
+    millas_de_trabajo: millas_de_trabajo.toFixed(2),
+    millas_totales: millas_totales.toFixed(2),
+    millas_por_hora: millas_por_hora.toFixed(2),
+    gasto_de_gasolina: gasto_de_gasolina.toFixed(2),
+    desgaste_vehiculo: desgaste_vehiculo.toFixed(2),
+    tax: tax.toFixed(2),
+    claim_por_milla: claim_por_milla.toFixed(2),
+    user_id: user_id,
+    primary_city: primary_city, first_stop: first_stop_distance.toFixed(2), numero_paradas: numero_paradas
     };
 });
 
