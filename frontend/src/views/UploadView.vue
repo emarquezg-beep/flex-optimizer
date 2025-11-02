@@ -133,9 +133,65 @@ onMounted(() => {
 });
 
 // ============================================
-// FUNCIONES OCR
+// FUNCIÓN PRINCIPAL: EVALUAR RUTA
 // ============================================
 
+async function evaluateRoute() {
+  // Si no hay direcciones procesadas, primero procesar el JSON
+  if (extractedAddresses.value.length === 0) {
+    if (!jsonInput.value) {
+      alert('Please paste the JSON from the Gem first.');
+      return;
+    }
+
+    isProcessing.value = true;
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    try {
+      const parsedData = JSON.parse(jsonInput.value);
+
+      if (!Array.isArray(parsedData)) {
+        throw new Error('JSON must be an array of stops.');
+      }
+
+      const mappedStops = parsedData.map(item => {
+        const fullAddress = [
+          item.street_address,
+          item.apartment,
+          item.city
+        ].filter(Boolean).join(' ').trim();
+
+        return {
+          number: item.stop_number || 0,
+          address: fullAddress,
+          isDowntown: false
+        };
+      });
+
+      extractedAddresses.value = mappedStops;
+      
+      console.log('✅ Stops loaded from JSON:', extractedAddresses.value.length);
+      
+      // Pequeña pausa para mostrar el contador de stops
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+    } catch (error) {
+      console.error("Error processing JSON:", error);
+      alert(`Error processing JSON: ${error.message}`);
+      isProcessing.value = false;
+      return;
+    }
+  }
+
+  // Ahora evaluar la ruta
+  await sendToBackend();
+}
+
+// ============================================
+// FUNCIONES OCR (COMENTADAS - No se usan)
+// ============================================
+
+/*
 function calculateActualDelay() {
   try {
     const now = new Date();
@@ -348,6 +404,38 @@ async function handleFileChange(event) {
     if (fileInputRef.value) {
       fileInputRef.value.value = '';
     }
+  }
+}
+
+function startManualEntry() {
+  extractedAddresses.value = [{ number: 2, address: '', isDowntown: false }];
+}
+*/
+
+// ============================================
+// FUNCIÓN PARA CALCULAR DELAY (aún se usa en advanced settings)
+// ============================================
+
+function calculateActualDelay() {
+  try {
+    const now = new Date();
+    if (!blockData.value.hora) {
+      alert("Please set the 'Start Time' first.");
+      return;
+    }
+    
+    const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
+    const blockStartTime = new Date();
+    blockStartTime.setHours(startHours, startMinutes, 0, 0);
+    const diffMs = now.getTime() - blockStartTime.getTime();
+    const actualDelayMinutes = Math.max(0, Math.round(diffMs / 60000));
+    blockData.value.retraso_almacen = actualDelayMinutes;
+    
+    console.log(`⏱️ Calculated delay: ${actualDelayMinutes} minutes`);
+    alert(`Calculated delay: ${actualDelayMinutes} minutes.`);
+  } catch (e) {
+    console.error("Error calculating delay:", e);
+    alert(`Error: ${e.message}`);
   }
 }
 
@@ -827,158 +915,142 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   <div class="view-container">
     <div class="uploader-container">
 
-      <div class="file-input-area">
-        <label for="file-input" class="file-input-label">
-          <span class="file-input-icon">📤</span>
-          <span class="file-input-text">{{ fileInputLabel }}</span>
-        </label>
-        <input 
-          type="file" 
-          multiple 
-          accept="image/*" 
-          @change="handleFileChange" 
-          id="file-input" 
-          :disabled="isProcessing"
-          ref="fileInputRef" 
-        />
-        <div v-if="selectedFileNames.length > 0" class="selected-files">
-          Selected: {{ selectedFileNames.join(', ') }}
+      <!-- 📦 DATOS DEL BLOQUE -->
+      <div class="block-info-card">
+        <h2>📦 Block Details</h2>
+        <div class="block-info-grid">
+          <div class="info-item">
+            <span class="info-label">Warehouse</span>
+            <span class="info-value">{{ selectedWarehouseCode }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Date</span>
+            <span class="info-value">{{ blockData.fecha }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Start Time</span>
+            <span class="info-value">{{ blockData.hora }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Duration</span>
+            <span class="info-value">{{ blockData.duracion_horas }}h</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Payment</span>
+            <span class="info-value">${{ blockData.pago }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Vehicle</span>
+            <span class="info-value">{{ blockData.vehiculo }}</span>
+          </div>
         </div>
       </div>
+      </div>
 
-<div class="file-input-area">
-        </div>
-
-        <div class="gem-link-container">
+      <!-- 🤖 LINK AL GEM -->
+      <div class="gem-link-container">
         <a 
           href="https://gemini.google.com/gem/11PCFo5tGT1kWc0fd9PvoPz6uQryQUzTu?usp=sharing" 
           target="_blank" 
           rel="noopener noreferrer" 
           class="gem-link"
         >
-          🤖 Abrir el Gem para procesar direcciones
+          🤖 Open Gem to Process Screenshots
         </a>
+        <p class="gem-hint">Upload your route screenshots to the Gem, then paste the JSON below</p>
       </div>
-      <div class="json-paste-container">
+
+      <!-- 📋 JSON INPUT -->
+      <div class="json-input-card">
+        <h3>📋 Paste Route JSON</h3>
         <textarea 
           v-model="jsonInput" 
-          placeholder="... O pega el JSON de las paradas aquí"
-          rows="8"
+          placeholder='Paste the JSON from the Gem here. Example:
+[
+  {
+    "stop_number": 1,
+    "street_address": "123 Main St",
+    "apartment": "",
+    "city": "Orlando, FL"
+  },
+  ...
+]'
+          rows="10"
           class="json-textarea"
-          :disabled="isProcessing"
+          :disabled="isProcessing || extractedAddresses.length > 0"
         ></textarea>
-        <button @click="processJsonInput" class="button-secondary" :disabled="isProcessing">
-          Procesar JSON
+        
+        <!-- Mostrar contador de stops si ya se procesó -->
+        <div v-if="extractedAddresses.length > 0" class="stops-detected">
+          ✅ {{ extractedAddresses.length }} stops detected
+        </div>
+
+        <!-- Botón de evaluación (aparece cuando hay JSON) -->
+        <button 
+          v-if="jsonInput.trim() || extractedAddresses.length > 0"
+          @click="evaluateRoute" 
+          class="button-primary button-evaluate"
+          :disabled="isProcessing"
+        >
+          {{ isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios' }}
         </button>
       </div>
-      <div class="manual-entry-container">
-          <button @click="startManualEntry" class="button-secondary" :disabled="isProcessing">
-              📝 Enter Stops Manually
-          </button>
-      </div>
 
-      <div v-if="isProcessing" class="status"><h3>Processing images...</h3></div>
+      <div v-if="isProcessing" class="status"><h3>Evaluating route scenarios...</h3></div>
       
-      <div v-if="extractedAddresses.length > 0 && !isProcessing">
+      <!-- RESULTADOS (solo aparecen después de evaluar) -->
+      <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing">
+      
+      <!-- RESULTADOS (solo aparecen después de evaluar) -->
+      <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing">
         
-        <div class="controls-container">
-          <div class="control-group">
-            <label for="warehouse-select">Departure Point</label>
-            <select id="warehouse-select" v-model="selectedWarehouseCode">
-              <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
-                {{ wh.code }} ({{ wh.commuteMiles }} mi)
-              </option>
-            </select>
-          </div>
-          <div class="control-group">
-            <label for="destination-select">Final Destination</label>
-            <select id="destination-select" v-model="selectedDestination">
-              <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
-            </select>
-          </div>
-        </div>
-        <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-          <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
-        </div>
-
-        <div class="block-details-container">
-            <h3>Block Details</h3>
-            <div class="form-group">
-              <label for="user-select">Conductor</label>
-              <select id="user-select" v-model="selectedUserId">
-                <option v-for="user in USERS" :key="user.id" :value="user.id">
-                  {{ user.name }}
+        <!-- Controles de configuración (colapsados en una sección limpia) -->
+        <div class="route-config-card">
+          <h3>🎯 Route Configuration</h3>
+          <div class="controls-container">
+            <div class="control-group">
+              <label for="warehouse-select">Departure Point</label>
+              <select id="warehouse-select" v-model="selectedWarehouseCode">
+                <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
+                  {{ wh.code }} ({{ wh.commuteMiles }} mi)
                 </option>
               </select>
             </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Date</label>
-                    <input type="date" v-model="blockData.fecha">
-                </div>
-                <div class="form-group">
-                    <label>Start Time (24h)</label>
-                    <input type="time" v-model="blockData.hora">
-                </div>
-                <div class="form-group">
-                    <label>Vehicle</label>
-                    <select v-model="blockData.vehiculo">
-                        <option v-for="v in VEHICULO_OPTIONS" :key="v" :value="v">{{ v }}</option>
-                    </select>
-                </div>
+            <div class="control-group">
+              <label for="destination-select">Final Destination</label>
+              <select id="destination-select" v-model="selectedDestination">
+                <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
+              </select>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Duration (Hours)</label>
-                    <select v-model.number="blockData.duracion_horas">
-                        <option v-for="d in DURACION_OPTIONS" :key="d" :value="d">{{ d }} hrs</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Payment ($)</label>
-                    <input type="number" v-model.number="blockData.pago" placeholder="e.g., 70.50">
-                </div>
-            </div>
-             <div class="form-row">
-                <div class="form-group">
-                    <label>Time Before Block (min)</label>
-                    <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
-                </div>
-                <div class="form-group">
-                    <label>Commute 1 (Miles)</label>
-                    <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
-                </div>
-                <!-- Warehouse Delay -->
-                 <div class="form-group">
-                    <label class="label-with-button">
-                      <span>Warehouse Delay (min)</span>
-                      <button @click.prevent="calculateActualDelay" class="button-tertiary">Ahora</button>
-                    </label>
-                    <input type="number" v-model.number="blockData.retraso_almacen" step="5">
-                  </div>
-        </div>
-</div>
-
-        <div class="address-list">
-          <h2>📝 Review and Edit Stops ({{ extractedAddresses.length }})</h2>
-          <ol class="ordered-list">
-            <li v-for="(stop, index) in extractedAddresses" :key="index" class="editable-item">
-              <input type="number" v-model.number="stop.number" class="stop-number-input" placeholder="#">
-              <input type="text" v-model="stop.address" class="address-input" placeholder="Stop address">
-              <label class="downtown-label" title="Mark if Downtown">
-                <input type="checkbox" v-model="stop.isDowntown" class="downtown-checkbox"> DT
-              </label>
-              <button @click="removeAddress(index)" class="button-delete">🗑️</button>
-            </li>
-          </ol>
-          <div class="action-buttons">
-            <button @click="addAddress" class="button-add">➕ Add Stop</button>
-            <button @click="reorderList" class="button-reorder">🔄 Reorder List</button>
           </div>
-        </div> 
-        
-        <button @click="sendToBackend" class="button-map button-primary">Evaluate Scenarios</button>
+          <div v-if="selectedDestination === 'custom'" class="custom-input-container">
+            <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
+          </div>
+        </div>
+
+        <!-- Ajustes adicionales del bloque (si es necesario) -->
+        <div class="additional-settings">
+          <details>
+            <summary>⚙️ Advanced Settings (optional)</summary>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Time Before Block (min)</label>
+                <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
+              </div>
+              <div class="form-group">
+                <label>Commute 1 (Miles)</label>
+                <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
+              </div>
+              <div class="form-group">
+                <label class="label-with-button">
+                  <span>Warehouse Delay (min)</span>
+                  <button @click.prevent="calculateActualDelay" class="button-tertiary">Now</button>
+                </label>
+                <input type="number" v-model.number="blockData.retraso_almacen" step="5">
+              </div>
+            </div>
+          </details>
+        </div>
 
         <div v-if="backendResponse">
           <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
@@ -2100,4 +2172,232 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   cursor: not-allowed !important;
   opacity: 0.6 !important;
 }
+
+/* ========================================
+   NUEVOS ESTILOS - DISEÑO SIMPLIFICADO v4.2
+   ======================================== */
+
+/* Block Info Card */
+.block-info-card {
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.block-info-card h2 {
+  margin: 0 0 var(--space-4) 0;
+  color: var(--brand-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+}
+
+.block-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.info-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: var(--font-semibold);
+}
+
+.info-value {
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+}
+
+/* Gem Link Container */
+.gem-link-container {
+  background-color: var(--info-bg);
+  border: 2px solid var(--info);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+  text-align: center;
+}
+
+.gem-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  background-color: var(--brand-primary);
+  color: white;
+  text-decoration: none;
+  border-radius: var(--radius-base);
+  font-weight: var(--font-semibold);
+  font-size: var(--text-base);
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-md);
+}
+
+.gem-link:hover {
+  background-color: var(--brand-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.gem-hint {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* JSON Input Card */
+.json-input-card {
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.json-input-card h3 {
+  margin: 0 0 var(--space-4) 0;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+}
+
+.json-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: var(--space-4);
+  font-family: 'Courier New', monospace;
+  font-size: var(--text-sm);
+  border: 2px solid var(--border-primary);
+  border-radius: var(--radius-base);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  resize: vertical;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-xs);
+}
+
+.json-textarea:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), var(--shadow-sm);
+  outline: none;
+}
+
+.json-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--bg-tertiary);
+}
+
+.stops-detected {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background-color: var(--success-bg);
+  border: 1px solid var(--success);
+  border-radius: var(--radius-base);
+  color: var(--success);
+  font-weight: var(--font-semibold);
+  text-align: center;
+}
+
+.button-evaluate {
+  width: 100%;
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  box-shadow: var(--shadow-lg);
+}
+
+.button-evaluate:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-xl);
+}
+
+/* Route Config Card */
+.route-config-card {
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-card);
+}
+
+.route-config-card h3 {
+  margin: 0 0 var(--space-4) 0;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+}
+
+/* Additional Settings (collapsible) */
+.additional-settings {
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.additional-settings details {
+  cursor: pointer;
+}
+
+.additional-settings summary {
+  padding: var(--space-3);
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  user-select: none;
+}
+
+.additional-settings summary:hover {
+  color: var(--brand-primary);
+}
+
+.additional-settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.additional-settings summary::before {
+  content: '▶';
+  font-size: var(--text-xs);
+  transition: transform var(--transition-fast);
+}
+
+.additional-settings details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.additional-settings .form-row {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-secondary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .block-info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .button-evaluate {
+    font-size: var(--text-base);
+    padding: var(--space-3);
+  }
+}
+
 </style>
