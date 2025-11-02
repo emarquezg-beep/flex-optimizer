@@ -977,6 +977,23 @@ app.post('/api/complete-route', async (req, res) => {
     }
 
     console.log(`✅ Ruta ${routeId} completada. ETA real: ${timeFormatted}`);
+    
+    // 🆕 Si esta ruta vino de un bloque agendado, marcarlo como completado
+    try {
+      const { data: blockData, error: blockError } = await supabase
+        .from('scheduled_blocks')
+        .update({ status: 'completed' })
+        .eq('route_id', routeId)
+        .select();
+      
+      if (!blockError && blockData && blockData.length > 0) {
+        console.log(`✅ Bloque agendado ${blockData[0].id} marcado como completado`);
+      }
+    } catch (blockError) {
+      // No fallar si hay error actualizando el bloque
+      console.warn('⚠️ No se pudo actualizar bloque agendado:', blockError);
+    }
+    
     res.json({
       success: true,
       message: 'Ruta completada y ETA real guardado',
@@ -1332,6 +1349,56 @@ app.delete('/api/scheduled-blocks/:id', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Error eliminando bloque:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 6. POST /api/scheduled-blocks/:id/start
+// Marca un bloque como "en progreso" y lo vincula con la ruta creada
+app.post('/api/scheduled-blocks/:id/start', async (req, res) => {
+  const { id } = req.params;
+  const { routeId } = req.body;
+  
+  if (!routeId) {
+    return res.status(400).json({
+      success: false,
+      error: 'routeId es requerido'
+    });
+  }
+  
+  try {
+    // Actualizar el bloque agendado
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .update({ 
+        status: 'in_progress',
+        route_id: routeId
+      })
+      .eq('id', id)
+      .select();
+    
+    if (error) throw error;
+    
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bloque no encontrado'
+      });
+    }
+    
+    console.log(`✅ Bloque ${id} marcado como en progreso (route_id: ${routeId})`);
+    
+    res.json({
+      success: true,
+      message: 'Bloque vinculado con ruta',
+      block: data[0]
+    });
+    
+  } catch (error) {
+    console.error('❌ Error vinculando bloque con ruta:', error);
     res.status(500).json({
       success: false,
       error: error.message
