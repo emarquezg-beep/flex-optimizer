@@ -175,6 +175,9 @@ async function evaluateRoute() {
       // Pequeña pausa para mostrar el contador de stops
       await new Promise(resolve => setTimeout(resolve, 300));
       
+      // ✅ Resetear isProcessing antes de evaluar
+      isProcessing.value = false;
+      
     } catch (error) {
       console.error("Error processing JSON:", error);
       alert(`Error processing JSON: ${error.message}`);
@@ -809,6 +812,9 @@ async function sendToBackend() {
     } catch (error) {
       console.error("Error calling backend:", error);
       backendResponse.value = { error: `Error: ${error.message || 'No se pudo conectar al servidor.'}`, hasErrors: true };
+    } finally {
+      // ✅ Siempre limpiar isProcessing al terminar
+      isProcessing.value = false;
     }
 }
 
@@ -945,7 +951,8 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           </div>
         </div>
       </div>
-      </div>
+     </div> 
+
       <!-- 🤖 LINK AL GEM -->
       <div class="gem-link-container">
         <a 
