@@ -1,4 +1,4 @@
-// server.js (v3.0 - Implementación de ETA en Caliente)
+// server.js (v3.1 - Con Segmentos Inversos Reales)
 
 const { DateTime } = require('luxon');
 require('dotenv').config();
@@ -170,7 +170,7 @@ async function calculateLeg(origin, destination, waypoints = []) {
     }
 }
 
-// --- Tu endpoint `/api/optimize-route` (sin cambios) ---
+// --- Tu endpoint `/api/optimize-route` (CON SEGMENTOS INVERSOS) ---
 app.post('/api/optimize-route', async (req, res) => {
   let { addresses } = req.body;
   addresses = addresses.filter(addr => addr && addr.trim() !== '');
@@ -190,7 +190,7 @@ app.post('/api/optimize-route', async (req, res) => {
     const firstStop = workStops[0]; 
     const lastStop = workStops[workStops.length - 1]; 
 
-    console.log('✅ v1.7: Calculando con método manual correcto...');
+    console.log('✅ v1.8: Calculando con método manual correcto...');
     console.log(`   Warehouse: ${origin}`);
     console.log(`   Primera Parada: ${firstStop}`);
     console.log(`   Última Parada: ${lastStop}`);
@@ -221,17 +221,49 @@ app.post('/api/optimize-route', async (req, res) => {
         console.log(`   Segmento ${idx + 1}: ${seg.origin} → ${seg.destination} (${seg.waypoints.length} waypoints)`);
     });
 
+    // 🆕 CREAR SEGMENTOS INVERSOS (para ruta inversa)
+    const inverseWorkStops = [...workStops].reverse(); // Invertir el orden de paradas
+    const inverseSegments = [];
+
+    for (let i = 0; i < inverseWorkStops.length; i += 9) {
+        const segmentStops = inverseWorkStops.slice(i, i + 10);
+        
+        if (segmentStops.length > 0) {
+            inverseSegments.push({
+                origin: segmentStops[0],
+                destination: segmentStops[segmentStops.length - 1],
+                waypoints: segmentStops.slice(1, -1)
+            });
+        }
+    }
+
+    console.log(`   Segmentos inversos creados: ${inverseSegments.length}`);
+    inverseSegments.forEach((seg, idx) => {
+        console.log(`   Segmento Inverso ${idx + 1}: ${seg.origin} → ${seg.destination} (${seg.waypoints.length} waypoints)`);
+    });
+
     const segmentPromises = workStopSegments.map(seg => 
         calculateLeg(seg.origin, seg.destination, seg.waypoints)
     );
     
-    const [toFirstStop, toFinalDestination, toLastStopForInverse, fromFirstStopToHome, ...segmentResults] = await Promise.all([
+    // 🆕 CALCULAR SEGMENTOS INVERSOS
+    const inverseSegmentPromises = inverseSegments.map(seg =>
+        calculateLeg(seg.origin, seg.destination, seg.waypoints)
+    );
+    
+    const [toFirstStop, toFinalDestination, toLastStopForInverse, fromFirstStopToHome, ...allSegmentResults] = await Promise.all([
         toFirstStopPromise,
         toFinalDestinationPromise,
         toLastStopForInversePromise,
         fromFirstStopToHomePromise,
-        ...segmentPromises
+        ...segmentPromises,
+        ...inverseSegmentPromises // 🆕 AGREGAR PROMESAS INVERSAS
     ]);
+
+    // 🆕 SEPARAR RESULTADOS
+    const normalSegmentCount = workStopSegments.length;
+    const segmentResults = allSegmentResults.slice(0, normalSegmentCount);
+    const inverseSegmentResults = allSegmentResults.slice(normalSegmentCount);
 
     const failedAddresses = [];
     
@@ -255,7 +287,7 @@ app.post('/api/optimize-route', async (req, res) => {
     
     if (toLastStopForInverse.error) {
         failedAddresses.push({
-            type: 'Warehouse → Última Parada (Ruta Inversa)',
+            type: 'Warehouse → Última Parada (Inversa)',
             from: origin,
             to: lastStop,
             errorType: toLastStopForInverse.errorType
@@ -264,374 +296,112 @@ app.post('/api/optimize-route', async (req, res) => {
     
     if (fromFirstStopToHome.error) {
         failedAddresses.push({
-            type: 'Primera Parada → Destino (Ruta Inversa)',
+            type: 'Primera Parada → Destino (Inversa)',
             from: firstStop,
             to: finalDestination,
             errorType: fromFirstStopToHome.errorType
         });
     }
 
-    segmentResults.forEach((result, index) => {
+    segmentResults.forEach((result, idx) => {
         if (result.error) {
-            const seg = workStopSegments[index];
             failedAddresses.push({
-                type: `Segmento ${index + 1}`,
-                from: seg.origin,
-                to: seg.destination,
-                waypoints: seg.waypoints,
+                type: `Segmento ${idx + 1}`,
+                from: workStopSegments[idx].origin,
+                to: workStopSegments[idx].destination,
+                errorType: result.errorType
+            });
+        }
+    });
+
+    // 🆕 VERIFICAR ERRORES EN SEGMENTOS INVERSOS
+    inverseSegmentResults.forEach((result, idx) => {
+        if (result.error) {
+            failedAddresses.push({
+                type: `Segmento Inverso ${idx + 1}`,
+                from: inverseSegments[idx].origin,
+                to: inverseSegments[idx].destination,
                 errorType: result.errorType
             });
         }
     });
 
     if (failedAddresses.length > 0) {
-        console.error('❌ Se encontraron direcciones inválidas:', failedAddresses);
-        return res.status(400).json({
+        console.error('❌ Errores en el cálculo de rutas:', failedAddresses);
+        return res.status(422).json({
+            message: 'Error calculando algunas direcciones',
             hasErrors: true,
-            message: 'Algunas direcciones no pudieron ser geocodificadas',
-            failedAddresses: failedAddresses,
-            toFirstStop,
-            segments: segmentResults.map((result, index) => ({
-                ...result,
-                stops: workStopSegments[index] ? 
-                    [workStopSegments[index].origin, ...workStopSegments[index].waypoints, workStopSegments[index].destination] : 
-                    []
-            })),
-            toFinalDestination,
-            inverseRouteLegs: {
-                toLastStop: toLastStopForInverse,
-                fromFirstStop: fromFirstStopToHome
-            }
+            failedAddresses
         });
     }
 
-    const segmentsWithStops = segmentResults.map((result, index) => {
-        const seg = workStopSegments[index];
+    const segmentsWithStops = segmentResults.map((result, idx) => {
+        const segStops = workStopSegments[idx].waypoints.length > 0 
+            ? [workStopSegments[idx].origin, ...workStopSegments[idx].waypoints, workStopSegments[idx].destination]
+            : [workStopSegments[idx].origin, workStopSegments[idx].destination];
+        
         return {
-            ...result,
-            stops: [seg.origin, ...seg.waypoints, seg.destination] 
+            distance: result.distance,
+            duration: result.duration,
+            stops: segStops
         };
     });
 
-    console.log('🎉 v1.7: Cálculo completado correctamente');
+    // 🆕 AGREGAR STOPS A SEGMENTOS INVERSOS
+    const inverseSegmentsWithStops = inverseSegmentResults.map((result, idx) => {
+        const segStops = inverseSegments[idx].waypoints.length > 0 
+            ? [inverseSegments[idx].origin, ...inverseSegments[idx].waypoints, inverseSegments[idx].destination]
+            : [inverseSegments[idx].origin, inverseSegments[idx].destination];
+        
+        return {
+            distance: result.distance,
+            duration: result.duration,
+            stops: segStops
+        };
+    });
+
+    console.log('🎉 v1.8: Cálculo completado correctamente (con ruta inversa real)');
+    console.log('   RUTA NORMAL:');
     console.log(`   Warehouse → Primera: ${toFirstStop.distance} mi`);
     segmentsWithStops.forEach((seg, idx) => {
         console.log(`   Segmento ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
     });
     console.log(`   Última → Destino: ${toFinalDestination.distance} mi`);
+    console.log('   ');
+    console.log('   RUTA INVERSA:');
+    console.log(`   Warehouse → Última: ${toLastStopForInverse.distance} mi`);
+    inverseSegmentsWithStops.forEach((seg, idx) => {
+        console.log(`   Segmento Inverso ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
+    });
+    console.log(`   Primera → Destino: ${fromFirstStopToHome.distance} mi`);
 
     res.json({
-        hasErrors: false,
-        toFirstStop,
-        segments: segmentsWithStops,
-        toFinalDestination,
-        inverseRouteLegs: {
-            toLastStop: toLastStopForInverse,
-            fromFirstStop: fromFirstStopToHome
-        }
+      hasErrors: false,
+      toFirstStop,
+      segments: segmentsWithStops,
+      toFinalDestination,
+      inverseRouteLegs: {
+        toLastStop: toLastStopForInverse,
+        fromFirstStop: fromFirstStopToHome,
+        segments: inverseSegmentsWithStops // 🆕 SEGMENTOS INVERSOS REALES
+      }
     });
 
   } catch (error) {
-    console.error("❌ Error en el cálculo de escenarios:", error.message);
-    res.status(500).json({ 
-      hasErrors: true,
-      message: 'Error al calcular los escenarios.',
-      error: error.message 
-    });
-  }
-});
-
-// --- 🆕 FASE 3: Endpoint `/api/log-route` (MODIFICADO) ---
-app.post('/api/log-route', async (req, res) => {
-    const logData = req.body;
-    console.log('📦 Recibiendo datos v3 para guardar en bitácora');
-
-    // Extraer datos nuevos
-    const stopsArray = logData.stops_json; // Array de { number, address, isDowntown}
-    const etaOptimista = logData.eta_optimista; // String "11:45 AM"
-    const etaNormal = logData.eta_normal;
-    const etaPesimista = logData.eta_pesimista;
-
-    // Encriptar paradas
-    const encryptedStops = stopsArray ? encryptStops(stopsArray) : null;
-    if (stopsArray && !encryptedStops) {
-      return res.status(500).json({
-        success: false,
-        message: 'Error al encriptar paradas. Verifica ENCRYPTION_KEY.'
-      });
-    }
-
-    // Convertir ETAs de "11:45 AM" a formato TIME "11:45:00"
-    const convertToTime = (etaString) => {
-      if (!etaString) return null;
-      try {
-        const [time, period] = etaString.split(' ');
-        let [hours, minutes] = time.split(':').map(Number);
-        if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
-        if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
-      } catch (e) {
-        console.error('Error convirtiendo ETA:', e);
-        return null;
-      }
-    };
-
-    const dataToInsert = {
-        // --- Campos existentes ---
-        fecha: logData.fecha,
-        vehiculo: logData.vehiculo,
-        warehouse: logData.warehouse,
-        hora: logData.hora,
-        duracion_horas: logData.duracion_horas,
-        pago: logData.pago,
-        pago_por_hora: logData.pago_por_hora,
-        antes_del_bloque: logData.antes_del_bloque,
-        despues_del_bloque: logData.despues_del_bloque,
-        tiempo_total: logData.tiempo_total,
-        pago_real_por_hora: logData.pago_real_por_hora,
-        commute_1: logData.commute_1,
-        commute_2: logData.commute_2,
-        millas_de_trabajo: logData.millas_de_trabajo,
-        millas_totales: logData.millas_totales,
-        millas_por_hora: logData.millas_por_hora,
-        gasto_de_gasolina: logData.gasto_de_gasolina,
-        desgaste_vehiculo: logData.desgaste_vehiculo,
-        tax: logData.tax,
-        claim_por_milla: logData.claim_por_milla,
-        route_score: logData.route_score,
-        numero_paradas: logData.numero_paradas,
-        user_id: logData.user_id,
-        primary_city: logData.primary_city,
-        first_stop: logData.first_stop,
-        
-        // --- 🆕 NUEVOS CAMPOS ---
-        status: 1, // 1 = Ruta activa
-        eta_optimista: convertToTime(etaOptimista),
-        eta_normal: convertToTime(etaNormal),
-        eta_pesimista: convertToTime(etaPesimista),
-        stops_json: encryptedStops,
-        eta_real: null,
-        eta_real_input_date: null,
-        notes: null
-    };
-
-    Object.keys(dataToInsert).forEach(key => {
-        if (dataToInsert[key] === null || dataToInsert[key] === undefined) {
-            delete dataToInsert[key];
-        }
-    });
-
-    try {
-        const { data, error } = await supabase
-            .from('routes')
-            .insert([dataToInsert])
-            .select();
-
-        if (error) {
-            console.error('❌ Error de Supabase al insertar:', error.message);
-            throw error;
-        }
-
-        console.log('💾 ¡Ruta v3 guardada con ETAs y stops encriptados!');
-        res.status(200).json({ success: true, message: 'Ruta guardada en bitácora.', data: data });
-
-    } catch (error) {
-        console.error('❌ Error general en /api/log-route:', error.message);
-        res.status(500).json({ success: false, message: 'Error al guardar en Supabase.', error: error.message });
-    }
-});
-// --- Fin FASE 3 ---
-
-
-// --- 🆕 FASE 4: Nuevos Endpoints ---
-
-// 1. GET /api/active-route/:userId
-app.get('/api/active-route/:userId', async (req, res) => {
-  const { userId } = req.params;
-    // 🔥 LOGS CRÍTICOS
-  console.log('═══════════════════════════════════════');
-  console.log('🔍 [active-route] INICIANDO BÚSQUEDA');
-  console.log('📋 User ID recibido:', userId);
-  console.log('📋 User ID tipo:', typeof userId);
-  console.log('📋 User ID length:', userId.length);
-  console.log('═══════════════════════════════════════');
-  try {
-    // 🔥 SIMPLE: Traer la ruta más reciente con status=1
-    const { data, error } = await supabase
-      .from('routes')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 1)
-      .order('fecha', { ascending: false })
-      .order('hora', { ascending: false })
-      .limit(1);
-
-    if (error) throw error;
-
-    if (!data || data.length === 0) {
-      return res.json({
-        hasActiveRoute: false,
-        message: 'No tienes ruta activa'
-      });
-    }
-
-    const route = data[0];
-    const stops = route.stops_json ? decryptStops(route.stops_json) : [];
-
-    res.json({
-      hasActiveRoute: true,
-      route: {
-        id: route.id,
-        fecha: route.fecha,
-        warehouse: route.warehouse,
-        hora: route.hora,
-        duracion_horas: route.duracion_horas,
-        numero_paradas: route.numero_paradas,
-        primary_city: route.primary_city,
-        eta_optimista: route.eta_optimista,
-        eta_normal: route.eta_normal,
-        eta_pesimista: route.eta_pesimista,
-        stops: stops,
-        millas_totales: route.millas_totales,
-        pago: route.pago
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ [active-route] Error:', error);
+    console.error('❌ Error general:', error);
     res.status(500).json({
-      hasActiveRoute: false,
+      message: 'Error interno del servidor',
+      hasErrors: true,
       error: error.message
     });
   }
 });
 
-// 2. POST /api/calculate-live-eta
-
-    console.log('🕐 Servidor timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
-    console.log('🕐 Hora servidor (now):', new Date().toString());
-    console.log('🕐 Hora servidor (ISO):', new Date().toISOString());
-
-// REEMPLAZA TU ENDPOINT /api/calculate-live-eta CON ESTE:
-
-// 2. POST /api/calculate-live-eta (CON SEGMENTACIÓN)
-app.post('/api/calculate-live-eta', async (req, res) => {
-  const { routeId, currentStopNumber } = req.body;
-  if (!routeId || !currentStopNumber) {
-    return res.status(400).json({
-      error: 'Falta routeId o currentStopNumber'
-    });
-  }
-
-  try {
-    // 1. Obtener ruta y 2. Desencriptar paradas (Sin cambios)
-    const { data: route, error } = await supabase
-      .from('routes')
-      .select('*')
-      .eq('id', routeId)
-      .eq('status', 1)
-      .single();
-
-    if (error) {
-      throw new Error('Ruta no encontrada o ya finalizada');
-    }
-    const allStops = decryptStops(route.stops_json);
-    if (!allStops) {
-      throw new Error('Error desencriptando paradas');
-    }
-    
-    // 3. Filtrar paradas (Sin cambios)
-    const remainingStops = allStops.filter(
-      stop => stop.number >= currentStopNumber && stop.address
-    );
-    if (remainingStops.length === 0) {
-      return res.status(400).json({
-        error: 'No hay paradas restantes desde esa posición'
-      });
-    }
-
-    console.log(`Recalculando desde parada ${currentStopNumber}`);
-    console.log(`Paradas restantes: ${remainingStops.length} `);
-    
-    // --- 4. 🆕 CONSTRUIR RUTA SEGMENTADA ---
-    
-    // Lista de todos los puntos a visitar: 
-    // [ParadaActual, SiguienteParada, ..., UltimaParada, Casa]
-    const finalDestinationAddress = '513 Alafaya Woods Blvd Oviedo, FL';
-    const allRemainingPoints = remainingStops.map(s => s.address);
-    allRemainingPoints.push(finalDestinationAddress);
-
-    // Límite de Google: 1 Origen + 25 Waypoints + 1 Destino = 27 puntos
-    // Usamos 26 por seguridad (1 Origen + 24 Waypoints + 1 Destino)
-    const STOPS_PER_SEGMENT = 26; 
-    const routeSegments = [];
-
-    for (let i = 0; i < allRemainingPoints.length; i += (STOPS_PER_SEGMENT - 1)) {
-        const segmentPoints = allRemainingPoints.slice(i, i + STOPS_PER_SEGMENT);
-        
-        if (segmentPoints.length > 0) {
-            // Si es el último segmento y solo tiene 1 punto,
-            // ya fue el destino del segmento anterior.
-            if (segmentPoints.length === 1 && i > 0) {
-               break; 
-            }
-
-            routeSegments.push({
-                origin: segmentPoints[0],
-                destination: segmentPoints[segmentPoints.length - 1],
-                waypoints: segmentPoints.slice(1, -1) // Waypoints intermedios
-            });
-        }
-    }
-    // ========================================
-// SCHEDULED BLOCKS ENDPOINTS - v4.1
-// ========================================
-
-// 1. GET /api/scheduled-blocks/:userId - Obtener bloques de un usuario
-app.get('/api/scheduled-blocks/:userId', async (req, res) => {
-  const { userId } = req.params;
-  const { status, startDate, endDate } = req.query;
+// --- 🆕 FASE 3: Endpoint POST /api/save-route ---
+app.post('/api/save-route', async (req, res) => {
+  const { username, fecha, hora, duracion_horas, antes_del_bloque, despues_del_bloque, stops } = req.body;
   
-  try {
-    let query = supabase
-      .from('scheduled_blocks')
-      .select('*')
-      .eq('user_id', userId)
-      .order('fecha', { ascending: true })
-      .order('hora', { ascending: true });
-    
-    // Filtros opcionales
-    if (status) {
-      query = query.eq('status', status);
-    }
-    
-    if (startDate) {
-      query = query.gte('fecha', startDate);
-    }
-    
-    if (endDate) {
-      query = query.lte('fecha', endDate);
-    }
-    
-    const { data, error } = await query;
-    
-    if (error) throw error;
-    
-    console.log(`✅ Bloques obtenidos para user ${userId}:`, data?.length || 0);
-    res.json({ success: true, blocks: data || [] });
-    
-  } catch (error) {
-    console.error('❌ Error obteniendo bloques:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 2. POST /api/scheduled-blocks - Crear nuevo bloque
-app.post('/api/scheduled-blocks', async (req, res) => {
-  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehiculo, notes } = req.body;
-  
-  // Validación
-  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
+  if (!username || !fecha || !hora || !stops || stops.length === 0) {
     return res.status(400).json({ 
       success: false, 
       error: 'Faltan campos requeridos' 
@@ -639,296 +409,96 @@ app.post('/api/scheduled-blocks', async (req, res) => {
   }
   
   try {
+    // 🔐 ENCRIPTAR STOPS ANTES DE GUARDAR
+    const encryptedStops = encryptStops(stops);
+    
+    if (!encryptedStops) {
+      return res.status(500).json({
+        success: false,
+        error: 'Error encriptando las paradas'
+      });
+    }
+    
     const { data, error } = await supabase
-      .from('scheduled_blocks')
+      .from('routes')
       .insert([{
-        user_id,
+        username,
         fecha,
         hora,
         duracion_horas,
-        pago,
-        warehouse,
-        vehiculo,
-        notes,
-        status: 'scheduled'
+        antes_del_bloque,
+        despues_del_bloque,
+        stops_json: encryptedStops, // 🔐 Guardar encriptado
+        status: 1
       }])
       .select();
     
-    if (error) {
-      // Error de constraint (bloque duplicado)
-      if (error.code === '23505') {
-        return res.status(400).json({
-          success: false,
-          error: 'Ya existe un bloque agendado a esa hora'
-        });
-      }
-      throw error;
-    }
-    
-    console.log('✅ Bloque creado:', data[0].id);
-    res.json({ success: true, block: data[0] });
-    
-  } catch (error) {
-    console.error('❌ Error creando bloque:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 3. PUT /api/scheduled-blocks/:blockId - Actualizar bloque
-app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
-  const { blockId } = req.params;
-  const updates = req.body;
-  
-  // No permitir cambiar user_id ni created_at
-  delete updates.user_id;
-  delete updates.created_at;
-  
-  try {
-    const { data, error } = await supabase
-      .from('scheduled_blocks')
-      .update(updates)
-      .eq('id', blockId)
-      .select();
-    
     if (error) throw error;
     
-    if (!data || data.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Bloque no encontrado'
-      });
-    }
-    
-    console.log('✅ Bloque actualizado:', blockId);
-    res.json({ success: true, block: data[0] });
-    
-  } catch (error) {
-    console.error('❌ Error actualizando bloque:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 4. DELETE /api/scheduled-blocks/:blockId - Eliminar/Cancelar bloque
-app.delete('/api/scheduled-blocks/:blockId', async (req, res) => {
-  const { blockId } = req.params;
-  const { soft } = req.query; // ?soft=true para cancelar en lugar de eliminar
-  
-  try {
-    if (soft === 'true') {
-      // Soft delete: Cambiar status a 'cancelled'
-      const { data, error } = await supabase
-        .from('scheduled_blocks')
-        .update({ status: 'cancelled' })
-        .eq('id', blockId)
-        .select();
-      
-      if (error) throw error;
-      
-      console.log('✅ Bloque cancelado:', blockId);
-      res.json({ success: true, message: 'Bloque cancelado', block: data[0] });
-      
-    } else {
-      // Hard delete: Eliminar permanentemente
-      const { error } = await supabase
-        .from('scheduled_blocks')
-        .delete()
-        .eq('id', blockId);
-      
-      if (error) throw error;
-      
-      console.log('✅ Bloque eliminado:', blockId);
-      res.json({ success: true, message: 'Bloque eliminado' });
-    }
-    
-  } catch (error) {
-    console.error('❌ Error eliminando bloque:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 5. POST /api/scheduled-blocks/:blockId/start - Iniciar bloque (vincula con route)
-app.post('/api/scheduled-blocks/:blockId/start', async (req, res) => {
-  const { blockId } = req.params;
-  const { routeId } = req.body;
-  
-  if (!routeId) {
-    return res.status(400).json({
-      success: false,
-      error: 'routeId es requerido'
-    });
-  }
-  
-  try {
-    const { data, error } = await supabase
-      .from('scheduled_blocks')
-      .update({
-        status: 'started',
-        route_id: routeId
-      })
-      .eq('id', blockId)
-      .select();
-    
-    if (error) throw error;
-    
-    console.log(`✅ Bloque ${blockId} iniciado con route ${routeId}`);
-    res.json({ success: true, block: data[0] });
-    
-  } catch (error) {
-    console.error('❌ Error iniciando bloque:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 6. GET /api/scheduled-blocks/:userId/week-summary - Resumen semanal
-app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
-  const { userId } = req.params;
-  
-  try {
-    // Obtener fecha de inicio de semana (lunes)
-    const today = DateTime.now().setZone('America/New_York');
-    const startOfWeek = today.startOf('week').toISODate();
-    const endOfWeek = today.endOf('week').toISODate();
-    
-    console.log(`📊 Resumen semanal: ${startOfWeek} a ${endOfWeek}`);
-    
-    // Bloques agendados esta semana
-    const { data: blocks, error: blocksError } = await supabase
-      .from('scheduled_blocks')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('fecha', startOfWeek)
-      .lte('fecha', endOfWeek)
-      .neq('status', 'cancelled');
-    
-    if (blocksError) throw blocksError;
-    
-    // Rutas completadas esta semana
-    const { data: routes, error: routesError } = await supabase
-      .from('routes')
-      .select('duracion_horas, pago, millas_totales')
-      .eq('user_id', userId)
-      .gte('fecha', startOfWeek)
-      .lte('fecha', endOfWeek)
-      .eq('status', 0); // Completadas
-    
-    if (routesError) throw routesError;
-    
-    // Calcular totales
-    const totalHorasAgendadas = blocks.reduce((sum, b) => sum + (b.duracion_horas || 0), 0);
-    const totalPagoAgendado = blocks.reduce((sum, b) => sum + (b.pago || 0), 0);
-    
-    const totalHorasTrabajadas = routes.reduce((sum, r) => sum + (r.duracion_horas || 0), 0);
-    const totalPagoGanado = routes.reduce((sum, r) => sum + (r.pago || 0), 0);
-    const totalMillas = routes.reduce((sum, r) => sum + (r.millas_totales || 0), 0);
+    console.log(`✅ Ruta creada: ID ${data[0].id} (stops encriptados)`);
     
     res.json({
       success: true,
-      summary: {
-        weekStart: startOfWeek,
-        weekEnd: endOfWeek,
-        scheduled: {
-          blocks: blocks.length,
-          hours: totalHorasAgendadas.toFixed(1),
-          pay: totalPagoAgendado.toFixed(2)
-        },
-        completed: {
-          routes: routes.length,
-          hours: totalHorasTrabajadas.toFixed(1),
-          pay: totalPagoGanado.toFixed(2),
-          miles: totalMillas.toFixed(1)
-        }
+      message: 'Ruta guardada correctamente',
+      route: {
+        id: data[0].id,
+        username: data[0].username,
+        fecha: data[0].fecha,
+        hora: data[0].hora,
+        status: data[0].status
       }
     });
     
   } catch (error) {
-    console.error('❌ Error en resumen semanal:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ Error guardando ruta:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
-    // 5. 🆕 LLAMAR A GOOGLE MAPS API POR SEGMENTOS
-    const segmentPromises = routeSegments.map(seg => 
-        calculateLeg(seg.origin, seg.destination, seg.waypoints)
-    );
+// --- 🆕 FASE 3: Endpoint GET /api/routes (con desencriptación) ---
+app.get('/api/routes', async (req, res) => {
+  const { username, status } = req.query;
+  
+  try {
+    let query = supabase.from('routes').select('*');
     
-    const segmentResults = await Promise.all(segmentPromises);
-
-    // 6. 🆕 CALCULAR TOTALES Y ETAs
-    let totalDistance = 0;
-    let totalDuration = 0;
-    let hasError = false;
-
-    segmentResults.forEach(res => {
-      if (res.error) hasError = true;
-      totalDuration += res.duration;
-      totalDistance += parseFloat(res.distance);
-    });
-
-    if (hasError) {
-      throw new Error('Error calculando un segmento de la ruta con Google Maps');
+    if (username) {
+      query = query.eq('username', username);
     }
     
-    // A partir de aquí, la lógica es la misma que antes, 
-    // pero usando los totales de los segmentos.
+    if (status !== undefined) {
+      query = query.eq('status', parseInt(status));
+    }
     
-    const baseDriveMinutes = totalDuration; // Tiempo total de conducción (trabajo + commute)
-    const remainingMiles = totalDistance;
+    const { data, error } = await supabase.from('routes').select('*').order('fecha', { ascending: false });
     
-    // Contar paradas de TRABAJO (sin incluir la casa)
-    const stopCount = remainingStops.length; 
-    let aptCount = 0;
-    let downtownCount = 0;
-    remainingStops.forEach(stop => {
-      if (stop.isDowntown) {
-        downtownCount++;
-        aptCount++; 
-      } else if (stop.address && stop.address.match(/APT|UNIT|#/i)) {
-        aptCount++;
+    if (error) throw error;
+    
+    // 🔓 DESENCRIPTAR STOPS SI EXISTEN
+    const routesWithDecryptedStops = data.map(route => {
+      if (route.stops_json) {
+        const decrypted = decryptStops(route.stops_json);
+        return {
+          ...route,
+          stops: decrypted || [] // Si falla desencriptación, retornar array vacío
+        };
       }
-    });
-    const regularApts = aptCount - downtownCount;
-
-    // Función helper (con la corrección de zona horaria que hicimos antes)
-    const calculateETA = (multiplier) => {
-      const baseStopTime = stopCount * multiplier;
-      const extraAptTime = (regularApts * 1.5) + (downtownCount * 4.5);
-      // Total = (Drive + Commute) + (Tiempo de Paradas)
-      const totalMinutes = baseDriveMinutes + baseStopTime + extraAptTime; 
-      const now = new Date();
-      const etaTime = new Date(now.getTime() + totalMinutes * 60000);
       return {
-        totalMinutes: Math.round(totalMinutes),
-        eta: etaTime.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZone: 'America/New_York' 
-        })
+        ...route,
+        stops: []
       };
-    };
-
-    const liveETAs = {
-      optimistic: calculateETA(0.90),
-      normal: calculateETA(1.10),
-      pessimistic: calculateETA(1.50)
-    };
-
-    console.log('✅ ETAs recalculados (segmentados):', liveETAs);
+    });
+    
     res.json({
       success: true,
-      currentStop: currentStopNumber,
-      remainingStops: remainingStops.length,
-      remainingMiles: remainingMiles.toFixed(2), // 🆕 Enviamos las millas totales
-      etas: liveETAs,
-      breakdown: {
-        baseDriveMinutes: Math.round(baseDriveMinutes),
-        stopCount,
-        aptCount,
-        downtownCount
-      }
+      routes: routesWithDecryptedStops
     });
-
+    
   } catch (error) {
-    console.error('❌ Error en calculate-live-eta:', error);
+    console.error('❌ Error obteniendo rutas:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -936,71 +506,82 @@ app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
   }
 });
 
-// 3. POST /api/complete-route
-app.post('/api/complete-route', async (req, res) => {
-  const { routeId, etaReal } = req.body; // etaReal: "5:11 PM"
-  if (!routeId || !etaReal) {
-    return res.status(400).json({
-      error: 'Falta routeId o etaReal'
-    });
-  }
-
+// --- 🆕 FASE 4: Endpoint GET /api/routes/:id (con desencriptación) ---
+app.get('/api/routes/:id', async (req, res) => {
+  const { id } = req.params;
+  
   try {
-    // Convertir "5:11 PM" a "17:11:00"
-    const convertToTime = (etaString) => {
-      const [time, period] = etaString.trim().split(' ');
-      let [hours, minutes] = time.split(':').map(Number);
-      if (period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
-      if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
-    };
-    const timeFormatted = convertToTime(etaReal);
-
     const { data, error } = await supabase
       .from('routes')
-      .update({
-        status: 0,
-        eta_real: timeFormatted,
-        eta_real_input_date: new Date().toISOString(),
-        stops_json: null // BORRAR DIRECCIONES
-      })
-      .eq('id', routeId)
-      //.eq('status', 1) // Quitado para permitir actualizar rutas pendientes
-      .select();
-
+      .select('*')
+      .eq('id', id)
+      .single();
+    
     if (error) throw error;
+    
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        error: 'Ruta no encontrada'
+      });
+    }
+    
+    // 🔓 DESENCRIPTAR STOPS
+    let decryptedStops = [];
+    if (data.stops_json) {
+      decryptedStops = decryptStops(data.stops_json) || [];
+    }
+    
+    res.json({
+      success: true,
+      route: {
+        ...data,
+        stops: decryptedStops
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo ruta:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// --- 🆕 FASE 4: Endpoint PUT /api/routes/:id/finish ---
+app.put('/api/routes/:id/finish', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const { data, error } = await supabase
+      .from('routes')
+      .update({ 
+        status: 0,
+        stops_json: null // Borrar stops al finalizar
+      })
+      .eq('id', id)
+      .select();
+    
+    if (error) throw error;
+    
     if (!data || data.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Ruta no encontrada'
+        error: 'Ruta no encontrada'
       });
     }
-
-    console.log(`✅ Ruta ${routeId} completada. ETA real: ${timeFormatted}`);
     
-    // 🆕 Si esta ruta vino de un bloque agendado, marcarlo como completado
-    try {
-      const { data: blockData, error: blockError } = await supabase
-        .from('scheduled_blocks')
-        .update({ status: 'completed' })
-        .eq('route_id', routeId)
-        .select();
-      
-      if (!blockError && blockData && blockData.length > 0) {
-        console.log(`✅ Bloque agendado ${blockData[0].id} marcado como completado`);
-      }
-    } catch (blockError) {
-      // No fallar si hay error actualizando el bloque
-      console.warn('⚠️ No se pudo actualizar bloque agendado:', blockError);
-    }
+    console.log(`✅ Ruta ${id} finalizada y stops borrados`);
     
     res.json({
       success: true,
-      message: 'Ruta completada y ETA real guardado',
-      data: data[0]
+      message: 'Ruta finalizada correctamente',
+      route: data[0]
     });
+    
   } catch (error) {
-    console.error('❌ Error completando ruta:', error);
+    console.error('❌ Error finalizando ruta:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1008,167 +589,34 @@ app.post('/api/complete-route', async (req, res) => {
   }
 });
 
-// 4. GET /api/pending-eta/:userId
-app.get('/api/pending-eta/:userId', async (req, res) => {
-  const { userId } = req.params;
-  try {
-    const { data, error } = await supabase
-      .from('routes')
-      .select('id, fecha, warehouse, hora, eta_normal, primary_city')
-      .eq('user_id', userId)
-      .eq('status', 0)
-      .is('eta_real', null)
-      .is('notes', null) // No tiene "user_skipped"
-      .order('fecha', { ascending: false })
-      .limit(5);
+// --- 🆕 FASE 6: Endpoints de Scheduled Blocks ---
 
-    if (error) throw error;
-    res.json({
-      hasPending: data.length > 0,
-      routes: data
-    });
-  } catch (error) {
-    console.error('❌ Error obteniendo rutas pendientes:', error);
-    res.status(500).json({
-      hasPending: false,
-      error: error.message
-    });
-  }
-});
-
-// 5. POST /api/skip-eta
-app.post('/api/skip-eta', async (req, res) => {
-  const { routeId } = req.body;
-  try {
-    const { data, error } = await supabase
-      .from('routes')
-      .update({ notes: 'user_skipped' })
-      .eq('id', routeId)
-      .select();
-
-    if (error) throw error;
-    console.log(`✅ Usuario saltó ETA de ruta ${routeId}`);
-    res.json({
-      success: true,
-      message: 'Ruta marcada como saltada'
-    });
-  } catch (error) {
-    console.error('❌ Error saltando ETA:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-// --- Fin FASE 4 ---
-
-
-// ========================================
-// 🆕 FASE 6: SCHEDULED BLOCKS ENDPOINTS
-// ========================================
-
-// 1. GET /api/scheduled-blocks/:userId/week-summary
-// Obtiene resumen de la semana actual (horas, pago, millas, bloques)
-app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
-  const { userId } = req.params;
-  
-  try {
-    // Obtener inicio y fin de semana (domingo a sábado)
-    const now = DateTime.now().setZone('America/New_York');
-    const startOfWeek = now.startOf('week').toISODate(); // Domingo
-    const endOfWeek = now.endOf('week').toISODate(); // Sábado
-    
-    console.log(`📊 Calculando resumen semanal para ${userId}`);
-    console.log(`   Semana: ${startOfWeek} a ${endOfWeek}`);
-    
-    // Bloques completados (rutas con status = 0)
-    const { data: completedRoutes, error: routesError } = await supabase
-      .from('routes')
-      .select('duracion_horas, pago, millas_totales')
-      .eq('user_id', userId)
-      .eq('status', 0)
-      .gte('fecha', startOfWeek)
-      .lte('fecha', endOfWeek);
-    
-    if (routesError) throw routesError;
-    
-    // Bloques agendados (scheduled_blocks con status = 'scheduled')
-    const { data: scheduledBlocks, error: blocksError } = await supabase
-      .from('scheduled_blocks')
-      .select('duracion_horas, pago')
-      .eq('user_id', userId)
-      .eq('status', 'scheduled')
-      .gte('fecha', startOfWeek)
-      .lte('fecha', endOfWeek);
-    
-    if (blocksError) throw blocksError;
-    
-    // Calcular totales
-    const completedHours = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.duracion_horas) || 0), 0);
-    const completedPay = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.pago) || 0), 0);
-    const completedMiles = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.millas_totales) || 0), 0);
-    
-    const scheduledHours = scheduledBlocks.reduce((sum, b) => sum + (parseFloat(b.duracion_horas) || 0), 0);
-    const scheduledPay = scheduledBlocks.reduce((sum, b) => sum + (parseFloat(b.pago) || 0), 0);
-    
-    res.json({
-      success: true,
-      summary: {
-        completed: {
-          routes: completedRoutes.length,
-          hours: completedHours.toFixed(1),
-          pay: completedPay.toFixed(2),
-          miles: completedMiles.toFixed(1)
-        },
-        scheduled: {
-          blocks: scheduledBlocks.length,
-          hours: scheduledHours.toFixed(1),
-          pay: scheduledPay.toFixed(2)
-        }
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Error obteniendo resumen semanal:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// 2. GET /api/scheduled-blocks/:userId
-// Obtiene bloques agendados con filtros opcionales
-app.get('/api/scheduled-blocks/:userId', async (req, res) => {
-  const { userId } = req.params;
-  const { status, startDate, endDate } = req.query;
+// 1. GET /api/scheduled-blocks
+// Obtiene todos los bloques agendados (opcionalmente filtrados por usuario y/o fecha)
+app.get('/api/scheduled-blocks', async (req, res) => {
+  const { username, fecha } = req.query;
   
   try {
     let query = supabase
       .from('scheduled_blocks')
       .select('*')
-      .eq('user_id', userId)
+      .neq('status', 'cancelled') // Excluir bloques cancelados por defecto
       .order('fecha', { ascending: true })
       .order('hora', { ascending: true });
     
-    // Filtros opcionales
-    if (status) {
-      query = query.eq('status', status);
+    if (username) {
+      query = query.eq('username', username);
     }
     
-    if (startDate) {
-      query = query.gte('fecha', startDate);
-    }
-    
-    if (endDate) {
-      query = query.lte('fecha', endDate);
+    if (fecha) {
+      query = query.eq('fecha', fecha);
     }
     
     const { data, error } = await query;
     
     if (error) throw error;
     
-    console.log(`✅ ${data.length} bloques encontrados para usuario ${userId}`);
+    console.log(`✅ ${data.length} bloques agendados obtenidos`);
     
     res.json({
       success: true,
@@ -1176,7 +624,42 @@ app.get('/api/scheduled-blocks/:userId', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Error obteniendo bloques:', error);
+    console.error('❌ Error obteniendo bloques agendados:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 2. GET /api/scheduled-blocks/:id
+// Obtiene un bloque específico por ID
+app.get('/api/scheduled-blocks/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw error;
+    
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bloque no encontrado'
+      });
+    }
+    
+    res.json({
+      success: true,
+      block: data
+    });
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo bloque:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1187,22 +670,13 @@ app.get('/api/scheduled-blocks/:userId', async (req, res) => {
 // 3. POST /api/scheduled-blocks
 // Crea un nuevo bloque agendado
 app.post('/api/scheduled-blocks', async (req, res) => {
-  const { 
-    user_id, 
-    fecha, 
-    hora, 
-    duracion_horas, 
-    pago, 
-    warehouse, 
-    vehiculo,
-    notes 
-  } = req.body;
+  const { username, fecha, hora, duracion_horas, antes_del_bloque, despues_del_bloque } = req.body;
   
-  // Validaciones
-  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
+  // Validación básica
+  if (!username || !fecha || !hora) {
     return res.status(400).json({
       success: false,
-      error: 'Faltan campos requeridos'
+      error: 'Faltan campos requeridos: username, fecha, hora'
     });
   }
   
@@ -1210,15 +684,13 @@ app.post('/api/scheduled-blocks', async (req, res) => {
     const { data, error } = await supabase
       .from('scheduled_blocks')
       .insert([{
-        user_id,
+        username,
         fecha,
         hora,
-        duracion_horas: parseFloat(duracion_horas),
-        pago: parseFloat(pago),
-        warehouse,
-        vehiculo,
-        status: 'scheduled',
-        notes: notes || null
+        duracion_horas: duracion_horas || 4,
+        antes_del_bloque: antes_del_bloque || '0',
+        despues_del_bloque: despues_del_bloque || '0',
+        status: 'scheduled'
       }])
       .select();
     
@@ -1233,7 +705,7 @@ app.post('/api/scheduled-blocks', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Error creando bloque:', error);
+    console.error('❌ Error creando bloque agendado:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1245,30 +717,28 @@ app.post('/api/scheduled-blocks', async (req, res) => {
 // Actualiza un bloque existente
 app.put('/api/scheduled-blocks/:id', async (req, res) => {
   const { id } = req.params;
-  const { 
-    fecha, 
-    hora, 
-    duracion_horas, 
-    pago, 
-    warehouse, 
-    vehiculo,
-    notes 
-  } = req.body;
+  const { fecha, hora, duracion_horas, antes_del_bloque, despues_del_bloque, status } = req.body;
   
   try {
-    const updateData = {};
+    // Construir objeto de actualización solo con campos proporcionados
+    const updates = {};
+    if (fecha !== undefined) updates.fecha = fecha;
+    if (hora !== undefined) updates.hora = hora;
+    if (duracion_horas !== undefined) updates.duracion_horas = duracion_horas;
+    if (antes_del_bloque !== undefined) updates.antes_del_bloque = antes_del_bloque;
+    if (despues_del_bloque !== undefined) updates.despues_del_bloque = despues_del_bloque;
+    if (status !== undefined) updates.status = status;
     
-    if (fecha) updateData.fecha = fecha;
-    if (hora) updateData.hora = hora;
-    if (duracion_horas) updateData.duracion_horas = parseFloat(duracion_horas);
-    if (pago) updateData.pago = parseFloat(pago);
-    if (warehouse) updateData.warehouse = warehouse;
-    if (vehiculo) updateData.vehiculo = vehiculo;
-    if (notes !== undefined) updateData.notes = notes || null;
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No se proporcionaron campos para actualizar'
+      });
+    }
     
     const { data, error } = await supabase
       .from('scheduled_blocks')
-      .update(updateData)
+      .update(updates)
       .eq('id', id)
       .select();
     
@@ -1516,5 +986,5 @@ console.log('⏰ Cron job de cleanup iniciado (cada 5 minutos) usando Eastern Ti
 
 // --- Tu `app.listen` (movido al final) ---
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend v3.0 (ETA en Caliente) corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor backend v3.1 (Con Segmentos Inversos Reales) corriendo en http://localhost:${PORT}`);
 });

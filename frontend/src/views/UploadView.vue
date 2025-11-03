@@ -508,12 +508,69 @@ const reportData = computed(() => {
   const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
   const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
   
+  // ═══════════════════════════════════════════════════════════════
+  // 🆕 NUEVO CÓDIGO - PROCESAMIENTO DE SEGMENTOS INVERSOS
+  // ═══════════════════════════════════════════════════════════════
+  let inverseBlockMiles = 0;
+  let inverseBlockDriveDuration = 0;
+  let inverseProcessedSegments = [];
+  
+  if (inverseRouteLegs.segments && inverseRouteLegs.segments.length > 0) {
+    inverseProcessedSegments = inverseRouteLegs.segments.map(seg => {
+      let segmentBaseStopTime = 0;
+      let segmentExtraStopTime = 0;
+      let aptCount = 0;
+      let downtownCount = 0;
+      const currentStopCount = (seg.stops || []).length;
+      
+      (seg.stops || []).forEach(addr => {
+        const stopData = extractedAddresses.value.find(s => s.address === addr);
+        const isDowntown = stopData ? stopData.isDowntown : false;
+        const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
+        
+        segmentBaseStopTime += 1.5;
+        if (isDowntown) {
+          downtownCount++;
+          segmentExtraStopTime += 4.5;
+        } else if (isApartment) {
+          aptCount++;
+          segmentExtraStopTime += 1.5;
+        }
+      });
+      
+      const segDist = parseFloat(seg.distance || 0);
+      const segDur = parseFloat(seg.duration || 0);
+      inverseBlockMiles += segDist;
+      inverseBlockDriveDuration += segDur;
+      
+      return {
+        distance: seg.distance,
+        duration: seg.duration,
+        stopsCount: currentStopCount,
+        aptCount: aptCount,
+        downtownCount: downtownCount
+      };
+    });
+  } else {
+    // Fallback: usar segmentos normales (comportamiento antiguo)
+    console.warn('⚠️ No se recibieron segmentos inversos del backend, usando segmentos normales');
+    inverseBlockMiles = totalBlockMiles;
+    inverseBlockDriveDuration = totalBlockDriveDuration;
+    inverseProcessedSegments = processedSegments;
+  }
+  // ═══════════════════════════════════════════════════════════════
+  // FIN NUEVO CÓDIGO
+  // ═══════════════════════════════════════════════════════════════
+
+  const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
+
   const totalWorkMiles = toFirstStopDist + totalBlockMiles;
   const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
   const totalNormalMiles = totalWorkMiles + toFinalDestDist;
   const totalNormalDuration = totalWorkDuration + toFinalDestDur;
-  const totalInverseWorkMiles = toLastStopDist + totalBlockMiles;
-  const totalInverseWorkDuration = toLastStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
+  // 🆕 USAR SEGMENTOS INVERSOS REALES
+  const totalInverseWorkMiles = toLastStopDist + inverseBlockMiles;
+  const totalInverseWorkDuration = toLastStopDur + inverseBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
   const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
   const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
   
@@ -532,13 +589,13 @@ const reportData = computed(() => {
     },
     inverse: {
       toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
-      segments: processedSegments,
+      segments: inverseProcessedSegments,  // ✅ CORRECTO
       toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
       totalWorkMiles: totalInverseWorkMiles.toFixed(2),
       totalWorkDuration: Math.round(totalInverseWorkDuration),
       totalMiles: totalInverseMiles.toFixed(2),
       totalDuration: Math.round(totalInverseDuration),
-      baseDriveDuration: toLastStopDist + totalBlockDriveDuration,
+      baseDriveDuration: toLastStopDur + inverseBlockDriveDuration,  // ✅ CORRECTO
       commuteDuration: fromFirstStopDur,
     },
     stopCount: totalStopCount,
