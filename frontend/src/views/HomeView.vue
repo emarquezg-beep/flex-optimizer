@@ -98,7 +98,7 @@ async function editBlock(block) {
 }
 
 async function deleteBlock(block) {
-  if (!confirm(`¿Eliminar el bloque de ${block.warehouse} el ${formatDate(block.fecha)}?`)) {
+  if (!confirm('¿Estás seguro de cancelar este bloque?')) {
     return
   }
   
@@ -111,11 +111,11 @@ async function deleteBlock(block) {
     const result = await response.json()
     
     if (result.success) {
-      console.log('✅ Bloque cancelado')
+      alert('Bloque cancelado')
       closeBlockModal()
-      await loadDashboard() // Recargar
+      await loadDashboard()
     } else {
-      alert('Error cancelando bloque: ' + result.error)
+      alert('Error: ' + result.error)
     }
     
   } catch (error) {
@@ -157,6 +157,24 @@ const greeting = computed(() => {
 
 const userName = computed(() => {
   return USERS.find(u => u.id === selectedUserId.value)?.name || 'Usuario'
+})
+
+const hoursWorked = computed(() => {
+  if (!weekSummary.value) return 0
+  return parseFloat(weekSummary.value.completed.hours)
+})
+
+// 🆕 Horas agendadas
+const hoursScheduled = computed(() => {
+  if (!weekSummary.value) return 0
+  return parseFloat(weekSummary.value.scheduled.hours || 0)
+})
+
+// 🆕 Horas libres
+const hoursFree = computed(() => {
+  const worked = hoursWorked.value
+  const scheduled = hoursScheduled.value
+  return Math.max(0, 40 - worked - scheduled)
 })
 
 const hoursRemaining = computed(() => {
@@ -212,7 +230,9 @@ const progressPercentage = computed(() => {
           </p>
         </div>
 
+        <!-- 🆕 Grid de 6 cards (2 columnas en móvil, 3 en desktop) -->
         <div class="stats-grid">
+          <!-- 1. Ganado esta semana -->
           <div class="stat-card">
             <div class="stat-icon stat-icon--green">
               <DollarSign :size="24" />
@@ -223,6 +243,7 @@ const progressPercentage = computed(() => {
             </div>
           </div>
 
+          <!-- 2. Millas recorridas -->
           <div class="stat-card">
             <div class="stat-icon stat-icon--blue">
               <MapPin :size="24" />
@@ -233,6 +254,7 @@ const progressPercentage = computed(() => {
             </div>
           </div>
 
+          <!-- 3. Bloques completados -->
           <div class="stat-card">
             <div class="stat-icon stat-icon--purple">
               <TrendingUp :size="24" />
@@ -243,6 +265,7 @@ const progressPercentage = computed(() => {
             </div>
           </div>
 
+          <!-- 4. Bloques agendados -->
           <div class="stat-card">
             <div class="stat-icon stat-icon--orange">
               <Clock :size="24" />
@@ -250,6 +273,28 @@ const progressPercentage = computed(() => {
             <div class="stat-content">
               <span class="stat-label">Bloques agendados</span>
               <span class="stat-value">{{ weekSummary.scheduled.blocks }}</span>
+            </div>
+          </div>
+
+          <!-- 🆕 5. Horas agendadas -->
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--indigo">
+              <Calendar :size="24" />
+            </div>
+            <div class="stat-content">
+              <span class="stat-label">Horas agendadas</span>
+              <span class="stat-value">{{ hoursScheduled.toFixed(1) }}h</span>
+            </div>
+          </div>
+
+          <!-- 🆕 6. Horas libres -->
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--teal">
+              <Clock :size="24" />
+            </div>
+            <div class="stat-content">
+              <span class="stat-label">Horas libres</span>
+              <span class="stat-value">{{ hoursFree.toFixed(1) }}h</span>
             </div>
           </div>
         </div>
@@ -318,47 +363,57 @@ const progressPercentage = computed(() => {
     <!-- Modal de Acciones del Bloque -->
     <div v-if="showBlockModal" class="modal-overlay" @click="closeBlockModal">
       <div class="modal-content" @click.stop>
-        <h3 class="modal-title">¿Qué deseas hacer?</h3>
-        
-        <div v-if="selectedBlock" class="modal-block-info">
-          <p><strong>{{ selectedBlock.warehouse }}</strong></p>
-          <p>{{ formatDate(selectedBlock.fecha) }} a las {{ formatTime(selectedBlock.hora) }}</p>
-          <p>{{ selectedBlock.duracion_horas }}h - ${{ selectedBlock.pago }}</p>
+        <div class="modal-header">
+          <h3>Detalles del Bloque</h3>
+          <button class="close-btn" @click="closeBlockModal">×</button>
+        </div>
+
+        <div v-if="selectedBlock" class="modal-body">
+          <div class="detail-row">
+            <span class="detail-label">Fecha</span>
+            <span class="detail-value">{{ formatDate(selectedBlock.fecha) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Hora</span>
+            <span class="detail-value">{{ formatTime(selectedBlock.hora) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Warehouse</span>
+            <span class="detail-value">{{ selectedBlock.warehouse }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Duración</span>
+            <span class="detail-value">{{ selectedBlock.duracion_horas }}h</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Pago</span>
+            <span class="detail-value">${{ selectedBlock.pago }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Vehículo</span>
+            <span class="detail-value">{{ selectedBlock.vehiculo }}</span>
+          </div>
         </div>
 
         <div class="modal-actions">
           <BaseButton 
             variant="primary" 
-            size="lg" 
-            full-width
             @click="startBlock(selectedBlock)"
+            style="flex: 1"
           >
-            🚀 Empezar Bloque
+            Iniciar Bloque
           </BaseButton>
-
           <BaseButton 
             variant="secondary" 
-            size="lg" 
-            full-width
             @click="editBlock(selectedBlock)"
+            style="flex: 1"
           >
-            ✏️ Editar
+            Editar
           </BaseButton>
-
           <BaseButton 
-            variant="secondary" 
-            size="lg" 
-            full-width
+            variant="danger" 
             @click="deleteBlock(selectedBlock)"
-          >
-            🗑️ Eliminar
-          </BaseButton>
-
-          <BaseButton 
-            variant="ghost" 
-            size="md" 
-            full-width
-            @click="closeBlockModal"
+            style="flex: 1"
           >
             Cancelar
           </BaseButton>
@@ -370,394 +425,457 @@ const progressPercentage = computed(() => {
 </template>
 
 <style scoped>
-/* ==================== LAYOUT ==================== */
 .home-view {
-  min-height: 100vh;
-  background-color: var(--bg-primary);
-  padding-bottom: calc(var(--bottom-nav-height) + var(--space-4));
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  padding-bottom: 80px;
 }
 
+/* Header */
 .header-section {
-  max-width: var(--container-md);
-  margin: 0 auto;
-  padding: var(--space-6) var(--space-4) var(--space-4);
+  margin-bottom: 24px;
 }
 
 .greeting {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-2) 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 8px;
 }
 
 .header-subtitle {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  margin: 0;
+  font-size: 16px;
+  color: var(--color-text-secondary);
 }
 
-.dashboard-content {
-  max-width: var(--container-md);
-  margin: 0 auto;
-  padding: 0 var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-/* ==================== LOADING ==================== */
+/* Loading */
 .loading-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 50vh;
-  gap: var(--space-3);
+  padding: 60px 20px;
+  gap: 16px;
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid var(--border-primary);
-  border-top-color: var(--brand-primary);
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--color-primary);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-/* ==================== SUMMARY CARD ==================== */
+/* Dashboard Content */
+.dashboard-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Summary Card */
+.summary-card {
+  background: white;
+}
+
 .section-title {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-5) 0;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 20px;
 }
 
+/* Progress Section */
 .progress-section {
-  margin-bottom: var(--space-6);
+  margin-bottom: 24px;
 }
 
 .progress-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-3);
+  margin-bottom: 8px;
 }
 
 .progress-label {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-secondary);
+  font-size: 14px;
+  color: var(--color-text-secondary);
 }
 
 .progress-value {
-  font-size: var(--text-lg);
-  font-weight: var(--font-bold);
-  color: var(--brand-primary);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
 }
 
 .progress-bar {
   height: 12px;
-  background-color: var(--bg-tertiary);
-  border-radius: var(--radius-full);
+  background: #e5e7eb;
+  border-radius: 999px;
   overflow: hidden;
-  margin-bottom: var(--space-2);
+  margin-bottom: 8px;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--brand-accent), var(--brand-primary));
-  border-radius: var(--radius-full);
-  transition: width 0.5s var(--ease-out);
+  background: linear-gradient(90deg, var(--color-primary), #10b981);
+  border-radius: 999px;
+  transition: width 0.5s ease;
 }
 
 .progress-detail {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  text-align: center;
-  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 
-/* ==================== STATS GRID ==================== */
+/* 🆕 Stats Grid - 2 columnas en móvil, 3 en desktop */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(2, 1fr); /* 2 columnas en móvil */
+  gap: 12px;
+}
+
+/* Desktop: 3 columnas */
+@media (min-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
 }
 
 .stat-card {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background-color: var(--bg-primary);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-primary);
-  transition: all var(--transition-base);
+  gap: 12px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 12px;
+  transition: all 0.2s;
 }
 
 .stat-card:hover {
-  border-color: var(--brand-primary);
-  box-shadow: var(--shadow-sm);
+  background: #f3f4f6;
+  transform: translateY(-2px);
 }
 
 .stat-icon {
+  flex-shrink: 0;
   width: 48px;
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
+  border-radius: 12px;
+  background: white;
 }
 
-.stat-icon--green { background-color: rgba(16, 185, 129, 0.1); color: var(--success); }
-.stat-icon--blue { background-color: rgba(59, 130, 246, 0.1); color: var(--brand-primary); }
-.stat-icon--purple { background-color: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-.stat-icon--orange { background-color: rgba(245, 158, 11, 0.1); color: var(--warning); }
+.stat-icon--green { color: #10b981; }
+.stat-icon--blue { color: #3b82f6; }
+.stat-icon--purple { color: #8b5cf6; }
+.stat-icon--orange { color: #f59e0b; }
+.stat-icon--indigo { color: #6366f1; } /* 🆕 */
+.stat-icon--teal { color: #14b8a6; } /* 🆕 */
 
 .stat-content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
+  gap: 4px;
+  min-width: 0; /* Para permitir text-overflow */
 }
 
 .stat-label {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
+  font-size: 12px;
+  color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .stat-value {
-  font-size: var(--text-lg);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
-/* ==================== BLOCKS CARD ==================== */
+/* Blocks Card */
+.blocks-card {
+  background: white;
+}
+
 .blocks-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-4);
+  margin-bottom: 20px;
+  gap: 12px;
 }
 
 .blocks-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 12px;
 }
 
 .block-item {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
+  gap: 16px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all 0.2s;
 }
 
 .block-item:hover {
-  border-color: var(--brand-primary);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  background: #f3f4f6;
+  transform: translateX(4px);
 }
 
 .block-date {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
-  min-width: 80px;
-  padding: var(--space-3);
-  background-color: var(--brand-primary);
-  color: white;
-  border-radius: var(--radius-md);
-  text-align: center;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+  min-width: 70px;
 }
 
 .block-day {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-transform: uppercase;
 }
 
 .block-time {
-  font-size: var(--text-xs);
-  opacity: 0.9;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .block-details {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 4px;
+  min-width: 0;
 }
 
 .block-main {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
 
 .block-warehouse {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .block-duration {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--brand-primary);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
 
 .block-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.block-vehicle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .block-pay {
-  font-weight: var(--font-semibold);
-  color: var(--success);
+  font-weight: 600;
+  color: #10b981;
+  flex-shrink: 0;
 }
 
 .block-arrow {
-  font-size: var(--text-2xl);
-  color: var(--text-tertiary);
+  font-size: 24px;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
 }
 
-/* ==================== EMPTY STATE ==================== */
+/* Empty State */
 .empty-blocks {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-8) var(--space-4);
+  gap: 16px;
+  padding: 40px 20px;
   text-align: center;
-  gap: var(--space-4);
 }
 
 .empty-icon {
-  color: var(--text-tertiary);
-  opacity: 0.5;
+  color: var(--color-text-tertiary);
 }
 
 .empty-text {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  margin: 0;
+  font-size: 16px;
+  color: var(--color-text-secondary);
 }
 
-/* ==================== MODAL ==================== */
+/* Modal */
 .modal-overlay {
   position: fixed;
-  inset: 0;
-  background-color: var(--surface-overlay);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  z-index: var(--z-modal);
-  padding: var(--space-4);
-  animation: fadeIn 0.2s var(--ease-out);
+  z-index: 1000;
+  padding: 0;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@media (min-width: 768px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 20px;
+  }
 }
 
 .modal-content {
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
-  max-width: 400px;
+  background: white;
+  border-radius: 20px 20px 0 0;
   width: 100%;
-  box-shadow: var(--shadow-elevated);
-  animation: slideUp 0.3s var(--ease-out);
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.3s ease;
+}
+
+@media (min-width: 768px) {
+  .modal-content {
+    border-radius: 20px;
+  }
 }
 
 @keyframes slideUp {
   from {
-    opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(100%);
   }
   to {
-    opacity: 1;
     transform: translateY(0);
   }
 }
 
-.modal-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-4) 0;
-  text-align: center;
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.modal-block-info {
-  background-color: var(--bg-primary);
-  padding: var(--space-4);
-  border-radius: var(--radius-base);
-  margin-bottom: var(--space-5);
-  text-align: center;
+.modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
-.modal-block-info p {
-  margin: var(--space-1) 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: #f3f4f6;
+  color: var(--color-text-secondary);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
 }
 
-.modal-block-info p:first-child {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
+.close-btn:hover {
+  background: #e5e7eb;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.detail-label {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.detail-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
 .modal-actions {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid #e5e7eb;
 }
 
-/* ==================== RESPONSIVE ==================== */
-@media (max-width: 768px) {
+/* Mobile optimizations */
+@media (max-width: 767px) {
+  .home-view {
+    padding: 16px;
+  }
+
   .greeting {
-    font-size: var(--text-2xl);
+    font-size: 24px;
   }
 
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .stat-card {
+    padding: 12px;
   }
 
-  .blocks-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-3);
+  .stat-icon {
+    width: 40px;
+    height: 40px;
   }
 
-  .block-item {
-    flex-wrap: wrap;
-  }
-
-  .block-date {
-    min-width: 70px;
+  .stat-value {
+    font-size: 18px;
   }
 }
 </style>
