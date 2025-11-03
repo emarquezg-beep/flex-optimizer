@@ -1,0 +1,35 @@
+# .github/workflows/keep-alive.yml
+# Este archivo mantiene tu backend de Render despierto
+
+name: Keep Backend Alive
+
+on:
+  schedule:
+    # Ejecuta cada 10 minutos (máximo permitido por GitHub)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Permite ejecutar manualmente
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Ping Backend
+        run: |
+          echo "Haciendo ping al backend..."
+          curl -X GET https://tu-backend.onrender.com/api/ping \
+            -H "Content-Type: application/json" \
+            --max-time 30 \
+            --retry 3 \
+            --retry-delay 5
+          echo "✅ Ping completado"
+      
+      - name: Ping Supabase via Backend
+        run: |
+          echo "Despertando Supabase..."
+          curl -X GET https://tu-backend.onrender.com/api/health \
+            -H "Content-Type: application/json" \
+            --max-time 30 \
+            --retry 3 \
+            --retry-delay 5
+          echo "✅ Supabase despierta"
