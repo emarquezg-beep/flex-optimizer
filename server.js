@@ -1853,3 +1853,4 @@ console.log('   GET /api/health - Health check + Supabase wake-up');
 // ═══════════════════════════════════════════════════════════════
 // FIN DE HEALTH ENDPOINTS
 // ═══════════════════════════════════════════════════════════════
+// forzando commit
