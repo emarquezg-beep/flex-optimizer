@@ -399,21 +399,21 @@ const progressPercentage = computed(() => {
           <BaseButton 
             variant="primary" 
             @click="startBlock(selectedBlock)"
-            style="flex: 1"
+            class="modal-btn"
           >
             Iniciar Bloque
           </BaseButton>
           <BaseButton 
             variant="secondary" 
             @click="editBlock(selectedBlock)"
-            style="flex: 1"
+            class="modal-btn"
           >
             Editar
           </BaseButton>
           <BaseButton 
             variant="danger" 
             @click="deleteBlock(selectedBlock)"
-            style="flex: 1"
+            class="modal-btn"
           >
             Cancelar
           </BaseButton>
@@ -796,14 +796,16 @@ const progressPercentage = computed(() => {
   border-radius: 20px 20px 0 0;
   width: 100%;
   max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
+  max-height: 85vh; /* Reducido de 90vh para asegurar espacio */
+  display: flex;
+  flex-direction: column;
   animation: slideUp 0.3s ease;
 }
 
 @media (min-width: 768px) {
   .modal-content {
     border-radius: 20px;
+    max-height: 90vh;
   }
 }
 
@@ -854,6 +856,8 @@ const progressPercentage = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto; /* Permitir scroll en el body */
+  flex: 1; /* Tomar espacio disponible */
 }
 
 .detail-row {
@@ -877,8 +881,26 @@ const progressPercentage = computed(() => {
 
 .modal-actions {
   display: flex;
+  flex-direction: column; /* Botones en columna en móvil */
   gap: 12px;
   padding: 20px;
   border-top: 1px solid #e5e7eb;
+  background: white; /* Asegurar fondo blanco */
+  flex-shrink: 0; /* No permitir que se comprima */
+}
+
+.modal-btn {
+  width: 100%; /* Ancho completo en móvil */
+}
+
+/* Desktop: botones en fila */
+@media (min-width: 768px) {
+  .modal-actions {
+    flex-direction: row;
+  }
+  
+  .modal-btn {
+    flex: 1; /* Distribuir espacio en desktop */
+  }
 }
 </style>
