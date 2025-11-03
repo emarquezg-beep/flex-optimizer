@@ -1585,18 +1585,11 @@ setInterval(async () => {
 console.log('⏰ Cron job de cleanup iniciado (cada 5 minutos) usando Eastern Time');
 // --- Fin FASE 5 ---
 
+
 // ═══════════════════════════════════════════════════════════════
 // 🔍 ENDPOINT DE DEBUGGING - Ver Stops Desencriptados
 // ═══════════════════════════════════════════════════════════════
-// 
-// INSTRUCCIONES:
-// 1. Copia este código completo
-// 2. Pégalo en server.js ANTES del app.listen() (al final del archivo)
-// 3. Guarda y reinicia el servidor
-// 4. Usa: GET http://localhost:3000/api/debug/route/{routeId}
-//
-// ⚠️ IMPORTANTE: Este endpoint es SOLO PARA DESARROLLO
-//    REMOVERLO antes de desplegar a producción
+// ⚠️ PARA DESARROLLO - Remover en producción si es necesario
 // ═══════════════════════════════════════════════════════════════
 
 // Helper functions para análisis
@@ -1795,6 +1788,8 @@ console.log('🔍 Debug endpoint activado: GET /api/debug/route/:routeId');
 // ═══════════════════════════════════════════════════════════════
 // FIN DEL ENDPOINT DE DEBUGGING
 // ═══════════════════════════════════════════════════════════════
+
+
 // --- Tu `app.listen` (movido al final) ---
 app.listen(PORT, () => {
   console.log(`🚀 Servidor backend v3.1 (ETA en Caliente + Segmentos Inversos v1.8) corriendo en http://localhost:${PORT}`);
