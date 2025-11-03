@@ -542,7 +542,7 @@ const progressPercentage = computed(() => {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr); /* 2 columnas en móvil */
-  gap: 12px;
+  gap: 8px; /* Reducido para móvil */
 }
 
 /* Desktop: 3 columnas */
@@ -556,11 +556,12 @@ const progressPercentage = computed(() => {
 .stat-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
+  gap: 8px; /* Reducido */
+  padding: 12px; /* Reducido */
   background: #f9fafb;
-  border-radius: 12px;
+  border-radius: 10px; /* Reducido */
   transition: all 0.2s;
+  min-height: 70px; /* Altura mínima consistente */
 }
 
 .stat-card:hover {
@@ -570,12 +571,12 @@ const progressPercentage = computed(() => {
 
 .stat-icon {
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
+  width: 40px; /* Reducido de 48px */
+  height: 40px; /* Reducido de 48px */
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 10px;
   background: white;
 }
 
@@ -589,22 +590,48 @@ const progressPercentage = computed(() => {
 .stat-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px; /* Reducido */
   min-width: 0; /* Para permitir text-overflow */
+  flex: 1;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px; /* Reducido de 12px */
   color: var(--color-text-secondary);
-  white-space: nowrap;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2; /* Permite 2 líneas */
+  -webkit-box-orient: vertical;
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 18px; /* Reducido de 20px */
   font-weight: 700;
   color: var(--color-text-primary);
+  line-height: 1;
+}
+
+/* Ajustes específicos para desktop */
+@media (min-width: 768px) {
+  .stat-card {
+    padding: 16px;
+    gap: 12px;
+  }
+  
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .stat-label {
+    font-size: 12px;
+  }
+  
+  .stat-value {
+    font-size: 20px;
+  }
 }
 
 /* Blocks Card */
@@ -853,29 +880,5 @@ const progressPercentage = computed(() => {
   gap: 12px;
   padding: 20px;
   border-top: 1px solid #e5e7eb;
-}
-
-/* Mobile optimizations */
-@media (max-width: 767px) {
-  .home-view {
-    padding: 16px;
-  }
-
-  .greeting {
-    font-size: 24px;
-  }
-
-  .stat-card {
-    padding: 12px;
-  }
-
-  .stat-icon {
-    width: 40px;
-    height: 40px;
-  }
-
-  .stat-value {
-    font-size: 18px;
-  }
 }
 </style>
