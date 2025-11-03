@@ -348,88 +348,97 @@ const progressPercentage = computed(() => {
         <!-- Empty State -->
         <div v-else class="empty-blocks">
           <Calendar :size="48" class="empty-icon" />
-          <p class="empty-text">No tienes bloques agendados</p>
-          <BaseButton 
-            variant="primary" 
-            @click="goToSchedule"
-          >
-            Agendar Primer Bloque
+          <p class="empty-text">No tienes bloques agendados para los próximos 7 días</p>
+          <BaseButton variant="primary" @click="goToSchedule">
+            Agendar Bloque
           </BaseButton>
         </div>
       </BaseCard>
-
     </div>
 
-    <!-- Modal de Acciones del Bloque -->
-    <div v-if="showBlockModal" class="modal-overlay" @click="closeBlockModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>Detalles del Bloque</h3>
-          <button class="close-btn" @click="closeBlockModal">×</button>
-        </div>
-
-        <div v-if="selectedBlock" class="modal-body">
-          <div class="detail-row">
-            <span class="detail-label">Fecha</span>
-            <span class="detail-value">{{ formatDate(selectedBlock.fecha) }}</span>
+    <!-- Modal de Detalles del Bloque -->
+    <Teleport to="body">
+      <div v-if="showBlockModal" class="modal-overlay" @click.self="closeBlockModal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Detalles del Bloque</h3>
+            <button class="close-btn" @click="closeBlockModal">×</button>
           </div>
-          <div class="detail-row">
-            <span class="detail-label">Hora</span>
-            <span class="detail-value">{{ formatTime(selectedBlock.hora) }}</span>
+          
+          <div v-if="selectedBlock" class="modal-body">
+            <div class="detail-row">
+              <span class="detail-label">Fecha</span>
+              <span class="detail-value">{{ formatDate(selectedBlock.fecha) }}</span>
+            </div>
+            
+            <div class="detail-row">
+              <span class="detail-label">Hora</span>
+              <span class="detail-value">{{ formatTime(selectedBlock.hora) }}</span>
+            </div>
+            
+            <div class="detail-row">
+              <span class="detail-label">Warehouse</span>
+              <span class="detail-value">{{ selectedBlock.warehouse }}</span>
+            </div>
+            
+            <div class="detail-row">
+              <span class="detail-label">Duración</span>
+              <span class="detail-value">{{ selectedBlock.duracion_horas }}h</span>
+            </div>
+            
+            <div class="detail-row">
+              <span class="detail-label">Pago</span>
+              <span class="detail-value">${{ selectedBlock.pago }}</span>
+            </div>
+            
+            <div class="detail-row">
+              <span class="detail-label">Vehículo</span>
+              <span class="detail-value">{{ selectedBlock.vehiculo }}</span>
+            </div>
           </div>
-          <div class="detail-row">
-            <span class="detail-label">Warehouse</span>
-            <span class="detail-value">{{ selectedBlock.warehouse }}</span>
+          
+          <div class="modal-actions">
+            <BaseButton 
+              variant="primary" 
+              class="modal-btn"
+              @click="startBlock(selectedBlock)"
+            >
+              Iniciar Bloque
+            </BaseButton>
+            
+            <BaseButton 
+              variant="secondary" 
+              class="modal-btn"
+              @click="editBlock(selectedBlock)"
+            >
+              Editar
+            </BaseButton>
+            
+            <BaseButton 
+              variant="danger" 
+              class="modal-btn"
+              @click="deleteBlock(selectedBlock)"
+            >
+              Eliminar
+            </BaseButton>
           </div>
-          <div class="detail-row">
-            <span class="detail-label">Duración</span>
-            <span class="detail-value">{{ selectedBlock.duracion_horas }}h</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Pago</span>
-            <span class="detail-value">${{ selectedBlock.pago }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Vehículo</span>
-            <span class="detail-value">{{ selectedBlock.vehiculo }}</span>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <BaseButton 
-            variant="primary" 
-            @click="startBlock(selectedBlock)"
-            class="modal-btn"
-          >
-            Iniciar Bloque
-          </BaseButton>
-          <BaseButton 
-            variant="secondary" 
-            @click="editBlock(selectedBlock)"
-            class="modal-btn"
-          >
-            Editar
-          </BaseButton>
-          <BaseButton 
-            variant="danger" 
-            @click="deleteBlock(selectedBlock)"
-            class="modal-btn"
-          >
-            Cancelar
-          </BaseButton>
         </div>
       </div>
-    </div>
-
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
+/* ============================================
+   🔥 CORRECCIÓN: Modal con padding-bottom seguro
+   ============================================ */
+
+/* Home View */
 .home-view {
-  max-width: 1200px;
-  margin: 0 auto;
   padding: 20px;
-  padding-bottom: 80px;
+  padding-bottom: 100px;
+  background: var(--color-background);
+  min-height: 100vh;
 }
 
 /* Header */
@@ -438,15 +447,16 @@ const progressPercentage = computed(() => {
 }
 
 .greeting {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--color-text-primary);
-  margin-bottom: 8px;
+  margin: 0 0 4px 0;
 }
 
 .header-subtitle {
-  font-size: 16px;
+  font-size: 14px;
   color: var(--color-text-secondary);
+  margin: 0;
 }
 
 /* Loading */
@@ -455,22 +465,21 @@ const progressPercentage = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
   gap: 16px;
+  padding: 60px 20px;
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid var(--color-primary);
+  border: 3px solid #f3f4f6;
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Dashboard Content */
@@ -489,15 +498,15 @@ const progressPercentage = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--color-text-primary);
-  margin-bottom: 20px;
+  margin: 0 0 20px 0;
 }
 
 /* Progress Section */
 .progress-section {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .progress-header {
@@ -513,39 +522,40 @@ const progressPercentage = computed(() => {
 }
 
 .progress-value {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-primary);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .progress-bar {
-  height: 12px;
+  width: 100%;
+  height: 8px;
   background: #e5e7eb;
-  border-radius: 999px;
+  border-radius: 9999px;
   overflow: hidden;
   margin-bottom: 8px;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), #10b981);
-  border-radius: 999px;
-  transition: width 0.5s ease;
+  background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
 }
 
 .progress-detail {
   font-size: 13px;
   color: var(--color-text-secondary);
+  margin: 0;
 }
 
 /* 🆕 Stats Grid - 2 columnas en móvil, 3 en desktop */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* 2 columnas en móvil */
-  gap: 8px; /* Reducido para móvil */
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
-/* Desktop: 3 columnas */
 @media (min-width: 768px) {
   .stats-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -556,12 +566,13 @@ const progressPercentage = computed(() => {
 .stat-card {
   display: flex;
   align-items: center;
-  gap: 8px; /* Reducido */
-  padding: 12px; /* Reducido */
-  background: #f9fafb;
-  border-radius: 10px; /* Reducido */
+  gap: 10px; /* Reducido de 12px */
+  padding: 12px; /* Reducido de 16px */
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
   transition: all 0.2s;
-  min-height: 70px; /* Altura mínima consistente */
+  cursor: default;
 }
 
 .stat-card:hover {
@@ -769,7 +780,10 @@ const progressPercentage = computed(() => {
   color: var(--color-text-secondary);
 }
 
-/* Modal */
+/* ============================================
+   🔥 MODAL - CORRECCIÓN PRINCIPAL
+   ============================================ */
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -796,16 +810,20 @@ const progressPercentage = computed(() => {
   border-radius: 20px 20px 0 0;
   width: 100%;
   max-width: 500px;
-  max-height: 85vh; /* Reducido de 90vh para asegurar espacio */
+  /* 🔥 CORRECCIÓN: Reducir altura máxima para dejar espacio al menú */
+  max-height: 75vh; /* Cambiado de 85vh a 75vh */
   display: flex;
   flex-direction: column;
   animation: slideUp 0.3s ease;
+  /* 🔥 CORRECCIÓN: Agregar margen inferior en móvil */
+  margin-bottom: 80px; /* Espacio para el menú de navegación */
 }
 
 @media (min-width: 768px) {
   .modal-content {
     border-radius: 20px;
     max-height: 90vh;
+    margin-bottom: 0; /* Sin margen en desktop */
   }
 }
 
@@ -824,6 +842,7 @@ const progressPercentage = computed(() => {
   align-items: center;
   padding: 20px;
   border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0; /* No permitir compresión */
 }
 
 .modal-header h3 {
@@ -856,7 +875,7 @@ const progressPercentage = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto; /* Permitir scroll en el body */
+  overflow-y: auto; /* Permitir scroll si es necesario */
   flex: 1; /* Tomar espacio disponible */
 }
 
@@ -879,28 +898,47 @@ const progressPercentage = computed(() => {
   color: var(--color-text-primary);
 }
 
+/* 🔥 CORRECCIÓN PRINCIPAL: Modal Actions con padding-bottom adicional */
 .modal-actions {
   display: flex;
-  flex-direction: column; /* Botones en columna en móvil */
+  flex-direction: column;
   gap: 12px;
   padding: 20px;
+  /* 🔥 IMPORTANTE: Padding inferior adicional en móvil */
+  padding-bottom: 24px; /* Más espacio en la parte inferior */
   border-top: 1px solid #e5e7eb;
-  background: white; /* Asegurar fondo blanco */
-  flex-shrink: 0; /* No permitir que se comprima */
+  background: white;
+  flex-shrink: 0; /* No permitir compresión */
+  /* 🔥 Asegurar que esté siempre visible */
+  position: relative;
+  z-index: 10;
 }
 
 .modal-btn {
-  width: 100%; /* Ancho completo en móvil */
+  width: 100%;
+  min-height: 44px; /* Asegurar altura táctil mínima */
 }
 
 /* Desktop: botones en fila */
 @media (min-width: 768px) {
   .modal-actions {
     flex-direction: row;
+    padding-bottom: 20px; /* Padding normal en desktop */
   }
   
   .modal-btn {
-    flex: 1; /* Distribuir espacio en desktop */
+    flex: 1;
+  }
+}
+
+/* 🔥 CORRECCIÓN ADICIONAL: Safe area para dispositivos con notch */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .modal-content {
+    margin-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+  
+  .modal-actions {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 }
 </style>
