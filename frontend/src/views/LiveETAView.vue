@@ -21,6 +21,10 @@ const etaRealInput = ref('')
 const isCompleting = ref(false)
 const completionStatus = ref(null)
 
+// 🚧 TEMPORAL: Auto-detección de usuario
+// TODO v4.2: Reemplazar con usuario autenticado
+// const currentUser = await supabase.auth.getUser()
+// selectedUserId.value = currentUser.id
 onMounted(async () => {
   await autoDetectActiveRoute()
 })

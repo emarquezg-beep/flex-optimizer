@@ -5,13 +5,19 @@ const routes = [
     path: '/',
     name: 'Home',
     component: () => import('@/views/HomeView.vue'),
-    meta: { title: 'Inicio' }
+    meta: { title: 'Dashboard' }
   },
   {
     path: '/upload',
     name: 'Upload',
     component: () => import('@/views/UploadView.vue'),
     meta: { title: 'Evaluar Ruta' }
+  },
+  {
+    path: '/schedule', // 🆕 Nueva ruta
+    name: 'Schedule',
+    component: () => import('@/views/ScheduleView.vue'),
+    meta: { title: 'Agendar Bloque' }
   },
   {
     path: '/live-eta',

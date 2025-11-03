@@ -1,4 +1,4 @@
-// server.js (v3.0 - Implementación de ETA en Caliente)
+// server.js (v3.1 - ETA en Caliente + Segmentos Inversos v1.8)
 
 const { DateTime } = require('luxon');
 require('dotenv').config();
@@ -21,8 +21,8 @@ const PORT = 3000;
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
-  'https://flex-optimizer-git-v15-logbook-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-v20-app-layout-ernestos-projects-d9e7c95d.vercel.app'
+  'https://flex-optimizer-git-feature-sc-8b70f7-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-fzy130b7l-ernestos-projects-d9e7c95d.vercel.app',
 ];
 const corsOptions = {
   origin: function (origin, callback) {
@@ -190,7 +190,7 @@ app.post('/api/optimize-route', async (req, res) => {
     const firstStop = workStops[0]; 
     const lastStop = workStops[workStops.length - 1]; 
 
-    console.log('✅ v1.7: Calculando con método manual correcto...');
+    console.log('✅ v1.8: Calculando con método manual correcto...');
     console.log(`   Warehouse: ${origin}`);
     console.log(`   Primera Parada: ${firstStop}`);
     console.log(`   Última Parada: ${lastStop}`);
@@ -221,17 +221,49 @@ app.post('/api/optimize-route', async (req, res) => {
         console.log(`   Segmento ${idx + 1}: ${seg.origin} → ${seg.destination} (${seg.waypoints.length} waypoints)`);
     });
 
+    // 🆕 CREAR SEGMENTOS INVERSOS (para ruta inversa)
+    const inverseWorkStops = [...workStops].reverse(); // Invertir el orden de paradas
+    const inverseSegments = [];
+
+    for (let i = 0; i < inverseWorkStops.length; i += 9) {
+        const segmentStops = inverseWorkStops.slice(i, i + 10);
+        
+        if (segmentStops.length > 0) {
+            inverseSegments.push({
+                origin: segmentStops[0],
+                destination: segmentStops[segmentStops.length - 1],
+                waypoints: segmentStops.slice(1, -1)
+            });
+        }
+    }
+
+    console.log(`   Segmentos inversos creados: ${inverseSegments.length}`);
+    inverseSegments.forEach((seg, idx) => {
+        console.log(`   Segmento Inverso ${idx + 1}: ${seg.origin} → ${seg.destination} (${seg.waypoints.length} waypoints)`);
+    });
+
     const segmentPromises = workStopSegments.map(seg => 
         calculateLeg(seg.origin, seg.destination, seg.waypoints)
     );
     
-    const [toFirstStop, toFinalDestination, toLastStopForInverse, fromFirstStopToHome, ...segmentResults] = await Promise.all([
+    // 🆕 CALCULAR SEGMENTOS INVERSOS
+    const inverseSegmentPromises = inverseSegments.map(seg =>
+        calculateLeg(seg.origin, seg.destination, seg.waypoints)
+    );
+    
+    const [toFirstStop, toFinalDestination, toLastStopForInverse, fromFirstStopToHome, ...allSegmentResults] = await Promise.all([
         toFirstStopPromise,
         toFinalDestinationPromise,
         toLastStopForInversePromise,
         fromFirstStopToHomePromise,
-        ...segmentPromises
+        ...segmentPromises,
+        ...inverseSegmentPromises // 🆕 AGREGAR PROMESAS INVERSAS
     ]);
+
+    // 🆕 SEPARAR RESULTADOS
+    const normalSegmentCount = workStopSegments.length;
+    const segmentResults = allSegmentResults.slice(0, normalSegmentCount);
+    const inverseSegmentResults = allSegmentResults.slice(normalSegmentCount);
 
     const failedAddresses = [];
     
@@ -284,6 +316,18 @@ app.post('/api/optimize-route', async (req, res) => {
         }
     });
 
+    // 🆕 VERIFICAR ERRORES EN SEGMENTOS INVERSOS
+    inverseSegmentResults.forEach((result, idx) => {
+        if (result.error) {
+            failedAddresses.push({
+                type: `Segmento Inverso ${idx + 1}`,
+                from: inverseSegments[idx].origin,
+                to: inverseSegments[idx].destination,
+                errorType: result.errorType
+            });
+        }
+    });
+
     if (failedAddresses.length > 0) {
         console.error('❌ Se encontraron direcciones inválidas:', failedAddresses);
         return res.status(400).json({
@@ -300,7 +344,13 @@ app.post('/api/optimize-route', async (req, res) => {
             toFinalDestination,
             inverseRouteLegs: {
                 toLastStop: toLastStopForInverse,
-                fromFirstStop: fromFirstStopToHome
+                fromFirstStop: fromFirstStopToHome,
+                segments: inverseSegmentResults.map((result, index) => ({
+                    ...result,
+                    stops: inverseSegments[index] ? 
+                        [inverseSegments[index].origin, ...inverseSegments[index].waypoints, inverseSegments[index].destination] : 
+                        []
+                }))
             }
         });
     }
@@ -313,12 +363,33 @@ app.post('/api/optimize-route', async (req, res) => {
         };
     });
 
-    console.log('🎉 v1.7: Cálculo completado correctamente');
+    // 🆕 AGREGAR STOPS A SEGMENTOS INVERSOS
+    const inverseSegmentsWithStops = inverseSegmentResults.map((result, idx) => {
+        const segStops = inverseSegments[idx].waypoints.length > 0 
+            ? [inverseSegments[idx].origin, ...inverseSegments[idx].waypoints, inverseSegments[idx].destination]
+            : [inverseSegments[idx].origin, inverseSegments[idx].destination];
+        
+        return {
+            distance: result.distance,
+            duration: result.duration,
+            stops: segStops
+        };
+    });
+
+    console.log('🎉 v1.8: Cálculo completado correctamente (con ruta inversa real)');
+    console.log('   RUTA NORMAL:');
     console.log(`   Warehouse → Primera: ${toFirstStop.distance} mi`);
     segmentsWithStops.forEach((seg, idx) => {
         console.log(`   Segmento ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
     });
     console.log(`   Última → Destino: ${toFinalDestination.distance} mi`);
+    console.log('   ');
+    console.log('   RUTA INVERSA:');
+    console.log(`   Warehouse → Última: ${toLastStopForInverse.distance} mi`);
+    inverseSegmentsWithStops.forEach((seg, idx) => {
+        console.log(`   Segmento Inverso ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
+    });
+    console.log(`   Primera → Destino: ${fromFirstStopToHome.distance} mi`);
 
     res.json({
         hasErrors: false,
@@ -327,7 +398,8 @@ app.post('/api/optimize-route', async (req, res) => {
         toFinalDestination,
         inverseRouteLegs: {
             toLastStop: toLastStopForInverse,
-            fromFirstStop: fromFirstStopToHome
+            fromFirstStop: fromFirstStopToHome,
+            segments: inverseSegmentsWithStops // 🆕 SEGMENTOS INVERSOS REALES
         }
     });
 
@@ -583,6 +655,268 @@ app.post('/api/calculate-live-eta', async (req, res) => {
             });
         }
     }
+    // ========================================
+// SCHEDULED BLOCKS ENDPOINTS - v4.1
+// ========================================
+
+// 1. GET /api/scheduled-blocks/:userId - Obtener bloques de un usuario
+app.get('/api/scheduled-blocks/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { status, startDate, endDate } = req.query;
+  
+  try {
+    let query = supabase
+      .from('scheduled_blocks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('fecha', { ascending: true })
+      .order('hora', { ascending: true });
+    
+    // Filtros opcionales
+    if (status) {
+      query = query.eq('status', status);
+    }
+    
+    if (startDate) {
+      query = query.gte('fecha', startDate);
+    }
+    
+    if (endDate) {
+      query = query.lte('fecha', endDate);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    
+    console.log(`✅ Bloques obtenidos para user ${userId}:`, data?.length || 0);
+    res.json({ success: true, blocks: data || [] });
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo bloques:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 2. POST /api/scheduled-blocks - Crear nuevo bloque
+app.post('/api/scheduled-blocks', async (req, res) => {
+  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehiculo, notes } = req.body;
+  
+  // Validación
+  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan campos requeridos' 
+    });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .insert([{
+        user_id,
+        fecha,
+        hora,
+        duracion_horas,
+        pago,
+        warehouse,
+        vehiculo,
+        notes,
+        status: 'scheduled'
+      }])
+      .select();
+    
+    if (error) {
+      // Error de constraint (bloque duplicado)
+      if (error.code === '23505') {
+        return res.status(400).json({
+          success: false,
+          error: 'Ya existe un bloque agendado a esa hora'
+        });
+      }
+      throw error;
+    }
+    
+    console.log('✅ Bloque creado:', data[0].id);
+    res.json({ success: true, block: data[0] });
+    
+  } catch (error) {
+    console.error('❌ Error creando bloque:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 3. PUT /api/scheduled-blocks/:blockId - Actualizar bloque
+app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
+  const { blockId } = req.params;
+  const updates = req.body;
+  
+  // No permitir cambiar user_id ni created_at
+  delete updates.user_id;
+  delete updates.created_at;
+  
+  try {
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .update(updates)
+      .eq('id', blockId)
+      .select();
+    
+    if (error) throw error;
+    
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bloque no encontrado'
+      });
+    }
+    
+    console.log('✅ Bloque actualizado:', blockId);
+    res.json({ success: true, block: data[0] });
+    
+  } catch (error) {
+    console.error('❌ Error actualizando bloque:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 4. DELETE /api/scheduled-blocks/:blockId - Eliminar/Cancelar bloque
+app.delete('/api/scheduled-blocks/:blockId', async (req, res) => {
+  const { blockId } = req.params;
+  const { soft } = req.query; // ?soft=true para cancelar en lugar de eliminar
+  
+  try {
+    if (soft === 'true') {
+      // Soft delete: Cambiar status a 'cancelled'
+      const { data, error } = await supabase
+        .from('scheduled_blocks')
+        .update({ status: 'cancelled' })
+        .eq('id', blockId)
+        .select();
+      
+      if (error) throw error;
+      
+      console.log('✅ Bloque cancelado:', blockId);
+      res.json({ success: true, message: 'Bloque cancelado', block: data[0] });
+      
+    } else {
+      // Hard delete: Eliminar permanentemente
+      const { error } = await supabase
+        .from('scheduled_blocks')
+        .delete()
+        .eq('id', blockId);
+      
+      if (error) throw error;
+      
+      console.log('✅ Bloque eliminado:', blockId);
+      res.json({ success: true, message: 'Bloque eliminado' });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error eliminando bloque:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 5. POST /api/scheduled-blocks/:blockId/start - Iniciar bloque (vincula con route)
+app.post('/api/scheduled-blocks/:blockId/start', async (req, res) => {
+  const { blockId } = req.params;
+  const { routeId } = req.body;
+  
+  if (!routeId) {
+    return res.status(400).json({
+      success: false,
+      error: 'routeId es requerido'
+    });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .update({
+        status: 'started',
+        route_id: routeId
+      })
+      .eq('id', blockId)
+      .select();
+    
+    if (error) throw error;
+    
+    console.log(`✅ Bloque ${blockId} iniciado con route ${routeId}`);
+    res.json({ success: true, block: data[0] });
+    
+  } catch (error) {
+    console.error('❌ Error iniciando bloque:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 6. GET /api/scheduled-blocks/:userId/week-summary - Resumen semanal
+app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
+  const { userId } = req.params;
+  
+  try {
+    // Obtener fecha de inicio de semana (lunes)
+    const today = DateTime.now().setZone('America/New_York');
+    const startOfWeek = today.startOf('week').toISODate();
+    const endOfWeek = today.endOf('week').toISODate();
+    
+    console.log(`📊 Resumen semanal: ${startOfWeek} a ${endOfWeek}`);
+    
+    // Bloques agendados esta semana
+    const { data: blocks, error: blocksError } = await supabase
+      .from('scheduled_blocks')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('fecha', startOfWeek)
+      .lte('fecha', endOfWeek)
+      .neq('status', 'cancelled');
+    
+    if (blocksError) throw blocksError;
+    
+    // Rutas completadas esta semana
+    const { data: routes, error: routesError } = await supabase
+      .from('routes')
+      .select('duracion_horas, pago, millas_totales')
+      .eq('user_id', userId)
+      .gte('fecha', startOfWeek)
+      .lte('fecha', endOfWeek)
+      .eq('status', 0); // Completadas
+    
+    if (routesError) throw routesError;
+    
+    // Calcular totales
+    const totalHorasAgendadas = blocks.reduce((sum, b) => sum + (b.duracion_horas || 0), 0);
+    const totalPagoAgendado = blocks.reduce((sum, b) => sum + (b.pago || 0), 0);
+    
+    const totalHorasTrabajadas = routes.reduce((sum, r) => sum + (r.duracion_horas || 0), 0);
+    const totalPagoGanado = routes.reduce((sum, r) => sum + (r.pago || 0), 0);
+    const totalMillas = routes.reduce((sum, r) => sum + (r.millas_totales || 0), 0);
+    
+    res.json({
+      success: true,
+      summary: {
+        weekStart: startOfWeek,
+        weekEnd: endOfWeek,
+        scheduled: {
+          blocks: blocks.length,
+          hours: totalHorasAgendadas.toFixed(1),
+          pay: totalPagoAgendado.toFixed(2)
+        },
+        completed: {
+          routes: routes.length,
+          hours: totalHorasTrabajadas.toFixed(1),
+          pay: totalPagoGanado.toFixed(2),
+          miles: totalMillas.toFixed(1)
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en resumen semanal:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
     // 5. 🆕 LLAMAR A GOOGLE MAPS API POR SEGMENTOS
     const segmentPromises = routeSegments.map(seg => 
@@ -715,6 +1049,23 @@ app.post('/api/complete-route', async (req, res) => {
     }
 
     console.log(`✅ Ruta ${routeId} completada. ETA real: ${timeFormatted}`);
+    
+    // 🆕 Si esta ruta vino de un bloque agendado, marcarlo como completado
+    try {
+      const { data: blockData, error: blockError } = await supabase
+        .from('scheduled_blocks')
+        .update({ status: 'completed' })
+        .eq('route_id', routeId)
+        .select();
+      
+      if (!blockError && blockData && blockData.length > 0) {
+        console.log(`✅ Bloque agendado ${blockData[0].id} marcado como completado`);
+      }
+    } catch (blockError) {
+      // No fallar si hay error actualizando el bloque
+      console.warn('⚠️ No se pudo actualizar bloque agendado:', blockError);
+    }
+    
     res.json({
       success: true,
       message: 'Ruta completada y ETA real guardado',
@@ -782,6 +1133,352 @@ app.post('/api/skip-eta', async (req, res) => {
   }
 });
 // --- Fin FASE 4 ---
+
+
+// ========================================
+// 🆕 FASE 6: SCHEDULED BLOCKS ENDPOINTS
+// ========================================
+
+// 1. GET /api/scheduled-blocks/:userId/week-summary
+// Obtiene resumen de la semana actual (horas, pago, millas, bloques)
+app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
+  const { userId } = req.params;
+  
+  try {
+    // Obtener inicio y fin de semana (domingo a sábado)
+    const now = DateTime.now().setZone('America/New_York');
+    const startOfWeek = now.startOf('week').toISODate(); // Domingo
+    const endOfWeek = now.endOf('week').toISODate(); // Sábado
+    
+    console.log(`📊 Calculando resumen semanal para ${userId}`);
+    console.log(`   Semana: ${startOfWeek} a ${endOfWeek}`);
+    
+    // Bloques completados (rutas con status = 0)
+    const { data: completedRoutes, error: routesError } = await supabase
+      .from('routes')
+      .select('duracion_horas, pago, millas_totales')
+      .eq('user_id', userId)
+      .eq('status', 0)
+      .gte('fecha', startOfWeek)
+      .lte('fecha', endOfWeek);
+    
+    if (routesError) throw routesError;
+    
+    // Bloques agendados (scheduled_blocks con status = 'scheduled')
+    const { data: scheduledBlocks, error: blocksError } = await supabase
+      .from('scheduled_blocks')
+      .select('duracion_horas, pago')
+      .eq('user_id', userId)
+      .eq('status', 'scheduled')
+      .gte('fecha', startOfWeek)
+      .lte('fecha', endOfWeek);
+    
+    if (blocksError) throw blocksError;
+    
+    // Calcular totales
+    const completedHours = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.duracion_horas) || 0), 0);
+    const completedPay = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.pago) || 0), 0);
+    const completedMiles = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.millas_totales) || 0), 0);
+    
+    const scheduledHours = scheduledBlocks.reduce((sum, b) => sum + (parseFloat(b.duracion_horas) || 0), 0);
+    const scheduledPay = scheduledBlocks.reduce((sum, b) => sum + (parseFloat(b.pago) || 0), 0);
+    
+    res.json({
+      success: true,
+      summary: {
+        completed: {
+          routes: completedRoutes.length,
+          hours: completedHours.toFixed(1),
+          pay: completedPay.toFixed(2),
+          miles: completedMiles.toFixed(1)
+        },
+        scheduled: {
+          blocks: scheduledBlocks.length,
+          hours: scheduledHours.toFixed(1),
+          pay: scheduledPay.toFixed(2)
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo resumen semanal:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 2. GET /api/scheduled-blocks/:userId
+// Obtiene bloques agendados con filtros opcionales
+app.get('/api/scheduled-blocks/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { status, startDate, endDate } = req.query;
+  
+  try {
+    let query = supabase
+      .from('scheduled_blocks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('fecha', { ascending: true })
+      .order('hora', { ascending: true });
+    
+    // Filtros opcionales
+    if (status) {
+      query = query.eq('status', status);
+    }
+    
+    if (startDate) {
+      query = query.gte('fecha', startDate);
+    }
+    
+    if (endDate) {
+      query = query.lte('fecha', endDate);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    
+    console.log(`✅ ${data.length} bloques encontrados para usuario ${userId}`);
+    
+    res.json({
+      success: true,
+      blocks: data
+    });
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo bloques:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 3. POST /api/scheduled-blocks
+// Crea un nuevo bloque agendado
+app.post('/api/scheduled-blocks', async (req, res) => {
+  const { 
+    user_id, 
+    fecha, 
+    hora, 
+    duracion_horas, 
+    pago, 
+    warehouse, 
+    vehiculo,
+    notes 
+  } = req.body;
+  
+  // Validaciones
+  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
+    return res.status(400).json({
+      success: false,
+      error: 'Faltan campos requeridos'
+    });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .insert([{
+        user_id,
+        fecha,
+        hora,
+        duracion_horas: parseFloat(duracion_horas),
+        pago: parseFloat(pago),
+        warehouse,
+        vehiculo,
+        status: 'scheduled',
+        notes: notes || null
+      }])
+      .select();
+    
+    if (error) throw error;
+    
+    console.log(`✅ Bloque agendado creado: ID ${data[0].id}`);
+    
+    res.json({
+      success: true,
+      message: 'Bloque agendado correctamente',
+      block: data[0]
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creando bloque:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 4. PUT /api/scheduled-blocks/:id
+// Actualiza un bloque existente
+app.put('/api/scheduled-blocks/:id', async (req, res) => {
+  const { id } = req.params;
+  const { 
+    fecha, 
+    hora, 
+    duracion_horas, 
+    pago, 
+    warehouse, 
+    vehiculo,
+    notes 
+  } = req.body;
+  
+  try {
+    const updateData = {};
+    
+    if (fecha) updateData.fecha = fecha;
+    if (hora) updateData.hora = hora;
+    if (duracion_horas) updateData.duracion_horas = parseFloat(duracion_horas);
+    if (pago) updateData.pago = parseFloat(pago);
+    if (warehouse) updateData.warehouse = warehouse;
+    if (vehiculo) updateData.vehiculo = vehiculo;
+    if (notes !== undefined) updateData.notes = notes || null;
+    
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .update(updateData)
+      .eq('id', id)
+      .select();
+    
+    if (error) throw error;
+    
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bloque no encontrado'
+      });
+    }
+    
+    console.log(`✅ Bloque ${id} actualizado`);
+    
+    res.json({
+      success: true,
+      message: 'Bloque actualizado correctamente',
+      block: data[0]
+    });
+    
+  } catch (error) {
+    console.error('❌ Error actualizando bloque:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 5. DELETE /api/scheduled-blocks/:id
+// Cancela un bloque (soft delete)
+app.delete('/api/scheduled-blocks/:id', async (req, res) => {
+  const { id } = req.params;
+  const { soft } = req.query; // ?soft=true para soft delete
+  
+  try {
+    if (soft === 'true') {
+      // Soft delete: cambiar status a 'cancelled'
+      const { data, error } = await supabase
+        .from('scheduled_blocks')
+        .update({ status: 'cancelled' })
+        .eq('id', id)
+        .select();
+      
+      if (error) throw error;
+      
+      if (!data || data.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Bloque no encontrado'
+        });
+      }
+      
+      console.log(`✅ Bloque ${id} cancelado (soft delete)`);
+      
+      res.json({
+        success: true,
+        message: 'Bloque cancelado',
+        block: data[0]
+      });
+      
+    } else {
+      // Hard delete: borrar permanentemente
+      const { error } = await supabase
+        .from('scheduled_blocks')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      console.log(`✅ Bloque ${id} eliminado (hard delete)`);
+      
+      res.json({
+        success: true,
+        message: 'Bloque eliminado permanentemente'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error eliminando bloque:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 6. POST /api/scheduled-blocks/:id/start
+// Marca un bloque como "en progreso" y lo vincula con la ruta creada
+app.post('/api/scheduled-blocks/:id/start', async (req, res) => {
+  const { id } = req.params;
+  const { routeId } = req.body;
+  
+  if (!routeId) {
+    return res.status(400).json({
+      success: false,
+      error: 'routeId es requerido'
+    });
+  }
+  
+  try {
+    // Actualizar el bloque agendado
+    const { data, error } = await supabase
+      .from('scheduled_blocks')
+      .update({ 
+        status: 'in_progress',
+        route_id: routeId
+      })
+      .eq('id', id)
+      .select();
+    
+    if (error) throw error;
+    
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bloque no encontrado'
+      });
+    }
+    
+    console.log(`✅ Bloque ${id} marcado como en progreso (route_id: ${routeId})`);
+    
+    res.json({
+      success: true,
+      message: 'Bloque vinculado con ruta',
+      block: data[0]
+    });
+    
+  } catch (error) {
+    console.error('❌ Error vinculando bloque con ruta:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// --- Fin FASE 6 ---
 
 
 // --- 🆕 FASE 5: Cleanup Automático ---
@@ -889,7 +1586,211 @@ console.log('⏰ Cron job de cleanup iniciado (cada 5 minutos) usando Eastern Ti
 // --- Fin FASE 5 ---
 
 
+// ═══════════════════════════════════════════════════════════════
+// 🔍 ENDPOINT DE DEBUGGING - Ver Stops Desencriptados
+// ═══════════════════════════════════════════════════════════════
+// ⚠️ PARA DESARROLLO - Remover en producción si es necesario
+// ═══════════════════════════════════════════════════════════════
+
+// Helper functions para análisis
+function checkIfSequential(stops) {
+  if (!stops || stops.length === 0) return false;
+  
+  for (let i = 0; i < stops.length - 1; i++) {
+    const current = parseInt(stops[i].number) || 0;
+    const next = parseInt(stops[i + 1].number) || 0;
+    if (next !== current + 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function checkIfReversed(stops) {
+  if (!stops || stops.length === 0) return false;
+  
+  for (let i = 0; i < stops.length - 1; i++) {
+    const current = parseInt(stops[i].number) || 0;
+    const next = parseInt(stops[i + 1].number) || 0;
+    if (next !== current - 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+app.get('/api/debug/route/:routeId', async (req, res) => {
+  const { routeId } = req.params;
+  
+  try {
+    // Obtener la ruta de la base de datos
+    const { data, error } = await supabase
+      .from('routes')
+      .select('*')
+      .eq('id', routeId)
+      .single();
+    
+    if (error) throw error;
+    
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        error: 'Ruta no encontrada'
+      });
+    }
+    
+    // Desencriptar stops si existen
+    let decryptedStops = null;
+    if (data.stops_json) {
+      decryptedStops = decryptStops(data.stops_json);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // Log en consola del servidor (para debugging fácil)
+    // ═══════════════════════════════════════════════════════════════
+    console.log('\n');
+    console.log('🔍 ═══════════════════════════════════════════════════════════');
+    console.log('🔍 DEBUG - RUTA ID:', routeId);
+    console.log('🔍 ═══════════════════════════════════════════════════════════');
+    console.log('📅 Fecha:', data.fecha);
+    console.log('🕐 Hora:', data.hora);
+    console.log('🏢 Warehouse:', data.warehouse);
+    console.log('🏠 First Stop (campo):', data.first_stop);
+    console.log('📊 Total Paradas:', data.numero_paradas);
+    console.log('🔢 Status:', data.status, data.status === 1 ? '(Activa)' : '(Finalizada)');
+    console.log('🚗 Millas Totales:', data.millas_totales);
+    console.log('💰 Pago:', data.pago);
+    console.log('');
+    
+    if (decryptedStops && decryptedStops.length > 0) {
+      console.log('📍 STOPS DESENCRIPTADOS (Total:', decryptedStops.length, '):');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      decryptedStops.forEach((stop, idx) => {
+        const posicion = (idx + 1).toString().padStart(3, ' ');
+        const numero = (stop.number || 'N/A').toString().padStart(3, ' ');
+        const downtown = stop.isDowntown ? '🏙️  DOWNTOWN' : '';
+        console.log(`  ${posicion}. #${numero} │ ${stop.address || 'Sin dirección'} ${downtown}`);
+      });
+      
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('');
+      
+      // Análisis del orden
+      const isSequential = checkIfSequential(decryptedStops);
+      const isReversed = checkIfReversed(decryptedStops);
+      const downtownCount = decryptedStops.filter(s => s.isDowntown).length;
+      
+      console.log('📊 ANÁLISIS:');
+      console.log('  ├─ Primera parada (posición 1):');
+      console.log('  │  ├─ Número: #' + (decryptedStops[0]?.number || 'N/A'));
+      console.log('  │  └─ Dirección:', decryptedStops[0]?.address || 'N/A');
+      console.log('  │');
+      console.log('  ├─ Última parada (posición ' + decryptedStops.length + '):');
+      console.log('  │  ├─ Número: #' + (decryptedStops[decryptedStops.length - 1]?.number || 'N/A'));
+      console.log('  │  └─ Dirección:', decryptedStops[decryptedStops.length - 1]?.address || 'N/A');
+      console.log('  │');
+      console.log('  ├─ Paradas downtown:', downtownCount, 'de', decryptedStops.length);
+      console.log('  │');
+      console.log('  ├─ Orden secuencial (1→2→3...):', isSequential ? '✅ SÍ' : '❌ NO');
+      console.log('  └─ Orden inverso (23→22→21...):', isReversed ? '✅ SÍ' : '❌ NO');
+      
+      // Advertencia si los números no coinciden
+      if (!isSequential && !isReversed) {
+        console.log('');
+        console.log('  ⚠️  ADVERTENCIA: Los números de parada no están en orden');
+        console.log('  ⚠️  secuencial ni inverso. Revisar la lógica de guardado.');
+      }
+      
+      // Verificar discrepancia con first_stop
+      if (data.first_stop && decryptedStops[0]?.address) {
+        const matchesFirstStop = data.first_stop.toLowerCase().includes(
+          decryptedStops[0].address.substring(0, 20).toLowerCase()
+        );
+        
+        if (!matchesFirstStop) {
+          console.log('');
+          console.log('  ⚠️  DISCREPANCIA DETECTADA:');
+          console.log('  ⚠️  El campo first_stop no coincide con la primera parada del array');
+          console.log('  ⚠️  Campo first_stop:', data.first_stop);
+          console.log('  ⚠️  Primera parada array:', decryptedStops[0].address);
+        }
+      }
+      
+    } else {
+      console.log('⚠️  No hay stops guardados o no se pudieron desencriptar');
+      
+      if (data.stops_json) {
+        console.log('ℹ️  Datos encriptados presentes pero no se pudieron desencriptar');
+        console.log('ℹ️  Verifica que STOPS_ENCRYPTION_KEY esté configurado correctamente');
+      } else {
+        console.log('ℹ️  El campo stops_json está vacío en la base de datos');
+      }
+    }
+    
+    console.log('🔍 ═══════════════════════════════════════════════════════════');
+    console.log('\n');
+    
+    // ═══════════════════════════════════════════════════════════════
+    // Responder con datos completos en JSON (para llamadas API)
+    // ═══════════════════════════════════════════════════════════════
+    res.json({
+      success: true,
+      route: {
+        id: data.id,
+        fecha: data.fecha,
+        hora: data.hora,
+        warehouse: data.warehouse,
+        first_stop: data.first_stop,
+        numero_paradas: data.numero_paradas,
+        status: data.status,
+        millas_totales: data.millas_totales,
+        millas_de_trabajo: data.millas_de_trabajo,
+        pago: data.pago,
+        commute_1: data.commute_1,
+        commute_2: data.commute_2
+      },
+      stops: decryptedStops,
+      analysis: {
+        total_stops: decryptedStops ? decryptedStops.length : 0,
+        first_stop: {
+          number: decryptedStops?.[0]?.number || null,
+          address: decryptedStops?.[0]?.address || null,
+          isDowntown: decryptedStops?.[0]?.isDowntown || false
+        },
+        last_stop: {
+          number: decryptedStops?.[decryptedStops.length - 1]?.number || null,
+          address: decryptedStops?.[decryptedStops.length - 1]?.address || null,
+          isDowntown: decryptedStops?.[decryptedStops.length - 1]?.isDowntown || false
+        },
+        downtown_count: decryptedStops ? decryptedStops.filter(s => s.isDowntown).length : 0,
+        is_sequential: decryptedStops ? checkIfSequential(decryptedStops) : null,
+        is_reversed: decryptedStops ? checkIfReversed(decryptedStops) : null,
+        matches_first_stop_field: data.first_stop && decryptedStops?.[0]?.address
+          ? data.first_stop.toLowerCase().includes(
+              decryptedStops[0].address.substring(0, 20).toLowerCase()
+            )
+          : null
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en debug endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+console.log('🔍 Debug endpoint activado: GET /api/debug/route/:routeId');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN DEL ENDPOINT DE DEBUGGING
+// ═══════════════════════════════════════════════════════════════
+
+
 // --- Tu `app.listen` (movido al final) ---
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend v3.0 (ETA en Caliente) corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor backend v3.1 (ETA en Caliente + Segmentos Inversos v1.8) corriendo en http://localhost:${PORT}`);
 });
