@@ -1794,3 +1794,62 @@ console.log('🔍 Debug endpoint activado: GET /api/debug/route/:routeId');
 app.listen(PORT, () => {
   console.log(`🚀 Servidor backend v3.1 (ETA en Caliente + Segmentos Inversos v1.8) corriendo en http://localhost:${PORT}`);
 });
+
+// Agregar estos endpoints a tu server.js (después de la línea 1586)
+
+// ═══════════════════════════════════════════════════════════════
+// 🏥 HEALTH & KEEP-ALIVE ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+
+// Endpoint simple para keep-alive
+app.get('/api/ping', (req, res) => {
+  res.json({ 
+    status: 'alive', 
+    timestamp: DateTime.now().setZone('America/New_York').toISO(),
+    message: '🏓 Pong!' 
+  });
+});
+
+// Endpoint que verifica la conexión a Supabase
+app.get('/api/health', async (req, res) => {
+  try {
+    // Hacer una query ligera a Supabase para mantenerla despierta
+    const { data, error } = await supabase
+      .from('routes')
+      .select('id')
+      .limit(1);
+    
+    if (error) {
+      console.error('⚠️ Health check - Error en Supabase:', error);
+      return res.status(500).json({
+        status: 'unhealthy',
+        database: 'error',
+        error: error.message,
+        timestamp: DateTime.now().setZone('America/New_York').toISO()
+      });
+    }
+    
+    res.json({
+      status: 'healthy',
+      database: 'connected',
+      timestamp: DateTime.now().setZone('America/New_York').toISO(),
+      message: '✅ Backend y DB funcionando correctamente'
+    });
+    
+  } catch (error) {
+    console.error('❌ Health check - Error general:', error);
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: DateTime.now().setZone('America/New_York').toISO()
+    });
+  }
+});
+
+console.log('🏥 Health endpoints activados:');
+console.log('   GET /api/ping - Keep-alive simple');
+console.log('   GET /api/health - Health check + Supabase wake-up');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN DE HEALTH ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
