@@ -1585,7 +1585,216 @@ setInterval(async () => {
 console.log('⏰ Cron job de cleanup iniciado (cada 5 minutos) usando Eastern Time');
 // --- Fin FASE 5 ---
 
+// ═══════════════════════════════════════════════════════════════
+// 🔍 ENDPOINT DE DEBUGGING - Ver Stops Desencriptados
+// ═══════════════════════════════════════════════════════════════
+// 
+// INSTRUCCIONES:
+// 1. Copia este código completo
+// 2. Pégalo en server.js ANTES del app.listen() (al final del archivo)
+// 3. Guarda y reinicia el servidor
+// 4. Usa: GET http://localhost:3000/api/debug/route/{routeId}
+//
+// ⚠️ IMPORTANTE: Este endpoint es SOLO PARA DESARROLLO
+//    REMOVERLO antes de desplegar a producción
+// ═══════════════════════════════════════════════════════════════
 
+// Helper functions para análisis
+function checkIfSequential(stops) {
+  if (!stops || stops.length === 0) return false;
+  
+  for (let i = 0; i < stops.length - 1; i++) {
+    const current = parseInt(stops[i].number) || 0;
+    const next = parseInt(stops[i + 1].number) || 0;
+    if (next !== current + 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function checkIfReversed(stops) {
+  if (!stops || stops.length === 0) return false;
+  
+  for (let i = 0; i < stops.length - 1; i++) {
+    const current = parseInt(stops[i].number) || 0;
+    const next = parseInt(stops[i + 1].number) || 0;
+    if (next !== current - 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+app.get('/api/debug/route/:routeId', async (req, res) => {
+  const { routeId } = req.params;
+  
+  try {
+    // Obtener la ruta de la base de datos
+    const { data, error } = await supabase
+      .from('routes')
+      .select('*')
+      .eq('id', routeId)
+      .single();
+    
+    if (error) throw error;
+    
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        error: 'Ruta no encontrada'
+      });
+    }
+    
+    // Desencriptar stops si existen
+    let decryptedStops = null;
+    if (data.stops_json) {
+      decryptedStops = decryptStops(data.stops_json);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // Log en consola del servidor (para debugging fácil)
+    // ═══════════════════════════════════════════════════════════════
+    console.log('\n');
+    console.log('🔍 ═══════════════════════════════════════════════════════════');
+    console.log('🔍 DEBUG - RUTA ID:', routeId);
+    console.log('🔍 ═══════════════════════════════════════════════════════════');
+    console.log('📅 Fecha:', data.fecha);
+    console.log('🕐 Hora:', data.hora);
+    console.log('🏢 Warehouse:', data.warehouse);
+    console.log('🏠 First Stop (campo):', data.first_stop);
+    console.log('📊 Total Paradas:', data.numero_paradas);
+    console.log('🔢 Status:', data.status, data.status === 1 ? '(Activa)' : '(Finalizada)');
+    console.log('🚗 Millas Totales:', data.millas_totales);
+    console.log('💰 Pago:', data.pago);
+    console.log('');
+    
+    if (decryptedStops && decryptedStops.length > 0) {
+      console.log('📍 STOPS DESENCRIPTADOS (Total:', decryptedStops.length, '):');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      decryptedStops.forEach((stop, idx) => {
+        const posicion = (idx + 1).toString().padStart(3, ' ');
+        const numero = (stop.number || 'N/A').toString().padStart(3, ' ');
+        const downtown = stop.isDowntown ? '🏙️  DOWNTOWN' : '';
+        console.log(`  ${posicion}. #${numero} │ ${stop.address || 'Sin dirección'} ${downtown}`);
+      });
+      
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('');
+      
+      // Análisis del orden
+      const isSequential = checkIfSequential(decryptedStops);
+      const isReversed = checkIfReversed(decryptedStops);
+      const downtownCount = decryptedStops.filter(s => s.isDowntown).length;
+      
+      console.log('📊 ANÁLISIS:');
+      console.log('  ├─ Primera parada (posición 1):');
+      console.log('  │  ├─ Número: #' + (decryptedStops[0]?.number || 'N/A'));
+      console.log('  │  └─ Dirección:', decryptedStops[0]?.address || 'N/A');
+      console.log('  │');
+      console.log('  ├─ Última parada (posición ' + decryptedStops.length + '):');
+      console.log('  │  ├─ Número: #' + (decryptedStops[decryptedStops.length - 1]?.number || 'N/A'));
+      console.log('  │  └─ Dirección:', decryptedStops[decryptedStops.length - 1]?.address || 'N/A');
+      console.log('  │');
+      console.log('  ├─ Paradas downtown:', downtownCount, 'de', decryptedStops.length);
+      console.log('  │');
+      console.log('  ├─ Orden secuencial (1→2→3...):', isSequential ? '✅ SÍ' : '❌ NO');
+      console.log('  └─ Orden inverso (23→22→21...):', isReversed ? '✅ SÍ' : '❌ NO');
+      
+      // Advertencia si los números no coinciden
+      if (!isSequential && !isReversed) {
+        console.log('');
+        console.log('  ⚠️  ADVERTENCIA: Los números de parada no están en orden');
+        console.log('  ⚠️  secuencial ni inverso. Revisar la lógica de guardado.');
+      }
+      
+      // Verificar discrepancia con first_stop
+      if (data.first_stop && decryptedStops[0]?.address) {
+        const matchesFirstStop = data.first_stop.toLowerCase().includes(
+          decryptedStops[0].address.substring(0, 20).toLowerCase()
+        );
+        
+        if (!matchesFirstStop) {
+          console.log('');
+          console.log('  ⚠️  DISCREPANCIA DETECTADA:');
+          console.log('  ⚠️  El campo first_stop no coincide con la primera parada del array');
+          console.log('  ⚠️  Campo first_stop:', data.first_stop);
+          console.log('  ⚠️  Primera parada array:', decryptedStops[0].address);
+        }
+      }
+      
+    } else {
+      console.log('⚠️  No hay stops guardados o no se pudieron desencriptar');
+      
+      if (data.stops_json) {
+        console.log('ℹ️  Datos encriptados presentes pero no se pudieron desencriptar');
+        console.log('ℹ️  Verifica que STOPS_ENCRYPTION_KEY esté configurado correctamente');
+      } else {
+        console.log('ℹ️  El campo stops_json está vacío en la base de datos');
+      }
+    }
+    
+    console.log('🔍 ═══════════════════════════════════════════════════════════');
+    console.log('\n');
+    
+    // ═══════════════════════════════════════════════════════════════
+    // Responder con datos completos en JSON (para llamadas API)
+    // ═══════════════════════════════════════════════════════════════
+    res.json({
+      success: true,
+      route: {
+        id: data.id,
+        fecha: data.fecha,
+        hora: data.hora,
+        warehouse: data.warehouse,
+        first_stop: data.first_stop,
+        numero_paradas: data.numero_paradas,
+        status: data.status,
+        millas_totales: data.millas_totales,
+        millas_de_trabajo: data.millas_de_trabajo,
+        pago: data.pago,
+        commute_1: data.commute_1,
+        commute_2: data.commute_2
+      },
+      stops: decryptedStops,
+      analysis: {
+        total_stops: decryptedStops ? decryptedStops.length : 0,
+        first_stop: {
+          number: decryptedStops?.[0]?.number || null,
+          address: decryptedStops?.[0]?.address || null,
+          isDowntown: decryptedStops?.[0]?.isDowntown || false
+        },
+        last_stop: {
+          number: decryptedStops?.[decryptedStops.length - 1]?.number || null,
+          address: decryptedStops?.[decryptedStops.length - 1]?.address || null,
+          isDowntown: decryptedStops?.[decryptedStops.length - 1]?.isDowntown || false
+        },
+        downtown_count: decryptedStops ? decryptedStops.filter(s => s.isDowntown).length : 0,
+        is_sequential: decryptedStops ? checkIfSequential(decryptedStops) : null,
+        is_reversed: decryptedStops ? checkIfReversed(decryptedStops) : null,
+        matches_first_stop_field: data.first_stop && decryptedStops?.[0]?.address
+          ? data.first_stop.toLowerCase().includes(
+              decryptedStops[0].address.substring(0, 20).toLowerCase()
+            )
+          : null
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en debug endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+console.log('🔍 Debug endpoint activado: GET /api/debug/route/:routeId');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN DEL ENDPOINT DE DEBUGGING
+// ═══════════════════════════════════════════════════════════════
 // --- Tu `app.listen` (movido al final) ---
 app.listen(PORT, () => {
   console.log(`🚀 Servidor backend v3.1 (ETA en Caliente + Segmentos Inversos v1.8) corriendo en http://localhost:${PORT}`);
