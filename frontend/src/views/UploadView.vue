@@ -499,7 +499,7 @@ const reportData = computed(() => {
     };
   });
   
-  const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
+  //const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
   const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
   const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
   const toFinalDestDur = parseFloat(toFinalDestination.duration || 0);
