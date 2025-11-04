@@ -1,20 +1,30 @@
 <script setup>
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 import BottomNavBar from '@/components/BottomNavBar.vue'
 import PendingETABanner from '@/components/PendingETABanner.vue'
 
 // Si tienes logo
 import logo from '@/assets/logo.svg' // Ajusta la ruta según tu proyecto
+
+const route = useRoute()
+const { isAuthenticated } = useAuth()
+
+// Mostrar layout solo si está autenticado Y no está en login
+const showLayout = computed(() => {
+  return isAuthenticated.value && route.name !== 'Login'
+})
 </script>
 
 <template>
   <div id="app-shell">
-  <header class="app-header">
-    <img :src="logo" alt="Flex Pilot Logo" class="app-logo" />
-  </header>
+    <header v-if="showLayout" class="app-header">
+      <img :src="logo" alt="Flex Pilot Logo" class="app-logo" />
+    </header>
     
     <main class="app-main">
-      <PendingETABanner />
+      <PendingETABanner v-if="showLayout" />
       <router-view v-slot="{ Component }">
         <transition name="page" mode="out-in">
           <component :is="Component" />
@@ -22,7 +32,7 @@ import logo from '@/assets/logo.svg' // Ajusta la ruta según tu proyecto
       </router-view>
     </main>
     
-    <BottomNavBar />
+    <BottomNavBar v-if="showLayout" />
   </div>
 </template>
 
