@@ -1,19 +1,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin } from 'lucide-vue-next'
 import { BaseButton, BaseCard } from '@/components/base'
 
 const router = useRouter()
 const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
-// 🚧 TEMPORAL: Auto-detección de usuario
-// TODO v4.2: Reemplazar con usuario autenticado
-const USERS = [
-  { name: 'Ernesto', id: 'b5a04a69-1e96-47c4-a0c8-972fec54c21d' },
-  { name: 'Carmen Cecilia', id: 'b3aaad3a-5835-4796-aca7-ea634e150b5d' }
-]
-const selectedUserId = ref(USERS[0].id)
+// ✅ Usuario autenticado
+const { userId, userName: authUserName } = useAuth()
 
 // Estados
 const isLoading = ref(true)
@@ -32,7 +28,7 @@ async function loadDashboard() {
   try {
     // Cargar resumen semanal
     const summaryResponse = await fetch(
-      `${backendUrl}/api/scheduled-blocks/${selectedUserId.value}/week-summary`
+      `${backendUrl}/api/scheduled-blocks/${userId.value}/week-summary`
     )
     const summaryResult = await summaryResponse.json()
     
@@ -45,7 +41,7 @@ async function loadDashboard() {
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     
     const blocksResponse = await fetch(
-      `${backendUrl}/api/scheduled-blocks/${selectedUserId.value}?status=scheduled&startDate=${today}&endDate=${nextWeek}`
+     `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${today}&endDate=${nextWeek}`
     )
     const blocksResult = await blocksResponse.json()
     
@@ -155,9 +151,8 @@ const greeting = computed(() => {
   return 'Buenas noches'
 })
 
-const userName = computed(() => {
-  return USERS.find(u => u.id === selectedUserId.value)?.name || 'Usuario'
-})
+const userName = computed(() => authUserName.value)
+
 
 const hoursWorked = computed(() => {
   if (!weekSummary.value) return 0
