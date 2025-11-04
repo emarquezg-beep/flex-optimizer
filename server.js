@@ -1,28 +1,43 @@
-// server.js (v3.1 - ETA en Caliente + Segmentos Inversos v1.8)
+// server.js (v4.2.1 - VERSIÓN FINAL CORREGIDA)
 
 const { DateTime } = require('luxon');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Client } = require('@googlemaps/google-maps-services-js');
-const { createClient } = require('@supabase/supabase-js');
+const { createClient } = require('@supabase/supabase-js'); 
 
 // --- 🆕 FASE 2: Dependencias de Encriptación ---
 const crypto = require('crypto');
-// IMPORTANTE: Asegúrate que STOPS_ENCRYPTION_KEY esté en tu .env
-const ENCRYPTION_KEY = process.env.STOPS_ENCRYPTION_KEY; // Debe ser 32 bytes (64 hex)
+const ENCRYPTION_KEY = process.env.STOPS_ENCRYPTION_KEY; 
 const IV_LENGTH = 16;
 // --- Fin FASE 2 ---
 
 const app = express();
 const PORT = 3000;
 
-// Tu configuración de CORS (sin cambios)
+// --- 🆕 FASE 2A: CORRECCIÓN DE AUTENTICACIÓN ---
+
+// 1. Cliente ADMIN (para el servidor, usa variables de entorno)
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey); // Cliente ADMIN
+
+// 2. Cliente PÚBLICO (solo para validar tokens)
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zeW5ibnZlYmhrYmRqd2l0Znh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NzI5ODQsImV4cCI6MjA3NjU0ODk4NH0.DSIcEUw2_1vyt6XGtNApH7gZzBpugehSujZwVkbiLIA'; 
+const supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey); // Cliente PÚBLICO (Auth)
+
+// --- FIN CORRECCIÓN ---
+
+
+// Tu configuración de CORS (actualizada)
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
   'https://flex-optimizer-git-feature-sc-8b70f7-ernestos-projects-d9e7c95d.vercel.app',
   'https://flex-optimizer-fzy130b7l-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-feature-au-f8a9f9-ernestos-projects-d9e7c95d.vercel.app',
+  'flex-optimizer-idga5vxd2-ernestos-projects-d9e7c95d.vercel.app',
 ];
 const corsOptions = {
   origin: function (origin, callback) {
@@ -41,7 +56,9 @@ const corsOptions = {
       console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
       callback(new Error('No permitido por CORS'));
     }
-  }
+  },
+  // 🆕 FASE 2A: Permitir el header 'Authorization'
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 // Verificación de timezone al iniciar
@@ -56,12 +73,48 @@ app.use(cors(corsOptions));
 app.use(express.json());
 const mapsClient = new Client({});
 
-// Tu conexión de Supabase (sin cambios)
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
-
+// Conexión de Supabase (usada para el middleware)
 console.log("Conectando a Supabase en:", supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'URL no encontrada');
+
+// --- 🆕 FASE 2A: Middleware de Autenticación ---
+async function authenticateUser(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization; 
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) { 
+      return res.status(401).json({ 
+        success: false,
+        error: 'No se proporcionó token de autenticación' 
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '').trim(); 
+    
+    // ❗️ Usar el CLIENTE DE AUTH (público) para verificar el token
+    const { data: { user }, error } = await supabaseAuthClient.auth.getUser(token); 
+
+    if (error || !user) { 
+      return res.status(401).json({ 
+        success: false,
+        error: 'Token inválido o expirado' 
+      });
+    }
+
+    // Agregar usuario al request
+    req.user = user; 
+    req.userId = user.id; 
+    
+    next(); 
+
+  } catch (error) { 
+    console.error('Error en autenticación:', error); 
+    return res.status(401).json({ 
+      success: false,
+      error: 'Error de autenticación' 
+    });
+  }
+}
+// --- Fin FASE 2A ---
 
 // --- 🆕 FASE 2: Funciones de Encriptación ---
 function encryptStops(stopsArray) {
@@ -170,8 +223,8 @@ async function calculateLeg(origin, destination, waypoints = []) {
     }
 }
 
-// --- Tu endpoint `/api/optimize-route` (sin cambios) ---
-app.post('/api/optimize-route', async (req, res) => {
+// --- Tu endpoint `/api/optimize-route` (AHORA PROTEGIDO) ---
+app.post('/api/optimize-route', authenticateUser, async (req, res) => {
   let { addresses } = req.body;
   addresses = addresses.filter(addr => addr && addr.trim() !== '');
 
@@ -413,8 +466,8 @@ app.post('/api/optimize-route', async (req, res) => {
   }
 });
 
-// --- 🆕 FASE 3: Endpoint `/api/log-route` (MODIFICADO) ---
-app.post('/api/log-route', async (req, res) => {
+// --- 🆕 FASE 3: Endpoint `/api/log-route` (PROTEGIDO Y MODIFICADO) ---
+app.post('/api/log-route', authenticateUser, async (req, res) => {
     const logData = req.body;
     console.log('📦 Recibiendo datos v3 para guardar en bitácora');
 
@@ -472,7 +525,8 @@ app.post('/api/log-route', async (req, res) => {
         claim_por_milla: logData.claim_por_milla,
         route_score: logData.route_score,
         numero_paradas: logData.numero_paradas,
-        user_id: logData.user_id,
+        // 🆕 FASE 2A: Usar el ID del token, no del body
+        user_id: req.userId, 
         primary_city: logData.primary_city,
         first_stop: logData.first_stop,
         
@@ -515,24 +569,26 @@ app.post('/api/log-route', async (req, res) => {
 // --- Fin FASE 3 ---
 
 
-// --- 🆕 FASE 4: Nuevos Endpoints ---
+// --- 🆕 FASE 4: Nuevos Endpoints (PROTEGIDOS) ---
 
 // 1. GET /api/active-route/:userId
-app.get('/api/active-route/:userId', async (req, res) => {
+app.get('/api/active-route/:userId', authenticateUser, async (req, res) => {
   const { userId } = req.params;
-    // 🔥 LOGS CRÍTICOS
-  console.log('═══════════════════════════════════════');
-  console.log('🔍 [active-route] INICIANDO BÚSQUEDA');
-  console.log('📋 User ID recibido:', userId);
-  console.log('📋 User ID tipo:', typeof userId);
-  console.log('📋 User ID length:', userId.length);
-  console.log('═══════════════════════════════════════');
+
+  // 🆕 FASE 2A: VALIDACIÓN
+  if (userId !== req.userId) { 
+    return res.status(403).json({ 
+      success: false,
+      error: 'No tienes permiso para acceder a estos datos' 
+    });
+  }
+  // --- Fin FASE 2A ---
+
   try {
-    // 🔥 SIMPLE: Traer la ruta más reciente con status=1
     const { data, error } = await supabase
       .from('routes')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', userId) 
       .eq('status', 1)
       .order('fecha', { ascending: false })
       .order('hora', { ascending: false })
@@ -586,8 +642,8 @@ app.get('/api/active-route/:userId', async (req, res) => {
 
 // REEMPLAZA TU ENDPOINT /api/calculate-live-eta CON ESTE:
 
-// 2. POST /api/calculate-live-eta (CON SEGMENTACIÓN)
-app.post('/api/calculate-live-eta', async (req, res) => {
+// 2. POST /api/calculate-live-eta (CON SEGMENTACIÓN Y PROTEGIDO)
+app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
   const { routeId, currentStopNumber } = req.body;
   if (!routeId || !currentStopNumber) {
     return res.status(400).json({
@@ -602,10 +658,11 @@ app.post('/api/calculate-live-eta', async (req, res) => {
       .select('*')
       .eq('id', routeId)
       .eq('status', 1)
+      .eq('user_id', req.userId) // 🆕 FASE 2A: Asegurar que la ruta pertenece al usuario
       .single();
 
     if (error) {
-      throw new Error('Ruta no encontrada o ya finalizada');
+      throw new Error('Ruta no encontrada, ya finalizada, o no te pertenece');
     }
     const allStops = decryptStops(route.stops_json);
     if (!allStops) {
@@ -659,16 +716,25 @@ app.post('/api/calculate-live-eta', async (req, res) => {
 // SCHEDULED BLOCKS ENDPOINTS - v4.1
 // ========================================
 
-// 1. GET /api/scheduled-blocks/:userId - Obtener bloques de un usuario
-app.get('/api/scheduled-blocks/:userId', async (req, res) => {
-  const { userId } = req.params;
+// 1. GET /api/scheduled-blocks/:userId - Obtener bloques de un usuario (PROTEGIDO)
+app.get('/api/scheduled-blocks/:userId', authenticateUser, async (req, res) => {
+  const { userId } = req.params; 
   const { status, startDate, endDate } = req.query;
   
+  // 🆕 FASE 2A: VALIDACIÓN
+  if (userId !== req.userId) { 
+    return res.status(403).json({ 
+      success: false,
+      error: 'No tienes permiso para acceder a estos datos' 
+    });
+  }
+  // --- Fin FASE 2A ---
+
   try {
     let query = supabase
       .from('scheduled_blocks')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', userId) 
       .order('fecha', { ascending: true })
       .order('hora', { ascending: true });
     
@@ -698,12 +764,12 @@ app.get('/api/scheduled-blocks/:userId', async (req, res) => {
   }
 });
 
-// 2. POST /api/scheduled-blocks - Crear nuevo bloque
-app.post('/api/scheduled-blocks', async (req, res) => {
-  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehiculo, notes } = req.body;
+// 2. POST /api/scheduled-blocks - Crear nuevo bloque (PROTEGIDO)
+app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => { 
+  const { fecha, hora, duracion_horas, pago, warehouse, vehiculo, notes } = req.body;
   
-  // Validación
-  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
+  // Validación (user_id ya no viene del body)
+  if (!fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
     return res.status(400).json({ 
       success: false, 
       error: 'Faltan campos requeridos' 
@@ -714,14 +780,14 @@ app.post('/api/scheduled-blocks', async (req, res) => {
     const { data, error } = await supabase
       .from('scheduled_blocks')
       .insert([{
-        user_id,
+        user_id: req.userId, // 🆕 FASE 2A: Usar el ID del token
         fecha,
         hora,
         duracion_horas,
         pago,
         warehouse,
         vehiculo,
-        notes,
+        notes: notes || null, // ❗️ CORRECCIÓN DEL BUG
         status: 'scheduled'
       }])
       .select();
@@ -746,8 +812,8 @@ app.post('/api/scheduled-blocks', async (req, res) => {
   }
 });
 
-// 3. PUT /api/scheduled-blocks/:blockId - Actualizar bloque
-app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
+// 3. PUT /api/scheduled-blocks/:blockId - Actualizar bloque (PROTEGIDO)
+app.put('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) => { 
   const { blockId } = req.params;
   const updates = req.body;
   
@@ -756,10 +822,12 @@ app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
   delete updates.created_at;
   
   try {
+    // 🆕 FASE 2A: Asegurar que el usuario es dueño del bloque
     const { data, error } = await supabase
       .from('scheduled_blocks')
       .update(updates)
       .eq('id', blockId)
+      .eq('user_id', req.userId) // Solo actualiza si el user_id coincide
       .select();
     
     if (error) throw error;
@@ -767,7 +835,7 @@ app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
     if (!data || data.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Bloque no encontrado'
+        error: 'Bloque no encontrado o no te pertenece'
       });
     }
     
@@ -780,8 +848,8 @@ app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
   }
 });
 
-// 4. DELETE /api/scheduled-blocks/:blockId - Eliminar/Cancelar bloque
-app.delete('/api/scheduled-blocks/:blockId', async (req, res) => {
+// 4. DELETE /api/scheduled-blocks/:blockId - Eliminar/Cancelar bloque (PROTEGIDO)
+app.delete('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) => { 
   const { blockId } = req.params;
   const { soft } = req.query; // ?soft=true para cancelar en lugar de eliminar
   
@@ -792,19 +860,24 @@ app.delete('/api/scheduled-blocks/:blockId', async (req, res) => {
         .from('scheduled_blocks')
         .update({ status: 'cancelled' })
         .eq('id', blockId)
+        .eq('user_id', req.userId) // 🆕 FASE 2A: Solo si es dueño
         .select();
       
       if (error) throw error;
+      if (!data || data.length === 0) {
+         return res.status(404).json({ success: false, error: 'Bloque no encontrado o no te pertenece' });
+      }
       
       console.log('✅ Bloque cancelado:', blockId);
       res.json({ success: true, message: 'Bloque cancelado', block: data[0] });
       
     } else {
       // Hard delete: Eliminar permanentemente
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('scheduled_blocks')
         .delete()
-        .eq('id', blockId);
+        .eq('id', blockId)
+        .eq('user_id', req.userId); // 🆕 FASE 2A: Solo si es dueño
       
       if (error) throw error;
       
@@ -818,8 +891,8 @@ app.delete('/api/scheduled-blocks/:blockId', async (req, res) => {
   }
 });
 
-// 5. POST /api/scheduled-blocks/:blockId/start - Iniciar bloque (vincula con route)
-app.post('/api/scheduled-blocks/:blockId/start', async (req, res) => {
+// 5. POST /api/scheduled-blocks/:blockId/start - Iniciar bloque (PROTEGIDO)
+app.post('/api/scheduled-blocks/:blockId/start', authenticateUser, async (req, res) => {
   const { blockId } = req.params;
   const { routeId } = req.body;
   
@@ -838,9 +911,13 @@ app.post('/api/scheduled-blocks/:blockId/start', async (req, res) => {
         route_id: routeId
       })
       .eq('id', blockId)
+      .eq('user_id', req.userId) // 🆕 FASE 2A: Solo si es dueño
       .select();
     
     if (error) throw error;
+    if (!data || data.length === 0) {
+       return res.status(404).json({ success: false, error: 'Bloque no encontrado o no te pertenece' });
+    }
     
     console.log(`✅ Bloque ${blockId} iniciado con route ${routeId}`);
     res.json({ success: true, block: data[0] });
@@ -851,10 +928,19 @@ app.post('/api/scheduled-blocks/:blockId/start', async (req, res) => {
   }
 });
 
-// 6. GET /api/scheduled-blocks/:userId/week-summary - Resumen semanal
-app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
+// 6. GET /api/scheduled-blocks/:userId/week-summary - Resumen semanal (PROTEGIDO)
+app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (req, res) => { 
   const { userId } = req.params;
   
+  // 🆕 FASE 2A: VALIDACIÓN
+  if (userId !== req.userId) { 
+    return res.status(403).json({ 
+      success: false,
+      error: 'No tienes permiso para acceder a estos datos' 
+    });
+  }
+  // --- Fin FASE 2A ---
+
   try {
     // Obtener fecha de inicio de semana (lunes)
     const today = DateTime.now().setZone('America/New_York');
@@ -867,7 +953,7 @@ app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
     const { data: blocks, error: blocksError } = await supabase
       .from('scheduled_blocks')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', userId) 
       .gte('fecha', startOfWeek)
       .lte('fecha', endOfWeek)
       .neq('status', 'cancelled');
@@ -878,7 +964,7 @@ app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
     const { data: routes, error: routesError } = await supabase
       .from('routes')
       .select('duracion_horas, pago, millas_totales')
-      .eq('user_id', userId)
+      .eq('user_id', userId) 
       .gte('fecha', startOfWeek)
       .lte('fecha', endOfWeek)
       .eq('status', 0); // Completadas
@@ -1008,8 +1094,8 @@ app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
   }
 });
 
-// 3. POST /api/complete-route
-app.post('/api/complete-route', async (req, res) => {
+// 3. POST /api/complete-route (PROTEGIDO)
+app.post('/api/complete-route', authenticateUser, async (req, res) => {
   const { routeId, etaReal } = req.body; // etaReal: "5:11 PM"
   if (!routeId || !etaReal) {
     return res.status(400).json({
@@ -1037,14 +1123,14 @@ app.post('/api/complete-route', async (req, res) => {
         stops_json: null // BORRAR DIRECCIONES
       })
       .eq('id', routeId)
-      //.eq('status', 1) // Quitado para permitir actualizar rutas pendientes
+      .eq('user_id', req.userId) // 🆕 FASE 2A: Solo si es dueño
       .select();
 
     if (error) throw error;
     if (!data || data.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Ruta no encontrada'
+        message: 'Ruta no encontrada o no te pertenece'
       });
     }
 
@@ -1056,6 +1142,7 @@ app.post('/api/complete-route', async (req, res) => {
         .from('scheduled_blocks')
         .update({ status: 'completed' })
         .eq('route_id', routeId)
+        .eq('user_id', req.userId) // 🆕 FASE 2A: Solo si es dueño
         .select();
       
       if (!blockError && blockData && blockData.length > 0) {
@@ -1080,14 +1167,24 @@ app.post('/api/complete-route', async (req, res) => {
   }
 });
 
-// 4. GET /api/pending-eta/:userId
-app.get('/api/pending-eta/:userId', async (req, res) => {
+// 4. GET /api/pending-eta/:userId (PROTEGIDO)
+app.get('/api/pending-eta/:userId', authenticateUser, async (req, res) => {
   const { userId } = req.params;
+
+  // 🆕 FASE 2A: VALIDACIÓN
+  if (userId !== req.userId) { 
+    return res.status(403).json({ 
+      success: false,
+      error: 'No tienes permiso para acceder a estos datos' 
+    });
+  }
+  // --- Fin FASE 2A ---
+
   try {
     const { data, error } = await supabase
       .from('routes')
       .select('id, fecha, warehouse, hora, eta_normal, primary_city')
-      .eq('user_id', userId)
+      .eq('user_id', userId) 
       .eq('status', 0)
       .is('eta_real', null)
       .is('notes', null) // No tiene "user_skipped"
@@ -1108,17 +1205,22 @@ app.get('/api/pending-eta/:userId', async (req, res) => {
   }
 });
 
-// 5. POST /api/skip-eta
-app.post('/api/skip-eta', async (req, res) => {
+// 5. POST /api/skip-eta (PROTEGIDO)
+app.post('/api/skip-eta', authenticateUser, async (req, res) => {
   const { routeId } = req.body;
   try {
     const { data, error } = await supabase
       .from('routes')
       .update({ notes: 'user_skipped' })
       .eq('id', routeId)
+      .eq('user_id', req.userId) // 🆕 FASE 2A: Solo si es dueño
       .select();
 
     if (error) throw error;
+    if (!data || data.length === 0) {
+       return res.status(404).json({ success: false, error: 'Ruta no encontrada o no te pertenece' });
+    }
+
     console.log(`✅ Usuario saltó ETA de ruta ${routeId}`);
     res.json({
       success: true,
@@ -1136,349 +1238,8 @@ app.post('/api/skip-eta', async (req, res) => {
 
 
 // ========================================
-// 🆕 FASE 6: SCHEDULED BLOCKS ENDPOINTS
+// ❗️ BLOQUE "FASE 6" ELIMINADO ❗️
 // ========================================
-
-// 1. GET /api/scheduled-blocks/:userId/week-summary
-// Obtiene resumen de la semana actual (horas, pago, millas, bloques)
-app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
-  const { userId } = req.params;
-  
-  try {
-    // Obtener inicio y fin de semana (domingo a sábado)
-    const now = DateTime.now().setZone('America/New_York');
-    const startOfWeek = now.startOf('week').toISODate(); // Domingo
-    const endOfWeek = now.endOf('week').toISODate(); // Sábado
-    
-    console.log(`📊 Calculando resumen semanal para ${userId}`);
-    console.log(`   Semana: ${startOfWeek} a ${endOfWeek}`);
-    
-    // Bloques completados (rutas con status = 0)
-    const { data: completedRoutes, error: routesError } = await supabase
-      .from('routes')
-      .select('duracion_horas, pago, millas_totales')
-      .eq('user_id', userId)
-      .eq('status', 0)
-      .gte('fecha', startOfWeek)
-      .lte('fecha', endOfWeek);
-    
-    if (routesError) throw routesError;
-    
-    // Bloques agendados (scheduled_blocks con status = 'scheduled')
-    const { data: scheduledBlocks, error: blocksError } = await supabase
-      .from('scheduled_blocks')
-      .select('duracion_horas, pago')
-      .eq('user_id', userId)
-      .eq('status', 'scheduled')
-      .gte('fecha', startOfWeek)
-      .lte('fecha', endOfWeek);
-    
-    if (blocksError) throw blocksError;
-    
-    // Calcular totales
-    const completedHours = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.duracion_horas) || 0), 0);
-    const completedPay = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.pago) || 0), 0);
-    const completedMiles = completedRoutes.reduce((sum, r) => sum + (parseFloat(r.millas_totales) || 0), 0);
-    
-    const scheduledHours = scheduledBlocks.reduce((sum, b) => sum + (parseFloat(b.duracion_horas) || 0), 0);
-    const scheduledPay = scheduledBlocks.reduce((sum, b) => sum + (parseFloat(b.pago) || 0), 0);
-    
-    res.json({
-      success: true,
-      summary: {
-        completed: {
-          routes: completedRoutes.length,
-          hours: completedHours.toFixed(1),
-          pay: completedPay.toFixed(2),
-          miles: completedMiles.toFixed(1)
-        },
-        scheduled: {
-          blocks: scheduledBlocks.length,
-          hours: scheduledHours.toFixed(1),
-          pay: scheduledPay.toFixed(2)
-        }
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Error obteniendo resumen semanal:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// 2. GET /api/scheduled-blocks/:userId
-// Obtiene bloques agendados con filtros opcionales
-app.get('/api/scheduled-blocks/:userId', async (req, res) => {
-  const { userId } = req.params;
-  const { status, startDate, endDate } = req.query;
-  
-  try {
-    let query = supabase
-      .from('scheduled_blocks')
-      .select('*')
-      .eq('user_id', userId)
-      .order('fecha', { ascending: true })
-      .order('hora', { ascending: true });
-    
-    // Filtros opcionales
-    if (status) {
-      query = query.eq('status', status);
-    }
-    
-    if (startDate) {
-      query = query.gte('fecha', startDate);
-    }
-    
-    if (endDate) {
-      query = query.lte('fecha', endDate);
-    }
-    
-    const { data, error } = await query;
-    
-    if (error) throw error;
-    
-    console.log(`✅ ${data.length} bloques encontrados para usuario ${userId}`);
-    
-    res.json({
-      success: true,
-      blocks: data
-    });
-    
-  } catch (error) {
-    console.error('❌ Error obteniendo bloques:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// 3. POST /api/scheduled-blocks
-// Crea un nuevo bloque agendado
-app.post('/api/scheduled-blocks', async (req, res) => {
-  const { 
-    user_id, 
-    fecha, 
-    hora, 
-    duracion_horas, 
-    pago, 
-    warehouse, 
-    vehiculo,
-    notes 
-  } = req.body;
-  
-  // Validaciones
-  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
-    return res.status(400).json({
-      success: false,
-      error: 'Faltan campos requeridos'
-    });
-  }
-  
-  try {
-    const { data, error } = await supabase
-      .from('scheduled_blocks')
-      .insert([{
-        user_id,
-        fecha,
-        hora,
-        duracion_horas: parseFloat(duracion_horas),
-        pago: parseFloat(pago),
-        warehouse,
-        vehiculo,
-        status: 'scheduled',
-        notes: notes || null
-      }])
-      .select();
-    
-    if (error) throw error;
-    
-    console.log(`✅ Bloque agendado creado: ID ${data[0].id}`);
-    
-    res.json({
-      success: true,
-      message: 'Bloque agendado correctamente',
-      block: data[0]
-    });
-    
-  } catch (error) {
-    console.error('❌ Error creando bloque:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// 4. PUT /api/scheduled-blocks/:id
-// Actualiza un bloque existente
-app.put('/api/scheduled-blocks/:id', async (req, res) => {
-  const { id } = req.params;
-  const { 
-    fecha, 
-    hora, 
-    duracion_horas, 
-    pago, 
-    warehouse, 
-    vehiculo,
-    notes 
-  } = req.body;
-  
-  try {
-    const updateData = {};
-    
-    if (fecha) updateData.fecha = fecha;
-    if (hora) updateData.hora = hora;
-    if (duracion_horas) updateData.duracion_horas = parseFloat(duracion_horas);
-    if (pago) updateData.pago = parseFloat(pago);
-    if (warehouse) updateData.warehouse = warehouse;
-    if (vehiculo) updateData.vehiculo = vehiculo;
-    if (notes !== undefined) updateData.notes = notes || null;
-    
-    const { data, error } = await supabase
-      .from('scheduled_blocks')
-      .update(updateData)
-      .eq('id', id)
-      .select();
-    
-    if (error) throw error;
-    
-    if (!data || data.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Bloque no encontrado'
-      });
-    }
-    
-    console.log(`✅ Bloque ${id} actualizado`);
-    
-    res.json({
-      success: true,
-      message: 'Bloque actualizado correctamente',
-      block: data[0]
-    });
-    
-  } catch (error) {
-    console.error('❌ Error actualizando bloque:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// 5. DELETE /api/scheduled-blocks/:id
-// Cancela un bloque (soft delete)
-app.delete('/api/scheduled-blocks/:id', async (req, res) => {
-  const { id } = req.params;
-  const { soft } = req.query; // ?soft=true para soft delete
-  
-  try {
-    if (soft === 'true') {
-      // Soft delete: cambiar status a 'cancelled'
-      const { data, error } = await supabase
-        .from('scheduled_blocks')
-        .update({ status: 'cancelled' })
-        .eq('id', id)
-        .select();
-      
-      if (error) throw error;
-      
-      if (!data || data.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: 'Bloque no encontrado'
-        });
-      }
-      
-      console.log(`✅ Bloque ${id} cancelado (soft delete)`);
-      
-      res.json({
-        success: true,
-        message: 'Bloque cancelado',
-        block: data[0]
-      });
-      
-    } else {
-      // Hard delete: borrar permanentemente
-      const { error } = await supabase
-        .from('scheduled_blocks')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      console.log(`✅ Bloque ${id} eliminado (hard delete)`);
-      
-      res.json({
-        success: true,
-        message: 'Bloque eliminado permanentemente'
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Error eliminando bloque:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// 6. POST /api/scheduled-blocks/:id/start
-// Marca un bloque como "en progreso" y lo vincula con la ruta creada
-app.post('/api/scheduled-blocks/:id/start', async (req, res) => {
-  const { id } = req.params;
-  const { routeId } = req.body;
-  
-  if (!routeId) {
-    return res.status(400).json({
-      success: false,
-      error: 'routeId es requerido'
-    });
-  }
-  
-  try {
-    // Actualizar el bloque agendado
-    const { data, error } = await supabase
-      .from('scheduled_blocks')
-      .update({ 
-        status: 'in_progress',
-        route_id: routeId
-      })
-      .eq('id', id)
-      .select();
-    
-    if (error) throw error;
-    
-    if (!data || data.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Bloque no encontrado'
-      });
-    }
-    
-    console.log(`✅ Bloque ${id} marcado como en progreso (route_id: ${routeId})`);
-    
-    res.json({
-      success: true,
-      message: 'Bloque vinculado con ruta',
-      block: data[0]
-    });
-    
-  } catch (error) {
-    console.error('❌ Error vinculando bloque con ruta:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// --- Fin FASE 6 ---
 
 
 // --- 🆕 FASE 5: Cleanup Automático ---
@@ -1587,7 +1348,7 @@ console.log('⏰ Cron job de cleanup iniciado (cada 5 minutos) usando Eastern Ti
 
 
 // ═══════════════════════════════════════════════════════════════
-// 🔍 ENDPOINT DE DEBUGGING - Ver Stops Desencriptados
+// 🔍 ENDPOINT DE DEBUGGING - Ver Stops Desencriptados (PROTEGIDO)
 // ═══════════════════════════════════════════════════════════════
 // ⚠️ PARA DESARROLLO - Remover en producción si es necesario
 // ═══════════════════════════════════════════════════════════════
@@ -1619,7 +1380,7 @@ function checkIfReversed(stops) {
   return true;
 }
 
-app.get('/api/debug/route/:routeId', async (req, res) => {
+app.get('/api/debug/route/:routeId', authenticateUser, async (req, res) => {
   const { routeId } = req.params;
   
   try {
@@ -1628,6 +1389,7 @@ app.get('/api/debug/route/:routeId', async (req, res) => {
       .from('routes')
       .select('*')
       .eq('id', routeId)
+      .eq('user_id', req.userId) // 🆕 FASE 2A: Solo si es dueño
       .single();
     
     if (error) throw error;
@@ -1635,7 +1397,7 @@ app.get('/api/debug/route/:routeId', async (req, res) => {
     if (!data) {
       return res.status(404).json({
         success: false,
-        error: 'Ruta no encontrada'
+        error: 'Ruta no encontrada o no te pertenece'
       });
     }
     
@@ -1792,13 +1554,13 @@ console.log('🔍 Debug endpoint activado: GET /api/debug/route/:routeId');
 
 // --- Tu `app.listen` (movido al final) ---
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend v3.1 (ETA en Caliente + Segmentos Inversos v1.8) corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor backend v4.2 (Auth) corriendo en http://localhost:${PORT}`);
 });
 
 // Agregar estos endpoints a tu server.js (después de la línea 1586)
 
 // ═══════════════════════════════════════════════════════════════
-// 🏥 HEALTH & KEEP-ALIVE ENDPOINTS
+// 🏥 HEALTH & KEEP-ALIVE ENDPOINTS (PÚBLICOS)
 // ═══════════════════════════════════════════════════════════════
 
 // Endpoint simple para keep-alive
