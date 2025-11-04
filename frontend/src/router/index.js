@@ -1,41 +1,48 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 
 const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: { requiresAuth: false }
+  },
   {
     path: '/',
     name: 'Home',
     component: () => import('@/views/HomeView.vue'),
-    meta: { title: 'Dashboard' }
+    meta: { requiresAuth: true, title: 'Dashboard' }
   },
   {
     path: '/upload',
     name: 'Upload',
     component: () => import('@/views/UploadView.vue'),
-    meta: { title: 'Evaluar Ruta' }
+    meta: { requiresAuth: true, title: 'Evaluar Ruta' }
   },
   {
-    path: '/schedule', // 🆕 Nueva ruta
+    path: '/schedule',
     name: 'Schedule',
     component: () => import('@/views/ScheduleView.vue'),
-    meta: { title: 'Agendar Bloque' }
+    meta: { requiresAuth: true, title: 'Agendar Bloque' }
   },
   {
     path: '/live-eta',
     name: 'LiveETA',
     component: () => import('@/views/LiveETAView.vue'),
-    meta: { title: 'En Vivo' }
+    meta: { requiresAuth: true, title: 'En Vivo' }
   },
   {
     path: '/logbook',
     name: 'Logbook',
     component: () => import('@/views/LogbookView.vue'),
-    meta: { title: 'Bitácora' }
+    meta: { requiresAuth: true, title: 'Bitácora' }
   },
   {
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue'),
-    meta: { title: 'Ajustes' }
+    meta: { requiresAuth: true, title: 'Ajustes' }
   }
 ]
 
@@ -51,9 +58,33 @@ const router = createRouter({
   }
 })
 
-router.beforeEach((to, from, next) => {
-  document.title = `${to.meta.title || 'Flex Pilot'} | Flex Optimizer`
-  next()
+router.beforeEach(async (to, from, next) => {
+  const { isAuthenticated, checkAuth } = useAuth()
+  
+  // Actualizar título de la página
+  document.title = `${to.meta.title || to.name} | Flex Optimizer`
+  
+  // Si la ruta requiere autenticación
+  if (to.meta.requiresAuth) {
+    if (!isAuthenticated.value) {
+      // Verificar si hay sesión guardada
+      const hasSession = await checkAuth()
+      if (!hasSession) {
+        // Redirigir a login guardando la ruta deseada
+        next({ name: 'Login', query: { redirect: to.fullPath } })
+        return
+      }
+    }
+    next()
+  } 
+  // Si ya está autenticado y va a login, redirigir a home
+  else if (to.name === 'Login' && isAuthenticated.value) {
+    next({ name: 'Home' })
+  } 
+  // Ruta pública, dejar pasar
+  else {
+    next()
+  }
 })
 
 export default router
