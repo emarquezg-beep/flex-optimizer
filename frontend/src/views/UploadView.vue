@@ -4,6 +4,8 @@
 // ============================================
 import { computeScoreV5 } from '@/utils/scoring';
 import { useRoute } from 'vue-router';
+import { useAuth } from '@/composables/useAuth';
+import { fetchWithAuth } from '@/lib/api';
 import { 
   obtenerMensajeConsciente, 
   getIconForScore, 
@@ -24,12 +26,8 @@ const saveStatus = ref(null);
 const fileInputRef = ref(null);
 const selectedFileNames = ref([]);
 
-const USERS = [
-  { name: 'Ernesto', id: 'b5a04a69-1e96-47c4-a0c8-972fec54c21d' },
-  { name: 'Carmen Cecilia', id: 'b3aaad3a-5835-4796-aca7-ea634e150b5d' }
-];
-const selectedUserId = ref(USERS[0].id);
-
+// ✅ Usuario autenticado
+const { userId } = useAuth();
 const fileInputLabel = computed(() => {
   return isProcessing.value ? 'Processing...' : 'Choose Screenshots or Drag Here';
 });
@@ -677,8 +675,8 @@ const calculatedLogEntry = computed(() => {
     return null;
   }
   
-  const user_id = selectedUserId.value;
-  
+const user_id = userId.value;
+
   let primary_city = null;
   if (extractedAddresses.value.length > 0) {
     const cityCounts = {};
@@ -857,9 +855,10 @@ async function sendToBackend() {
 
     backendResponse.value = { status: 'loading' };
     try {
-      const response = await fetch(`${backendUrl}/api/optimize-route`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addresses: fullRoute }),
-      });
+    const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
+      method: 'POST',
+      body: JSON.stringify({ addresses: fullRoute }),
+    });
       const result = await response.json();
       
       // 🆕 ASIGNAR RESULTADO (CON O SIN ERRORES)
@@ -917,9 +916,8 @@ async function saveToLogbook() {
 
     try {
         // Guardar la ruta
-        const response = await fetch(`${backendUrl}/api/log-route`, {
+        const response = await fetchWithAuth(`${backendUrl}/api/log-route`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dataToSend)
         });
         
@@ -933,11 +931,10 @@ async function saveToLogbook() {
                 console.log('🔗 Vinculando con bloque agendado:', route.query.blockId);
                 
                 try {
-                    const linkResponse = await fetch(
+                    const linkResponse = await fetchWithAuth(
                         `${backendUrl}/api/scheduled-blocks/${route.query.blockId}/start`,
                         {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ routeId: result.data[0].id })
                         }
                     );
