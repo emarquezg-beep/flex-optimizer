@@ -43,7 +43,9 @@ const corsOptions = {
       console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
       callback(new Error('No permitido por CORS'));
     }
-  }
+  },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 // Verificación de timezone al iniciar
@@ -64,6 +66,56 @@ const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 console.log("Conectando a Supabase en:", supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'URL no encontrada');
+
+// ═══════════════════════════════════════════════════════════════
+// 🔐 MIDDLEWARE DE AUTENTICACIÓN
+// ═══════════════════════════════════════════════════════════════
+
+async function authenticateUser(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: 'No se proporcionó token de autenticación'
+      });
+    }
+    
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Verificar token con Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('❌ Token inválido:', error?.message || 'Usuario no encontrado');
+      return res.status(401).json({
+        success: false,
+        error: 'Token inválido o expirado'
+      });
+    }
+    
+    // Agregar usuario al request
+    req.user = user;
+    req.userId = user.id;
+    
+    console.log('✅ Usuario autenticado:', user.email, '- ID:', user.id);
+    
+    next();
+  } catch (error) {
+    console.error('❌ Error en autenticación:', error);
+    return res.status(401).json({
+      success: false,
+      error: 'Error de autenticación'
+    });
+  }
+}
+
+console.log('🔐 Middleware de autenticación configurado');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN MIDDLEWARE DE AUTENTICACIÓN
+// ═══════════════════════════════════════════════════════════════
 
 // --- 🆕 FASE 2: Funciones de Encriptación ---
 function encryptStops(stopsArray) {
@@ -666,6 +718,10 @@ app.get('/api/scheduled-blocks/:userId', async (req, res) => {
   const { userId } = req.params;
   const { status, startDate, endDate } = req.query;
   
+  if (userId !== req.userId) {
+    return res.status(403).json({ success: false, error: 'No tienes permiso' });
+  }
+
   try {
     let query = supabase
       .from('scheduled_blocks')
@@ -701,9 +757,13 @@ app.get('/api/scheduled-blocks/:userId', async (req, res) => {
 });
 
 // 2. POST /api/scheduled-blocks - Crear nuevo bloque
-app.post('/api/scheduled-blocks', async (req, res) => {
+app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
   const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehiculo, notes } = req.body;
-  
+ 
+  if (user_id && user_id !== req.userId) {
+    return res.status(403).json({ success: false, error: 'No tienes permiso' });
+  }
+
   // Validación
   if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
     return res.status(400).json({ 
@@ -749,10 +809,21 @@ app.post('/api/scheduled-blocks', async (req, res) => {
 });
 
 // 3. PUT /api/scheduled-blocks/:blockId - Actualizar bloque
-app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
+app.put('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) => {
   const { blockId } = req.params;
   const updates = req.body;
   
+  // Verificar ownership del bloque
+  const { data: block } = await supabase
+    .from('scheduled_blocks')
+    .select('user_id')  // ← user_id de la DB
+    .eq('id', blockId)
+    .single();
+  
+  if (block.user_id !== req.userId) {  // ← Comparar user_id con req.userId
+    return res.status(403).json({ success: false, error: 'No tienes permiso' });
+  }
+
   // No permitir cambiar user_id ni created_at
   delete updates.user_id;
   delete updates.created_at;
@@ -783,10 +854,21 @@ app.put('/api/scheduled-blocks/:blockId', async (req, res) => {
 });
 
 // 4. DELETE /api/scheduled-blocks/:blockId - Eliminar/Cancelar bloque
-app.delete('/api/scheduled-blocks/:blockId', async (req, res) => {
+app.delete('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) => {
   const { blockId } = req.params;
   const { soft } = req.query; // ?soft=true para cancelar en lugar de eliminar
   
+  // Verificar ownership del bloque
+  const { data: block } = await supabase
+    .from('scheduled_blocks')
+    .select('user_id')  // ← user_id de la DB
+    .eq('id', blockId)
+    .single();
+  
+  if (block.user_id !== req.userId) {  // ← Comparar user_id con req.userId
+    return res.status(403).json({ success: false, error: 'No tienes permiso' });
+  }
+
   try {
     if (soft === 'true') {
       // Soft delete: Cambiar status a 'cancelled'
@@ -854,8 +936,16 @@ app.post('/api/scheduled-blocks/:blockId/start', async (req, res) => {
 });
 
 // 6. GET /api/scheduled-blocks/:userId/week-summary - Resumen semanal
-app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
+app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (req, res) => {
   const { userId } = req.params;
+  
+  // Validar que el usuario solo vea su propio resumen
+  if (userId !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para ver el resumen de otro usuario'
+    });
+  }
   
   try {
     // Obtener fecha de inicio de semana (lunes)
@@ -1213,10 +1303,17 @@ app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
 
 // 2. GET /api/scheduled-blocks/:userId
 // Obtiene bloques agendados con filtros opcionales
-app.get('/api/scheduled-blocks/:userId', async (req, res) => {
+app.get('/api/scheduled-blocks/:userId', authenticateUser, async (req, res) => {
   const { userId } = req.params;
   const { status, startDate, endDate } = req.query;
   
+    if (userId !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para ver bloques de otro usuario'
+    });
+  }
+
   try {
     let query = supabase
       .from('scheduled_blocks')
@@ -1260,7 +1357,7 @@ app.get('/api/scheduled-blocks/:userId', async (req, res) => {
 
 // 3. POST /api/scheduled-blocks
 // Crea un nuevo bloque agendado
-app.post('/api/scheduled-blocks', async (req, res) => {
+app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
   const { 
     user_id, 
     fecha, 
