@@ -735,7 +735,7 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
 // ========================================
 
 // 1. GET /api/scheduled-blocks/:userId - Obtener bloques de un usuario
-app.get('/api/scheduled-blocks/:userId', async (req, res) => {
+app.get('/api/scheduled-blocks/:userId', authenticateUser, async (req, res) => {
   const { userId } = req.params;
   const { status, startDate, endDate } = req.query;
   
@@ -1298,8 +1298,16 @@ app.post('/api/skip-eta', authenticateUser, async (req, res) => {
 
 // 1. GET /api/scheduled-blocks/:userId/week-summary
 // Obtiene resumen de la semana actual (horas, pago, millas, bloques)
-app.get('/api/scheduled-blocks/:userId/week-summary', async (req, res) => {
+app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (req, res) => {
   const { userId } = req.params;
+  
+  // Validar que el usuario solo vea su propio resumen
+  if (userId !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para ver el resumen de otro usuario'
+    });
+  }
   
   try {
     // Obtener inicio y fin de semana (domingo a sábado)
@@ -1479,8 +1487,8 @@ app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
 
 // 4. PUT /api/scheduled-blocks/:id
 // Actualiza un bloque existente
-app.put('/api/scheduled-blocks/:id', async (req, res) => {
-  const { id } = req.params;
+app.put('/api/scheduled-blocks/:id', authenticateUser, async (req, res) => {
+  const { userId, id } = req.params;
   const { 
     fecha, 
     hora, 
@@ -1490,7 +1498,26 @@ app.put('/api/scheduled-blocks/:id', async (req, res) => {
     vehiculo,
     notes 
   } = req.body;
+    // Verificar ownership
+  const { data: block, error: fetchError } = await supabase
+    .from('scheduled_blocks')
+    .select('user_id')
+    .eq('id', id)
+    .single();
   
+  if (fetchError || !block) {
+    return res.status(404).json({
+      success: false,
+      error: 'Bloque no encontrado'
+    });
+  }
+  
+  if (block.user_id !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para modificar este bloque'
+    });
+  }
   try {
     const updateData = {};
     
@@ -1536,10 +1563,22 @@ app.put('/api/scheduled-blocks/:id', async (req, res) => {
 
 // 5. DELETE /api/scheduled-blocks/:id
 // Cancela un bloque (soft delete)
-app.delete('/api/scheduled-blocks/:id', async (req, res) => {
-  const { id } = req.params;
+app.delete('/api/scheduled-blocks/:id', authenticateUser, async (req, res) => {
+  const { userID, id } = req.params;
   const { soft } = req.query; // ?soft=true para soft delete
+   // Verificar ownership
+  const { data: block, error: fetchError } = await supabase
+    .from('scheduled_blocks')
+    .select('user_id')
+    .eq('id', id)
+    .single();
   
+  if (fetchError || !block) {
+    return res.status(404).json({
+      success: false,
+      error: 'Bloque no encontrado'
+    });
+  }
   try {
     if (soft === 'true') {
       // Soft delete: cambiar status a 'cancelled'
@@ -1594,10 +1633,31 @@ app.delete('/api/scheduled-blocks/:id', async (req, res) => {
 
 // 6. POST /api/scheduled-blocks/:id/start
 // Marca un bloque como "en progreso" y lo vincula con la ruta creada
-app.post('/api/scheduled-blocks/:id/start', async (req, res) => {
-  const { id } = req.params;
+app.post('/api/scheduled-blocks/:id/start', authenticateUser, async (req, res) => {
+  const { userID, id } = req.params;
   const { routeId } = req.body;
+ 
+   // Verificar ownership
+  const { data: block, error: fetchError } = await supabase
+    .from('scheduled_blocks')
+    .select('user_id')
+    .eq('id', id)
+    .single();
   
+  if (fetchError || !block) {
+    return res.status(404).json({
+      success: false,
+      error: 'Bloque no encontrado'
+    });
+  }
+  
+  if (block.user_id !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para iniciar este bloque'
+    });
+  }
+
   if (!routeId) {
     return res.status(400).json({
       success: false,
