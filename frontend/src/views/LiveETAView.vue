@@ -17,23 +17,44 @@ onMounted(async () => {
   await loadActiveRoute()
 })
 async function loadActiveRoute() {
+  console.log('═══════════════════════════════════════')
+  console.log('🔍 [FRONTEND] Iniciando loadActiveRoute')
+  console.log('🔍 [FRONTEND] userId.value:', userId.value)
+  console.log('🔍 [FRONTEND] backendUrl:', backendUrl)
+  
   isLoading.value = true
   try {
-    const response = await fetchWithAuth(`${backendUrl}/api/active-route/${userId.value}`)
-    const result = await response.json()    
+    const url = `${backendUrl}/api/active-route/${userId.value}`
+    console.log('🔍 [FRONTEND] URL completa:', url)
+    
+    const response = await fetchWithAuth(url)
+    console.log('🔍 [FRONTEND] Response status:', response.status)
+    console.log('🔍 [FRONTEND] Response ok:', response.ok)
+    
+    const result = await response.json()
+    console.log('🔍 [FRONTEND] Result completo:', result)
+    console.log('🔍 [FRONTEND] result.hasActiveRoute:', result.hasActiveRoute)
+    
     if (result.hasActiveRoute) {
       hasActiveRoute.value = true
       activeRoute.value = result.route
-      console.log('✅ Ruta activa cargada:', activeRoute.value)
+      console.log('✅ [FRONTEND] Ruta asignada a activeRoute.value')
+      console.log('✅ [FRONTEND] hasActiveRoute.value:', hasActiveRoute.value)
+      console.log('✅ [FRONTEND] activeRoute.value:', activeRoute.value)
     } else {
       hasActiveRoute.value = false
-      console.log('ℹ️ No hay ruta activa')
+      console.log('❌ [FRONTEND] No hay ruta activa según respuesta')
     }
   } catch (error) {
-    console.error('❌ Error cargando ruta activa:', error)
+    console.error('❌ [FRONTEND] Error cargando ruta activa:', error)
     hasActiveRoute.value = false
   } finally {
     isLoading.value = false
+    console.log('🔍 [FRONTEND] Estado final:')
+    console.log('   - isLoading:', isLoading.value)
+    console.log('   - hasActiveRoute:', hasActiveRoute.value)
+    console.log('   - activeRoute:', activeRoute.value)
+    console.log('═══════════════════════════════════════')
   }
 }
 
