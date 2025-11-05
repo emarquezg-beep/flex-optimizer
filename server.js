@@ -225,8 +225,8 @@ async function calculateLeg(origin, destination, waypoints = []) {
 }
 
 // --- Tu endpoint `/api/optimize-route` (sin cambios) ---
-app.post('/api/optimize-route', async (req, res) => {
-  let { addresses } = req.body;
+app.post('/api/optimize-route', authenticateUser, async (req, res) => {
+    let { addresses } = req.body;
   addresses = addresses.filter(addr => addr && addr.trim() !== '');
 
   if (!addresses || addresses.length < 3) {
@@ -468,11 +468,17 @@ app.post('/api/optimize-route', async (req, res) => {
 });
 
 // --- 🆕 FASE 3: Endpoint `/api/log-route` (MODIFICADO) ---
-app.post('/api/log-route', async (req, res) => {
-    const logData = req.body;
-    console.log('📦 Recibiendo datos v3 para guardar en bitácora');
-
-    // Extraer datos nuevos
+app.post('/api/log-route', authenticateUser, async (req, res) => {    const logData = req.body;
+  const { user_id } = req.body;  
+  console.log('📦 Recibiendo datos v3 para guardar en bitácora');
+  // Validar que el usuario solo registre rutas para sí mismo
+  if (user_id && user_id !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para registrar rutas de otro usuario'
+    });
+  }
+  // Extraer datos nuevos
     const stopsArray = logData.stops_json; // Array de { number, address, isDowntown}
     const etaOptimista = logData.eta_optimista; // String "11:45 AM"
     const etaNormal = logData.eta_normal;
@@ -572,15 +578,23 @@ app.post('/api/log-route', async (req, res) => {
 // --- 🆕 FASE 4: Nuevos Endpoints ---
 
 // 1. GET /api/active-route/:userId
-app.get('/api/active-route/:userId', async (req, res) => {
+app.get('/api/active-route/:userId', authenticateUser, async (req, res) => {
   const { userId } = req.params;
-    // 🔥 LOGS CRÍTICOS
+  
+  // 🔥 LOGS CRÍTICOS
   console.log('═══════════════════════════════════════');
   console.log('🔍 [active-route] INICIANDO BÚSQUEDA');
   console.log('📋 User ID recibido:', userId);
   console.log('📋 User ID tipo:', typeof userId);
   console.log('📋 User ID length:', userId.length);
   console.log('═══════════════════════════════════════');
+  // Validar que el usuario solo vea su propia ruta activa
+  if (userId !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para ver la ruta activa de otro usuario'
+    });
+  }
   try {
     // 🔥 SIMPLE: Traer la ruta más reciente con status=1
     const { data, error } = await supabase
@@ -641,8 +655,15 @@ app.get('/api/active-route/:userId', async (req, res) => {
 // REEMPLAZA TU ENDPOINT /api/calculate-live-eta CON ESTE:
 
 // 2. POST /api/calculate-live-eta (CON SEGMENTACIÓN)
-app.post('/api/calculate-live-eta', async (req, res) => {
-  const { routeId, currentStopNumber } = req.body;
+app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
+  const { userId, routeId, currentStopNumber } = req.body;
+  // Validar que el usuario solo calcule ETA para sus propias rutas
+  if (userId && userId !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para calcular ETA de otro usuario'
+    });
+  }  
   if (!routeId || !currentStopNumber) {
     return res.status(400).json({
       error: 'Falta routeId o currentStopNumber'
@@ -903,10 +924,31 @@ app.delete('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) 
 });
 
 // 5. POST /api/scheduled-blocks/:blockId/start - Iniciar bloque (vincula con route)
-app.post('/api/scheduled-blocks/:blockId/start', async (req, res) => {
+app.post('/api/scheduled-blocks/:blockId/start', authenticateUser, async (req, res) => {
   const { blockId } = req.params;
   const { routeId } = req.body;
   
+  // Verificar que el bloque pertenece al usuario
+  const { data: block, error: fetchError } = await supabase
+    .from('scheduled_blocks')
+    .select('user_id')
+    .eq('id', blockId)
+    .single();
+  
+  if (fetchError || !block) {
+    return res.status(404).json({
+      success: false,
+      error: 'Bloque no encontrado'
+    });
+  }
+  
+  if (block.user_id !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para iniciar este bloque'
+    });
+  }
+
   if (!routeId) {
     return res.status(400).json({
       success: false,
@@ -1101,8 +1143,16 @@ app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (r
 });
 
 // 3. POST /api/complete-route
-app.post('/api/complete-route', async (req, res) => {
-  const { routeId, etaReal } = req.body; // etaReal: "5:11 PM"
+app.post('/api/complete-route', authenticateUser, async (req, res) => {
+  const { userId: userIdFromBody, routeId, etaReal } = req.body; // etaReal: "5:11 PM"
+  // Validar que el usuario solo complete sus propias rutas
+  if (userIdFromBody && userIdFromBody !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para completar rutas de otro usuario'
+    });
+  }
+  
   if (!routeId || !etaReal) {
     return res.status(400).json({
       error: 'Falta routeId o etaReal'
@@ -1173,8 +1223,15 @@ app.post('/api/complete-route', async (req, res) => {
 });
 
 // 4. GET /api/pending-eta/:userId
-app.get('/api/pending-eta/:userId', async (req, res) => {
+app.get('/api/pending-eta/:userId', authenticateUser, async (req, res) => {
   const { userId } = req.params;
+   // Validar que el usuario solo vea su propio pending ETA
+  if (userId !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para ver el pending ETA de otro usuario'
+    });
+  }
   try {
     const { data, error } = await supabase
       .from('routes')
@@ -1201,8 +1258,16 @@ app.get('/api/pending-eta/:userId', async (req, res) => {
 });
 
 // 5. POST /api/skip-eta
-app.post('/api/skip-eta', async (req, res) => {
-  const { routeId } = req.body;
+app.post('/api/skip-eta', authenticateUser, async (req, res) => {
+  const { userId, routeId } = req.body;
+   // Validar que el usuario solo saltee su propio ETA
+  if (userId && userId !== req.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para saltear el ETA de otro usuario'
+    });
+  }
+  
   try {
     const { data, error } = await supabase
       .from('routes')
