@@ -193,23 +193,6 @@ function goBack() {
     <div class="form-container">
       <BaseCard padding="lg" elevated>
         
-        <!-- User Selector -->
-        <div class="form-section">
-          <h3 class="section-title">👤 Conductor</h3>
-          <div class="form-group">
-            <label for="user-select">Seleccionar conductor</label>
-            <select 
-              id="user-select" 
-              v-model="selectedUserId"
-              :disabled="isEditMode"
-            >
-              <option v-for="user in USERS" :key="user.id" :value="user.id">
-                {{ user.name }}
-              </option>
-            </select>
-          </div>
-        </div>
-
         <!-- Fecha y Hora -->
         <div class="form-section">
           <h3 class="section-title">📅 Fecha y Hora</h3>
