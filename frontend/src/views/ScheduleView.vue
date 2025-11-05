@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import { fetchWithAuth } from '@/lib/api'
 import { Calendar, ArrowLeft } from 'lucide-vue-next'
 import { BaseButton, BaseCard, BaseInput } from '@/components/base'
 
@@ -8,12 +10,8 @@ const router = useRouter()
 const route = useRoute()
 const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
-// 🚧 TEMPORAL: Usuario hardcoded
-const USERS = [
-  { name: 'Ernesto', id: 'b5a04a69-1e96-47c4-a0c8-972fec54c21d' },
-  { name: 'Carmen Cecilia', id: 'b3aaad3a-5835-4796-aca7-ea634e150b5d' }
-]
-const selectedUserId = ref(USERS[0].id)
+// ✅ Usuario autenticado
+const { userId } = useAuth()
 
 // Opciones
 const VEHICULO_OPTIONS = ['Pontiac', 'Trax', 'Kia', 'Otro Carro']
@@ -68,7 +66,7 @@ function getTodayDate() {
 async function loadBlock() {
   try {
     // En modo edición, cargar datos del bloque
-    const response = await fetch(`${backendUrl}/api/scheduled-blocks/${selectedUserId.value}`)
+    const response = await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${userId.value}`)
     const result = await response.json()
     
     if (result.success) {
@@ -115,7 +113,7 @@ async function saveBlock() {
 
   try {
     const dataToSend = {
-      user_id: selectedUserId.value,
+      user_id: userId.value,
       fecha: formData.value.fecha,
       hora: formData.value.hora + ':00', // "14:15" -> "14:15:00"
       duracion_horas: parseFloat(formData.value.duracion_horas),
@@ -128,19 +126,17 @@ async function saveBlock() {
     let response
     
     if (isEditMode.value) {
-      // Actualizar bloque existente
-      response = await fetch(`${backendUrl}/api/scheduled-blocks/${blockId.value}`, {
+    // Actualizar bloque existente
+    response = await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${blockId.value}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSend)
-      })
+    })
     } else {
-      // Crear nuevo bloque
-      response = await fetch(`${backendUrl}/api/scheduled-blocks`, {
+    // Crear nuevo bloque
+    response = await fetchWithAuth(`${backendUrl}/api/scheduled-blocks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSend)
-      })
+    })
     }
 
     const result = await response.json()
