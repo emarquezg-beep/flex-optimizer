@@ -581,30 +581,47 @@ app.post('/api/log-route', authenticateUser, async (req, res) => {    const logD
 app.get('/api/active-route/:userId', authenticateUser, async (req, res) => {
   const { userId } = req.params;
   
-  // 🔥 LOGS CRÍTICOS
   console.log('═══════════════════════════════════════');
-  console.log('🔍 [active-route] INICIANDO BÚSQUEDA');
-  console.log('📋 User ID recibido:', userId);
-  console.log('📋 User ID tipo:', typeof userId);
-  console.log('📋 User ID length:', userId.length);
-  console.log('═══════════════════════════════════════');
-  // Validar que el usuario solo vea su propia ruta activa
+  console.log('🔍 ACTIVE ROUTE - userId del param:', userId);
+  console.log('🔍 ACTIVE ROUTE - userId del token:', req.userId);
+  
+  // Validar ownership
   if (userId !== req.userId) {
+    console.log('❌ ACTIVE ROUTE - IDs no coinciden');
     return res.status(403).json({
       success: false,
       error: 'No tienes permiso para ver la ruta activa de otro usuario'
     });
   }
+  
   try {
-    // 🔥 SIMPLE: Traer la ruta más reciente con status=1
+    console.log('🔍 ACTIVE ROUTE - Buscando en DB...');
+    
     const { data, error } = await supabase
       .from('routes')
       .select('*')
       .eq('user_id', userId)
-      .eq('status', 1) 
+      .eq('status', 1)
       .order('fecha', { ascending: false })
       .order('hora', { ascending: false })
       .limit(1);
+
+    console.log('🔍 ACTIVE ROUTE - Error DB:', error);
+    console.log('🔍 ACTIVE ROUTE - Data length:', data?.length);
+    
+    if (data && data.length > 0) {
+      console.log('✅ ACTIVE ROUTE - Ruta encontrada:', {
+        id: data[0].id,
+        fecha: data[0].fecha,
+        hora: data[0].hora,
+        status: data[0].status,
+        warehouse: data[0].warehouse
+      });
+    } else {
+      console.log('❌ ACTIVE ROUTE - No se encontró ruta activa');
+    }
+    
+    console.log('═══════════════════════════════════════');
 
     if (error) throw error;
 
@@ -638,7 +655,7 @@ app.get('/api/active-route/:userId', authenticateUser, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ [active-route] Error:', error);
+    console.error('❌ ACTIVE ROUTE - Error general:', error);
     res.status(500).json({
       hasActiveRoute: false,
       error: error.message
