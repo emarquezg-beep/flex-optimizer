@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { fetchWithAuth } from '@/lib/api'
 import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin } from 'lucide-vue-next'
 import { BaseButton, BaseCard } from '@/components/base'
 
@@ -27,7 +28,7 @@ async function loadDashboard() {
   
   try {
     // Cargar resumen semanal
-    const summaryResponse = await fetch(
+    const summaryResponse = await fetchWithAuth(
       `${backendUrl}/api/scheduled-blocks/${userId.value}/week-summary`
     )
     const summaryResult = await summaryResponse.json()
@@ -40,8 +41,8 @@ async function loadDashboard() {
     const today = new Date().toISOString().split('T')[0]
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     
-    const blocksResponse = await fetch(
-     `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${today}&endDate=${nextWeek}`
+    const blocksResponse = await fetchWithAuth(
+      `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${today}&endDate=${nextWeek}`
     )
     const blocksResult = await blocksResponse.json()
     
@@ -99,7 +100,7 @@ async function deleteBlock(block) {
   }
   
   try {
-    const response = await fetch(
+    const response = await fetchWithAuth(
       `${backendUrl}/api/scheduled-blocks/${block.id}?soft=true`,
       { method: 'DELETE' }
     )
