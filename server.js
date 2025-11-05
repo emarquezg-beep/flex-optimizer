@@ -601,7 +601,7 @@ app.get('/api/active-route/:userId', authenticateUser, async (req, res) => {
       .from('routes')
       .select('*')
       .eq('user_id', userId)
-      .eq('status', 'in_progress')
+      .eq('status', 1) 
       .order('fecha', { ascending: false })
       .order('hora', { ascending: false })
       .limit(1);
