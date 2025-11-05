@@ -11,7 +11,18 @@ const { userId } = useAuth()
 
 // Estados
 const isLoading = ref(true)
-// ... resto (sin cambios)
+const hasActiveRoute = ref(false)
+const activeRoute = ref(null)
+const currentStopInput = ref('')
+const isCalculating = ref(false)
+const liveETAs = ref(null)
+const etaRealInput = ref('')
+const isCompleting = ref(false)
+const completionStatus = ref(null)
+
+onMounted(async () => {
+  await loadActiveRoute()
+})
 
 onMounted(async () => {
   await loadActiveRoute()
