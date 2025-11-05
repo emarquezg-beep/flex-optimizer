@@ -1,92 +1,26 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useAuth } from '@/composables/useAuth'
+import { fetchWithAuth } from '@/lib/api'
 import { Home, TrendingUp, MapPin, Clock, Navigation, Flame } from 'lucide-vue-next'
 import { BaseButton, BaseCard, BaseInput } from '@/components/base'
 
 const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-const USERS = [
-  { name: 'Ernesto', id: 'b5a04a69-1e96-47c4-a0c8-972fec54c21d' },
-  { name: 'Carmen Cecilia', id: 'b3aaad3a-5835-4796-aca7-ea634e150b5d' }
-]
-const selectedUserId = ref(USERS[1].id)
+// ✅ Usuario autenticado
+const { userId } = useAuth()
 
 // Estados
 const isLoading = ref(true)
-const hasActiveRoute = ref(false)
-const activeRoute = ref(null)
-const currentStopInput = ref('')
-const isCalculating = ref(false)
-const liveETAs = ref(null)
-const etaRealInput = ref('')
-const isCompleting = ref(false)
-const completionStatus = ref(null)
+// ... resto (sin cambios)
 
-// 🚧 TEMPORAL: Auto-detección de usuario
-// TODO v4.2: Reemplazar con usuario autenticado
-// const currentUser = await supabase.auth.getUser()
-// selectedUserId.value = currentUser.id
 onMounted(async () => {
-  await autoDetectActiveRoute()
+  await loadActiveRoute()
 })
-// 🆕 FUNCIÓN HELPER: Intentar cargar ruta de un usuario específico
-async function tryLoadRoute(userId) {
-  try {
-    console.log(`🔍 Intentando cargar ruta para: ${USERS.find(u => u.id === userId)?.name}`)
-    
-    const response = await fetch(`${backendUrl}/api/active-route/${userId}`)
-    const result = await response.json()
-    
-    if (result.hasActiveRoute) {
-      console.log(`✅ Ruta activa encontrada para: ${USERS.find(u => u.id === userId)?.name}`)
-      selectedUserId.value = userId
-      hasActiveRoute.value = true
-      activeRoute.value = result.route
-      return true
-    }
-    
-    console.log(`❌ No hay ruta activa para: ${USERS.find(u => u.id === userId)?.name}`)
-    return false
-    
-  } catch (error) {
-    console.error(`❌ Error cargando ruta para userId ${userId}:`, error)
-    return false
-  }
-}
-// 🆕 FUNCIÓN: Auto-detectar qué usuario tiene ruta activa
-async function autoDetectActiveRoute() {
-  isLoading.value = true
-  hasActiveRoute.value = false
-  activeRoute.value = null
-  
-  try {
-    console.log('🔄 Buscando ruta activa para cualquier usuario...')
-    
-    // Intentar con cada usuario en orden
-    for (const user of USERS) {
-      const found = await tryLoadRoute(user.id)
-      if (found) {
-        console.log(`🎯 Usando ruta de: ${user.name}`)
-        break // Salir del loop si encontró una ruta
-      }
-    }
-    
-    if (!hasActiveRoute.value) {
-      console.log('ℹ️ No hay rutas activas para ningún usuario')
-    }
-    
-  } catch (error) {
-    console.error('❌ Error en auto-detección:', error)
-    hasActiveRoute.value = false
-  } finally {
-    isLoading.value = false
-  }
-}
 async function loadActiveRoute() {
   isLoading.value = true
   try {
-    const response = await fetch(`${backendUrl}/api/active-route/${selectedUserId.value}`)
-    const result = await response.json()
-    
+    const response = await fetchWithAuth(`${backendUrl}/api/active-route/${userId.value}`)
+    const result = await response.json()    
     if (result.hasActiveRoute) {
       hasActiveRoute.value = true
       activeRoute.value = result.route
@@ -120,9 +54,8 @@ async function calculateLiveETA() {
   liveETAs.value = null
 
   try {
-    const response = await fetch(`${backendUrl}/api/calculate-live-eta`, {
+    const response = await fetchWithAuth(`${backendUrl}/api/calculate-live-eta`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         routeId: activeRoute.value.id,
         currentStopNumber: stopNumber
@@ -161,9 +94,8 @@ async function completeRoute() {
   completionStatus.value = null
 
   try {
-    const response = await fetch(`${backendUrl}/api/complete-route`, {
+    const response = await fetchWithAuth(`${backendUrl}/api/complete-route`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         routeId: activeRoute.value.id,
         etaReal: etaRealInput.value.trim()
