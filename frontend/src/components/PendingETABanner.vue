@@ -1,12 +1,12 @@
 <script setup>
 //nombre corregido
 import { ref, onMounted } from 'vue';
+import { useAuth } from '@/composables/useAuth';
+import { fetchWithAuth } from '@/lib/api';
+
 const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-const USERS = [
-  {name: 'Ernesto', id: 'b5a04a69-1e96-47c4-a0c8-972fec54c21d' },
-  { name: 'Carmen Cecilia', id: 'b3aaad3a-5835-4796-aca7-ea634e150b5d' }
-];
-const selectedUserId = ref(USERS[0].id); // Ajusta esto si tienes un store de usuario
+// ✅ Usuario autenticado
+const { userId } = useAuth();
 const hasPending = ref(false);
 const pendingRoutes = ref([]);
 const etaInputs = ref({});
@@ -18,7 +18,7 @@ onMounted(async () => {
 
 async function checkPendingETAs() {
   try {
-    const response = await fetch(`${backendUrl}/api/pending-eta/${selectedUserId.value}`);
+    const response = await fetchWithAuth(`${backendUrl}/api/pending-eta/${userId.value}`);
     const result = await response.json();
     if (result.hasPending) {
       hasPending.value = true;
@@ -44,14 +44,13 @@ async function submitETA(routeId) {
 
   isSubmitting.value = true;
   try {
-    const response = await fetch(`${backendUrl}/api/complete-route`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        routeId: routeId,
-        etaReal: etaValue.trim()
-      })
-    });
+const response = await fetchWithAuth(`${backendUrl}/api/complete-route`, {
+  method: 'POST',
+  body: JSON.stringify({
+    routeId: routeId,
+    etaReal: etaValue.trim()
+  })
+});
     const result = await response.json();
     if (result.success) {
       // Remover de la lista
@@ -74,11 +73,10 @@ async function skipRoute(routeId) {
     return;
   }
   try {
-    const response = await fetch(`${backendUrl}/api/skip-eta`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ routeId })
-    });
+const response = await fetchWithAuth(`${backendUrl}/api/skip-eta`, {
+  method: 'POST',
+  body: JSON.stringify({ routeId })
+});
     const result = await response.json();
     if (result.success) {
       pendingRoutes.value = pendingRoutes.value.filter(r => r.id !== routeId);
