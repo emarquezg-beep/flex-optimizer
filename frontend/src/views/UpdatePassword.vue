@@ -1,52 +1,51 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router'; // Importa el hook del router
-// BIEN ✅
-import { supabase } from '@/lib/supabase'; // Asegúrate que esta ruta sea correcta
+import { useRouter } from 'vue-router';
+import { supabase } from '@/lib/supabase'; // Ruta corregida
 
 // --- Estado Reactivo ---
-const showForm = ref(false);
+const router = useRouter();
 const isLoading = ref(true);
+const showForm = ref(false);
+const hasCheckedAuth = ref(false); // Nuevo: Bandera para saber si ya terminamos de revisar
+
+// --- Formulario ---
 const password = ref('');
 const confirmPassword = ref('');
 const message = ref('');
 const error = ref('');
 
-// Hook del router para navegar
-const router = useRouter();
-
-// 1. EL LISTENER (OYENTE)
-// onMounted se ejecuta solo en el navegador
+// 1. EL LISTENER (CORREGIDO)
 onMounted(() => {
   supabase.auth.onAuthStateChange(async (event, session) => {
-    
+    // Solo nos interesa el evento de recuperación por ahora
     if (event === 'PASSWORD_RECOVERY') {
-      // ¡Éxito! Supabase verificó el token en la URL.
-      // Ahora tenemos una sesión temporal para cambiar la contraseña.
+      console.log('¡Evento de recuperación detectado!');
       showForm.value = true;
+      isLoading.value = false;
+      hasCheckedAuth.value = true;
     } 
+    // Si el usuario ya tiene una sesión normal, que no esté aquí
     else if (session) {
-      // Si el usuario ya está logueado (sesión normal),
-      // no debería estar aquí. Lo mandamos al dashboard.
-      router.push('/dashboard'); // <-- Cambia esto a tu página principal de logueado
-    } 
-    else {
-      // Si no hay sesión y no es un evento de recovery,
-      // no debería estar aquí. Lo mandamos al login.
-      router.push('/login'); // <-- Cambia esto a tu página de login
+      isLoading.value = false;
+      hasCheckedAuth.value = true;
+      router.push('/dashboard'); // <-- Cambia esto a tu página de logueado
     }
-
-    isLoading.value = false;
+    // Si el cliente de Supabase termina de cargar y no hay sesión
+    // ni evento de recovery, marcamos que terminamos.
+    else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+      isLoading.value = false;
+      hasCheckedAuth.value = true;
+      // NO REDIRIGIMOS. Dejamos que el template muestre el error.
+    }
   });
 });
 
-// 2. EL MANEJADOR DEL FORMULARIO
+// 2. EL MANEJADOR DEL FORMULARIO (Sigue igual)
 const handleSubmit = async () => {
-  // Reseteamos mensajes
   error.value = '';
   message.value = '';
 
-  // Validaciones
   if (password.value.length < 6) {
     error.value = 'La contraseña debe tener al menos 6 caracteres.';
     return;
@@ -56,8 +55,6 @@ const handleSubmit = async () => {
     return;
   }
 
-  // Actualizamos al usuario en Supabase
-  // (Esto funciona porque ya tenemos la sesión temporal del 'onAuthStateChange')
   const { data, error: updateError } = await supabase.auth.updateUser({
     password: password.value
   });
@@ -66,15 +63,10 @@ const handleSubmit = async () => {
     error.value = updateError.message;
   } else {
     message.value = '¡Contraseña actualizada con éxito! Redirigiendo al login...';
-    // Limpiamos el formulario
-    password.value = '';
-    confirmPassword.value = '';
     showForm.value = false;
-
-    // Esperamos 2 segundos y lo mandamos al login
     setTimeout(() => {
       router.push('/login'); // <-- Cambia esto a tu página de login
-    }, 2000);
+    }, 2500);
   }
 };
 </script>
@@ -83,10 +75,10 @@ const handleSubmit = async () => {
   <div class="update-password-container">
     
     <div v-if="isLoading" class="loading-spinner">
-      <p>Verificando...</p>
+      <p>Verificando link...</p>
     </div>
 
-    <div v-if="showForm">
+    <div v-if="!isLoading && showForm">
       <h2>Restablecer Contraseña</h2>
       <p>Has verificado tu correo. Por favor, introduce tu nueva contraseña.</p>
       
@@ -101,7 +93,6 @@ const handleSubmit = async () => {
             required
           />
         </div>
-
         <div class="form-group">
           <label for="confirm-password">Confirmar Contraseña</label>
           <input 
@@ -112,13 +103,22 @@ const handleSubmit = async () => {
             required
           />
         </div>
-
         <button type="submit" class="submit-button">Actualizar Contraseña</button>
       </form>
     </div>
 
-    <p v-if="message" class="success-message">{{ message }}</p>
-    <p v-if="error" class="error-message">{{ error }}</p>
+    <div v-if="!isLoading && !showForm && hasCheckedAuth">
+      <p class="error-message">
+        El link de recuperación es inválido o ha expirado. 
+        Por favor, solicita uno nuevo.
+      </p>
+      <button @click="router.push('/login')" class="submit-button" style="background-color: #555;">
+        Ir a Login
+      </button>
+    </div>
+
+    <p v-if="message && !isLoading" class="success-message">{{ message }}</p>
+    <p v-if="error && !isLoading" class="error-message">{{ error }}</p>
 
   </div>
 </template>
@@ -133,34 +133,32 @@ const handleSubmit = async () => {
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   font-family: Arial, sans-serif;
+  text-align: center;
 }
-
 /* Mensaje de "Verificando..." */
 .loading-spinner {
   text-align: center;
   font-style: italic;
   color: #555;
+  padding: 2rem;
 }
-
 /* El formulario */
 .update-form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem; /* Espacio entre los elementos del formulario */
+  gap: 1.25rem;
+  text-align: left;
 }
-
 /* Grupo de (label + input) */
 .form-group {
   display: flex;
   flex-direction: column;
 }
-
 .form-group label {
   margin-bottom: 0.5rem;
   font-weight: bold;
   color: #333;
 }
-
 /* Campos de texto */
 .input-field {
   padding: 0.75rem;
@@ -168,7 +166,6 @@ const handleSubmit = async () => {
   border-radius: 4px;
   font-size: 1rem;
 }
-
 /* Botón de enviar */
 .submit-button {
   padding: 0.85rem;
@@ -180,12 +177,11 @@ const handleSubmit = async () => {
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s ease;
+  margin-top: 1rem;
 }
-
 .submit-button:hover {
   background-color: #0056b3;
 }
-
 /* Mensajes de éxito y error */
 .success-message {
   color: #155724; /* Verde oscuro */
@@ -195,7 +191,6 @@ const handleSubmit = async () => {
   border-radius: 4px;
   margin-top: 1rem;
 }
-
 .error-message {
   color: #721c24; /* Rojo oscuro */
   background-color: #f8d7da; /* Rojo claro */
