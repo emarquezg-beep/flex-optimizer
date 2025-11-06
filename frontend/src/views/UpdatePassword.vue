@@ -3,14 +3,13 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '@/lib/supabase';
 
-console.log('SCRIPT DE UpdatePassword.vue SE ESTÁ CARGANDO');
+console.log('🔵 SCRIPT DE UpdatePassword.vue SE ESTÁ CARGANDO');
 
 // --- Estado Reactivo ---
 const router = useRouter();
 const isLoading = ref(true);
 const showForm = ref(false);
-const hasCheckedAuth = ref(false);
-const isPasswordRecovery = ref(false); // 🔥 NUEVA FLAG CRÍTICA
+const isPasswordRecovery = ref(false);
 
 // --- Formulario ---
 const password = ref('');
@@ -18,50 +17,41 @@ const confirmPassword = ref('');
 const message = ref('');
 const error = ref('');
 
-// 1. EL LISTENER (CORREGIDO DE VERDAD)
-onMounted(() => {
-  console.log('UpdatePassword.vue onMounted() SE ESTÁ EJECUTANDO');
+// SOLUCIÓN: Verificar INMEDIATAMENTE si estamos en modo recuperación
+onMounted(async () => {
+  console.log('🟢 UpdatePassword.vue onMounted() SE ESTÁ EJECUTANDO');
   
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log('EVENTO:', event, '| SESIÓN:', session ? 'Sí, existe' : 'No');
-    
-    // PRIORIDAD #1: Detectar PASSWORD_RECOVERY
-    if (event === 'PASSWORD_RECOVERY') {
-      console.log('¡Evento de recuperación detectado!');
-      isPasswordRecovery.value = true; // 🔥 Marcar que estamos en modo recuperación
-      isLoading.value = false;
-      showForm.value = true;
-      hasCheckedAuth.value = true;
-      return;
-    }
-
-    // PRIORIDAD #2: Si ya estamos en modo recuperación, IGNORAR TODO LO DEMÁS
-    // Esto previene que eventos posteriores (SIGNED_IN, etc.) nos redirijan
-    if (isPasswordRecovery.value) {
-      console.log('Ignorando evento porque estamos en modo recuperación');
-      return;
-    }
-
-    // PRIORIDAD #3: Usuario con sesión normal (no es recuperación)
-    if (session && event !== 'PASSWORD_RECOVERY') {
-      console.log('Usuario ya tiene sesión, redirigiendo a dashboard');
-      isLoading.value = false;
-      hasCheckedAuth.value = true;
-      router.push('/dashboard');
-      return;
-    }
-    
-    // PRIORIDAD #4: Link inválido o expirado
-    if (!session && (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT')) {
-      console.log('No hay sesión válida, mostrando error');
-      isLoading.value = false;
-      hasCheckedAuth.value = true;
-      // El template mostrará el error
-    }
-  });
+  // 🔥 PASO 1: Revisar si hay un hash de recuperación en la URL
+  const hashParams = new URLSearchParams(window.location.hash.substring(1));
+  const accessToken = hashParams.get('access_token');
+  const type = hashParams.get('type');
+  
+  console.log('🔍 Hash params:', { accessToken: !!accessToken, type });
+  
+  // 🔥 PASO 2: Si hay un token y es de tipo "recovery", estamos en recuperación
+  if (accessToken && type === 'recovery') {
+    console.log('✅ Es un link de recuperación válido');
+    isPasswordRecovery.value = true;
+    isLoading.value = false;
+    showForm.value = true;
+    return; // No necesitamos hacer nada más
+  }
+  
+  // 🔥 PASO 3: Si no es recuperación, verificar si hay sesión normal
+  const { data: { session } } = await supabase.auth.getSession();
+  console.log('📊 Sesión actual:', session ? 'Existe' : 'No existe');
+  
+  if (session) {
+    console.log('👤 Usuario ya logueado, redirigiendo a dashboard');
+    isLoading.value = false;
+    router.push('/dashboard');
+  } else {
+    console.log('❌ Link inválido o expirado');
+    isLoading.value = false;
+  }
 });
 
-// 2. EL MANEJADOR DEL FORMULARIO
+// Manejador del formulario
 const handleSubmit = async () => {
   error.value = '';
   message.value = '';
@@ -75,17 +65,21 @@ const handleSubmit = async () => {
     return;
   }
 
+  console.log('🔄 Intentando actualizar contraseña...');
+  
   const { data, error: updateError } = await supabase.auth.updateUser({
     password: password.value
   });
 
   if (updateError) {
+    console.error('❌ Error al actualizar:', updateError);
     error.value = updateError.message;
   } else {
+    console.log('✅ Contraseña actualizada');
     message.value = '¡Contraseña actualizada con éxito! Redirigiendo al login...';
     showForm.value = false;
     
-    // 🔥 IMPORTANTE: Cerrar sesión después de cambiar contraseña
+    // Cerrar sesión y redirigir
     await supabase.auth.signOut();
     
     setTimeout(() => {
@@ -131,7 +125,7 @@ const handleSubmit = async () => {
       </form>
     </div>
 
-    <div v-if="!isLoading && !showForm && hasCheckedAuth">
+    <div v-if="!isLoading && !showForm && !isPasswordRecovery">
       <p class="error-message">
         El link de recuperación es inválido o ha expirado. 
         Por favor, solicita uno nuevo.
