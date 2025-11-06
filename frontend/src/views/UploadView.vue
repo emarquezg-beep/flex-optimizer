@@ -2832,4 +2832,25 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
     width: 100%;
   }
 }
+/* Fix de contraste para texto visible */
+.modal-header h3 {
+  color: #60a5fa !important; /* Azul claro */
+}
+
+.modal-subtitle {
+  color: #d1d5db !important; /* Gris claro */
+}
+
+.apt-number {
+  color: #86efac !important; /* Verde brillante */
+}
+
+.apt-address {
+  color: #f9fafb !important; /* Casi blanco */
+}
+
+.apartment-item {
+  background-color: #1f2937 !important; /* Gris oscuro */
+  border-color: #4b5563 !important;
+}
 </style>
