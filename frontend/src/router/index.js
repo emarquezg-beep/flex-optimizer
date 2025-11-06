@@ -9,6 +9,12 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/update-password',
+    name: 'UpdatePassword',
+    component: () => import('../views/UpdatePassword.vue'),
+    meta: { requiresAuth: false, allowAuthenticated: true } // 🔥 Nueva meta
+  },
+  {
     path: '/',
     name: 'Home',
     component: () => import('@/views/HomeView.vue'),
@@ -43,14 +49,7 @@ const routes = [
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue'),
     meta: { requiresAuth: true, title: 'Ajustes' }
-  },
-  // ... (tus otras rutas)
-{
-  path: '/update-password',
-  name: 'UpdatePassword',
-  component: () => import('../views/UpdatePassword.vue') // Ruta al archivo que creaste
-}
-// ...
+  }
 ]
 
 const router = createRouter({
@@ -70,6 +69,12 @@ router.beforeEach(async (to, from, next) => {
   
   // Actualizar título de la página
   document.title = `${to.meta.title || to.name} | Flex Optimizer`
+  
+  // 🔥 EXCEPCIÓN: Siempre permitir /update-password
+  if (to.name === 'UpdatePassword') {
+    next()
+    return
+  }
   
   // Si la ruta requiere autenticación
   if (to.meta.requiresAuth) {
