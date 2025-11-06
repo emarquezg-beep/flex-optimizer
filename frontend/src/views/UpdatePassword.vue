@@ -1,13 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { supabase } from '@/lib/supabase'; // Ruta corregida
+import { supabase } from '@/lib/supabase';
 
 // --- Estado Reactivo ---
 const router = useRouter();
 const isLoading = ref(true);
 const showForm = ref(false);
-const hasCheckedAuth = ref(false); // Nuevo: Bandera para saber si ya terminamos de revisar
+const hasCheckedAuth = ref(false); // Para saber si ya terminamos de revisar
 
 // --- Formulario ---
 const password = ref('');
@@ -18,25 +18,39 @@ const error = ref('');
 // 1. EL LISTENER (CORREGIDO)
 onMounted(() => {
   supabase.auth.onAuthStateChange(async (event, session) => {
-    // Solo nos interesa el evento de recuperación por ahora
+    
+    // PRIORIDAD #1:
+    // Si el evento es de recuperación, mostramos el form y PARAmos.
+    // Esto evita que el siguiente evento 'session' nos redirija.
     if (event === 'PASSWORD_RECOVERY') {
       console.log('¡Evento de recuperación detectado!');
+      isLoading.value = false;
       showForm.value = true;
-      isLoading.value = false;
       hasCheckedAuth.value = true;
-    } 
-    // Si el usuario ya tiene una sesión normal, que no esté aquí
-    else if (session) {
-      isLoading.value = false;
-      hasCheckedAuth.value = true;
-      router.push('/dashboard'); // <-- Cambia esto a tu página de logueado
+      return; // ¡Importante! Salimos para no procesar más.
     }
-    // Si el cliente de Supabase termina de cargar y no hay sesión
-    // ni evento de recovery, marcamos que terminamos.
+
+    // PRIORIDAD #2:
+    // Si YA estamos mostrando el form, no hagas nada más.
+    // Ignora cualquier evento de 'session' que venga después.
+    if (showForm.value) {
+      return;
+    }
+
+    // PRIORIDAD #3:
+    // Si no es un recovery Y no estamos en el form,
+    // revisamos si es una sesión normal (alguien ya logueado).
+    if (session) {
+      isLoading.value = false;
+      hasCheckedAuth.value = true;
+      router.push('/dashboard'); // Redirigir a usuarios ya logueados
+    } 
+    // PRIORIDAD #4:
+    // Si no es nada de lo anterior, es un link inválido.
     else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
       isLoading.value = false;
       hasCheckedAuth.value = true;
-      // NO REDIRIGIMOS. Dejamos que el template muestre el error.
+      // No se redirige, el template mostrará el error.
     }
   });
 });
@@ -65,7 +79,7 @@ const handleSubmit = async () => {
     message.value = '¡Contraseña actualizada con éxito! Redirigiendo al login...';
     showForm.value = false;
     setTimeout(() => {
-      router.push('/login'); // <-- Cambia esto a tu página de login
+      router.push('/login');
     }, 2500);
   }
 };
