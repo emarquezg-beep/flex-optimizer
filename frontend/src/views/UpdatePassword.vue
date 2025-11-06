@@ -18,7 +18,7 @@ const error = ref('');
 // 1. EL LISTENER (CORREGIDO)
 onMounted(() => {
   supabase.auth.onAuthStateChange(async (event, session) => {
-    
+    console.log('EVENTO:', event, '| SESIÓN:', session ? 'Sí, existe' : 'No');
     // PRIORIDAD #1:
     // Si el evento es de recuperación, mostramos el form y PARAmos.
     // Esto evita que el siguiente evento 'session' nos redirija.
