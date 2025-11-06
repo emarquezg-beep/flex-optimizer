@@ -3,16 +3,9 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '@/lib/supabase';
 
-// 🔥 CONGELAR TODO PARA DEBUGGING
-const FREEZE_FOR_DEBUG = true;
-
-if (FREEZE_FOR_DEBUG) {
-  console.log('🛑 MODO DEBUG ACTIVADO - NO SE REDIRIGIRÁ');
-}
-
-console.log('🔵 SCRIPT DE UpdatePassword.vue CARGANDO');
-console.log('🔍 URL completa:', window.location.href);
-console.log('🔍 Hash:', window.location.hash);
+// 🔥 LEER EL HASH **INMEDIATAMENTE** antes que Vue Router lo procese
+const ORIGINAL_HASH = window.location.hash;
+console.log('🔵 HASH ORIGINAL CAPTURADO:', ORIGINAL_HASH);
 
 // --- Estado Reactivo ---
 const router = useRouter();
@@ -26,17 +19,18 @@ const confirmPassword = ref('');
 const message = ref('');
 const error = ref('');
 
-// VERIFICACIÓN INMEDIATA - Antes incluso de onMounted
+// VERIFICACIÓN INMEDIATA usando el hash original
 const checkRecoveryMode = () => {
-  const hash = window.location.hash.substring(1);
+  // Usar el hash que capturamos al inicio
+  const hash = ORIGINAL_HASH.substring(1); // Quitar el #
   const params = new URLSearchParams(hash);
   const type = params.get('type');
   const accessToken = params.get('access_token');
   
-  console.log('🔍 Parámetros del hash:', {
+  console.log('🔍 Parámetros del hash original:', {
     type,
     hasAccessToken: !!accessToken,
-    allParams: Array.from(params.entries())
+    hashLength: hash.length
   });
   
   // Si detectamos type=recovery, estamos en modo recuperación
@@ -45,6 +39,7 @@ const checkRecoveryMode = () => {
     return true;
   }
   
+  console.log('❌ No es modo recuperación');
   return false;
 };
 
@@ -66,14 +61,6 @@ onMounted(async () => {
   
   // Si NO es recuperación, verificar sesión normal
   console.log('🔍 No es recuperación, verificando sesión...');
-  
-  if (FREEZE_FOR_DEBUG) {
-    console.log('🛑 DEBUG: NO verificaré sesión ni redigiré');
-    isLoading.value = false;
-    error.value = 'MODO DEBUG: Revisa la consola';
-    return;
-  }
-  
   const { data: { session } } = await supabase.auth.getSession();
   
   if (session) {
@@ -121,12 +108,10 @@ const handleSubmit = async () => {
       console.log('🔄 Cerrando sesión...');
       await supabase.auth.signOut();
       
-      if (!FREEZE_FOR_DEBUG) {
-        setTimeout(() => {
-          console.log('➡️ Redirigiendo a /login');
-          router.push('/login');
-        }, 2500);
-      }
+      setTimeout(() => {
+        console.log('➡️ Redirigiendo a /login');
+        router.push('/login');
+      }, 2500);
     }
   } catch (err) {
     console.error('❌ Error inesperado:', err);
@@ -138,15 +123,15 @@ const handleSubmit = async () => {
 <template>
   <div class="update-password-container">
     
-    <!-- Debug info GRANDE Y VISIBLE -->
+    <!-- Debug info -->
     <div style="background: #ffeb3b; padding: 20px; margin-bottom: 20px; font-size: 14px; text-align: left; border: 3px solid #f44336;">
       <strong style="font-size: 18px;">🔍 INFORMACIÓN DE DEBUG</strong><br><br>
       <strong>isLoading:</strong> {{ isLoading }}<br>
       <strong>showForm:</strong> {{ showForm }}<br>
       <strong>isPasswordRecovery:</strong> {{ isPasswordRecovery }}<br>
-      <strong>URL actual:</strong> {{ $route.fullPath }}<br>
-      <strong>Hash completo:</strong> {{ $route.hash }}<br><br>
-      <strong style="color: red;">⚠️ MODO DEBUG ACTIVO - Revisa la consola del navegador (F12)</strong>
+      <strong>Hash capturado:</strong> {{ ORIGINAL_HASH.substring(0, 50) }}...<br>
+      <strong>Longitud del hash:</strong> {{ ORIGINAL_HASH.length }}<br><br>
+      <strong style="color: red;">⚠️ Revisa la consola del navegador (F12)</strong>
     </div>
 
     <div v-if="isLoading" class="loading-spinner">
