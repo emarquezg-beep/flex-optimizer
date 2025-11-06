@@ -3,7 +3,9 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '@/lib/supabase';
 
-console.log('🔵 SCRIPT DE UpdatePassword.vue SE ESTÁ CARGANDO');
+console.log('🔵 SCRIPT DE UpdatePassword.vue CARGANDO');
+console.log('🔍 URL completa:', window.location.href);
+console.log('🔍 Hash:', window.location.hash);
 
 // --- Estado Reactivo ---
 const router = useRouter();
@@ -17,36 +19,54 @@ const confirmPassword = ref('');
 const message = ref('');
 const error = ref('');
 
-// SOLUCIÓN: Verificar INMEDIATAMENTE si estamos en modo recuperación
-onMounted(async () => {
-  console.log('🟢 UpdatePassword.vue onMounted() SE ESTÁ EJECUTANDO');
+// VERIFICACIÓN INMEDIATA - Antes incluso de onMounted
+const checkRecoveryMode = () => {
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  const type = params.get('type');
+  const accessToken = params.get('access_token');
   
-  // 🔥 PASO 1: Revisar si hay un hash de recuperación en la URL
-  const hashParams = new URLSearchParams(window.location.hash.substring(1));
-  const accessToken = hashParams.get('access_token');
-  const type = hashParams.get('type');
+  console.log('🔍 Parámetros del hash:', {
+    type,
+    hasAccessToken: !!accessToken,
+    allParams: Array.from(params.entries())
+  });
   
-  console.log('🔍 Hash params:', { accessToken: !!accessToken, type });
-  
-  // 🔥 PASO 2: Si hay un token y es de tipo "recovery", estamos en recuperación
-  if (accessToken && type === 'recovery') {
-    console.log('✅ Es un link de recuperación válido');
-    isPasswordRecovery.value = true;
-    isLoading.value = false;
-    showForm.value = true;
-    return; // No necesitamos hacer nada más
+  // Si detectamos type=recovery, estamos en modo recuperación
+  if (type === 'recovery' && accessToken) {
+    console.log('✅ MODO RECUPERACIÓN DETECTADO');
+    return true;
   }
   
-  // 🔥 PASO 3: Si no es recuperación, verificar si hay sesión normal
+  return false;
+};
+
+// Verificar INMEDIATAMENTE si estamos en recuperación
+const IS_RECOVERY = checkRecoveryMode();
+console.log('🎯 ¿Es recuperación?', IS_RECOVERY);
+
+onMounted(async () => {
+  console.log('🟢 onMounted ejecutándose');
+  
+  // Si es recuperación, mostrar formulario sin importar nada más
+  if (IS_RECOVERY) {
+    console.log('✅ Mostrando formulario de recuperación');
+    isPasswordRecovery.value = true;
+    showForm.value = true;
+    isLoading.value = false;
+    return;
+  }
+  
+  // Si NO es recuperación, verificar sesión normal
+  console.log('🔍 No es recuperación, verificando sesión...');
   const { data: { session } } = await supabase.auth.getSession();
-  console.log('📊 Sesión actual:', session ? 'Existe' : 'No existe');
   
   if (session) {
-    console.log('👤 Usuario ya logueado, redirigiendo a dashboard');
+    console.log('👤 Usuario con sesión activa, redirigiendo a dashboard');
     isLoading.value = false;
     router.push('/dashboard');
   } else {
-    console.log('❌ Link inválido o expirado');
+    console.log('❌ No hay sesión ni recuperación - Link inválido');
     isLoading.value = false;
   }
 });
@@ -55,6 +75,8 @@ onMounted(async () => {
 const handleSubmit = async () => {
   error.value = '';
   message.value = '';
+
+  console.log('🔄 Validando contraseñas...');
 
   if (password.value.length < 6) {
     error.value = 'La contraseña debe tener al menos 6 caracteres.';
@@ -65,26 +87,33 @@ const handleSubmit = async () => {
     return;
   }
 
-  console.log('🔄 Intentando actualizar contraseña...');
+  console.log('🔄 Actualizando contraseña en Supabase...');
   
-  const { data, error: updateError } = await supabase.auth.updateUser({
-    password: password.value
-  });
+  try {
+    const { data, error: updateError } = await supabase.auth.updateUser({
+      password: password.value
+    });
 
-  if (updateError) {
-    console.error('❌ Error al actualizar:', updateError);
-    error.value = updateError.message;
-  } else {
-    console.log('✅ Contraseña actualizada');
-    message.value = '¡Contraseña actualizada con éxito! Redirigiendo al login...';
-    showForm.value = false;
-    
-    // Cerrar sesión y redirigir
-    await supabase.auth.signOut();
-    
-    setTimeout(() => {
-      router.push('/login');
-    }, 2500);
+    if (updateError) {
+      console.error('❌ Error al actualizar:', updateError);
+      error.value = updateError.message;
+    } else {
+      console.log('✅ Contraseña actualizada exitosamente');
+      message.value = '¡Contraseña actualizada con éxito! Redirigiendo al login...';
+      showForm.value = false;
+      
+      // Cerrar sesión
+      console.log('🔄 Cerrando sesión...');
+      await supabase.auth.signOut();
+      
+      setTimeout(() => {
+        console.log('➡️ Redirigiendo a /login');
+        router.push('/login');
+      }, 2500);
+    }
+  } catch (err) {
+    console.error('❌ Error inesperado:', err);
+    error.value = 'Ocurrió un error inesperado. Por favor, intenta nuevamente.';
   }
 };
 </script>
@@ -92,6 +121,15 @@ const handleSubmit = async () => {
 <template>
   <div class="update-password-container">
     
+    <!-- Debug info (eliminar en producción) -->
+    <div style="background: #f0f0f0; padding: 10px; margin-bottom: 20px; font-size: 12px; text-align: left;">
+      <strong>🔍 DEBUG:</strong><br>
+      isLoading: {{ isLoading }}<br>
+      showForm: {{ showForm }}<br>
+      isPasswordRecovery: {{ isPasswordRecovery }}<br>
+      URL: {{ $route.fullPath }}
+    </div>
+
     <div v-if="isLoading" class="loading-spinner">
       <p>Verificando link...</p>
     </div>
@@ -109,6 +147,7 @@ const handleSubmit = async () => {
             type="password" 
             v-model="password"
             required
+            autocomplete="new-password"
           />
         </div>
         <div class="form-group">
@@ -119,6 +158,7 @@ const handleSubmit = async () => {
             type="password"
             v-model="confirmPassword"
             required
+            autocomplete="new-password"
           />
         </div>
         <button type="submit" class="submit-button">Actualizar Contraseña</button>
