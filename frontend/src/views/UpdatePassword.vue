@@ -3,6 +3,10 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '@/lib/supabase';
 
+// ----> AÑADIR ESTE LOG #1 <----
+console.log('SCRIPT DE UpdatePassword.vue SE ESTÁ CARGANDO');
+// -----------------------------
+
 // --- Estado Reactivo ---
 const router = useRouter();
 const isLoading = ref(true);
@@ -17,6 +21,9 @@ const error = ref('');
 
 // 1. EL LISTENER (CORREGIDO)
 onMounted(() => {
+    // ----> AÑADIR ESTE LOG #2 <----
+  console.log('UpdatePassword.vue onMounted() SE ESTÁ EJECUTANDO');
+  // -----------------------------
   supabase.auth.onAuthStateChange(async (event, session) => {
     console.log('EVENTO:', event, '| SESIÓN:', session ? 'Sí, existe' : 'No');
     // PRIORIDAD #1:
