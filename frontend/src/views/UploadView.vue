@@ -25,6 +25,10 @@ const isSaving = ref(false);
 const saveStatus = ref(null);
 const fileInputRef = ref(null);
 const selectedFileNames = ref([]);
+// Variables para detección de downtown
+const showDowntownModal = ref(false);
+const orlandoApartments = ref([]);
+const downtownSelection = ref({});
 
 // ✅ Usuario autenticado
 const { userId } = useAuth();
@@ -130,6 +134,79 @@ onMounted(() => {
   }
 });
 
+
+// ============================================
+// FUNCIONES DE DETECCIÓN DE DOWNTOWN
+// ============================================
+
+function isApartment(address) {
+  if (!address) return false;
+  return /\b(APT|UNIT|#)\s*\d+[A-Z]?/i.test(address);
+}
+
+function isInOrlando(address) {
+  if (!address) return false;
+  return /\bORLANDO\b/i.test(address);
+}
+
+function detectOrlandoApartments() {
+  return extractedAddresses.value.filter(stop => 
+    stop.address && 
+    isApartment(stop.address) && 
+    isInOrlando(stop.address)
+  );
+}
+
+function showDowntownDetection() {
+  const apartments = detectOrlandoApartments();
+  
+  if (apartments.length === 0) {
+    return false; // No hay apartamentos en Orlando, continuar
+  }
+  
+  // Preparar datos para el modal
+  orlandoApartments.value = apartments;
+  downtownSelection.value = {};
+  apartments.forEach(apt => {
+    downtownSelection.value[apt.number] = false;
+  });
+  
+  showDowntownModal.value = true;
+  return true; // Mostrar modal
+}
+
+function confirmDowntownSelection() {
+  // Aplicar selección a extractedAddresses
+  Object.keys(downtownSelection.value).forEach(stopNumber => {
+    const stop = extractedAddresses.value.find(s => s.number === parseInt(stopNumber));
+    if (stop) {
+      stop.isDowntown = downtownSelection.value[stopNumber];
+    }
+  });
+  
+  showDowntownModal.value = false;
+  
+  // Continuar con evaluación
+  proceedWithEvaluation();
+}
+
+function skipDowntownSelection() {
+  // Marcar todos como NO downtown
+  orlandoApartments.value.forEach(apt => {
+    const stop = extractedAddresses.value.find(s => s.number === apt.number);
+    if (stop) {
+      stop.isDowntown = false;
+    }
+  });
+  
+  showDowntownModal.value = false;
+  proceedWithEvaluation();
+}
+
+async function proceedWithEvaluation() {
+  // Continuar con el proceso normal de evaluación
+  await sendToBackend();
+}
 // ============================================
 // FUNCIÓN PRINCIPAL: EVALUAR RUTA
 // ============================================
@@ -162,7 +239,7 @@ async function evaluateRoute() {
         return {
           number: item.stop_number || 0,
           address: fullAddress,
-          isDowntown: false
+          isDowntown: false  // Inicializar en false
         };
       });
 
@@ -173,7 +250,7 @@ async function evaluateRoute() {
       // Pequeña pausa para mostrar el contador de stops
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      // ✅ Resetear isProcessing antes de evaluar
+      // ✅ Resetear isProcessing antes de detectar downtown
       isProcessing.value = false;
       
     } catch (error) {
@@ -184,8 +261,16 @@ async function evaluateRoute() {
     }
   }
 
-  // Ahora evaluar la ruta
-  await sendToBackend();
+  // 🔍 NUEVA LÓGICA: Detectar apartamentos en Orlando
+  const needsDowntownCheck = showDowntownDetection();
+  
+  if (needsDowntownCheck) {
+    // Modal se muestra automáticamente, esperar confirmación del usuario
+    return; // No continuar hasta que usuario responda
+  }
+  
+  // Si no necesita check o ya se confirmó, evaluar
+  await proceedWithEvaluation();
 }
 
 // ============================================
@@ -1056,7 +1141,49 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         <div v-if="extractedAddresses.length > 0" class="stops-detected">
           ✅ {{ extractedAddresses.length }} stops detected
         </div>
-
+<!-- 🏢 MODAL DE DETECCIÓN DE DOWNTOWN -->
+<transition name="modal-fade">
+  <div v-if="showDowntownModal" class="modal-overlay" @click.self="skipDowntownSelection">
+    <div class="modal-container downtown-modal">
+      <div class="modal-header">
+        <h3>🏢 Downtown Apartments Detected</h3>
+        <p class="modal-subtitle">
+          Found {{ orlandoApartments.length }} apartment(s) in Orlando. 
+          Select which ones are downtown (adds +4.5 min per stop).
+        </p>
+      </div>
+      
+      <div class="modal-body">
+        <div class="apartment-list">
+          <label 
+            v-for="apt in orlandoApartments" 
+            :key="apt.number"
+            class="apartment-item"
+          >
+            <input 
+              type="checkbox" 
+              v-model="downtownSelection[apt.number]"
+              class="downtown-checkbox-modal"
+            >
+            <div class="apartment-info">
+              <span class="apt-number">Stop #{{ apt.number }}</span>
+              <span class="apt-address">{{ apt.address }}</span>
+            </div>
+          </label>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button @click="skipDowntownSelection" class="button-secondary">
+          ⏭️ No Downtown Apartments
+        </button>
+        <button @click="confirmDowntownSelection" class="button-primary">
+          ✅ Confirm Selection
+        </button>
+      </div>
+    </div>
+  </div>
+</transition>
         <!-- Botón de evaluación (siempre visible para mejor UX) -->
         <button 
           @click="evaluateRoute" 
@@ -2471,4 +2598,259 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   }
 }
 
+/* ========================================
+   MODAL DE DOWNTOWN - FIXED
+   ======================================== */
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.85); /* Más oscuro */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999; /* Más alto */
+  padding: 20px;
+  backdrop-filter: blur(4px); /* Efecto blur */
+}
+
+.modal-container {
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border); /* Borde más visible */
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  animation: slideUp 0.3s ease;
+  position: relative;
+  z-index: 10000; /* Asegurar que esté encima */
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  padding: 25px;
+  border-bottom: 2px solid var(--color-border);
+  background-color: var(--color-background); /* Fondo más oscuro */
+}
+
+.modal-header h3 {
+  margin: 0 0 10px 0;
+  color: var(--color-primary);
+  font-size: 1.4em;
+  font-weight: 700;
+}
+
+.modal-subtitle {
+  margin: 0;
+  color: var(--color-text-primary); /* Más visible */
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+
+.modal-body {
+  padding: 20px 25px;
+  overflow-y: auto;
+  flex: 1;
+  background-color: var(--color-surface); /* Asegurar fondo */
+}
+
+.apartment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.apartment-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background-color: var(--color-background); /* Más oscuro */
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.apartment-item:hover {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-color: var(--color-primary);
+  transform: translateX(5px);
+}
+
+.downtown-checkbox-modal {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border: 2px solid var(--color-text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  background-color: var(--color-surface);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.downtown-checkbox-modal:hover {
+  border-color: var(--color-primary);
+}
+
+.downtown-checkbox-modal:checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.downtown-checkbox-modal:checked::after {
+  content: '✓';
+  color: white;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.apartment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0; /* Permite que el texto se corte */
+}
+
+.apt-number {
+  font-weight: bold;
+  color: var(--color-accent);
+  font-size: 1em;
+}
+
+.apt-address {
+  color: var(--color-text-primary);
+  font-size: 0.95em;
+  word-break: break-word; /* Permite que direcciones largas se partan */
+}
+
+.modal-footer {
+  padding: 20px 25px;
+  border-top: 2px solid var(--color-border);
+  display: flex;
+  gap: 12px;
+  background-color: var(--color-background);
+}
+
+.modal-footer button {
+  flex: 1;
+  padding: 14px;
+  font-size: 1em;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.modal-footer .button-secondary {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 2px solid var(--color-border);
+}
+
+.modal-footer .button-secondary:hover {
+  background-color: var(--color-border);
+  border-color: var(--color-text-secondary);
+}
+
+.modal-footer .button-primary {
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.modal-footer .button-primary:hover {
+  background-color: #4f94f7;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 10px;
+  }
+  
+  .modal-container {
+    max-height: 90vh;
+  }
+  
+  .modal-header {
+    padding: 20px;
+  }
+  
+  .modal-body {
+    padding: 15px 20px;
+  }
+  
+  .apartment-item {
+    padding: 12px;
+  }
+  
+  .modal-footer {
+    flex-direction: column;
+    padding: 15px 20px;
+  }
+  
+  .modal-footer button {
+    width: 100%;
+  }
+}
+/* Fix de contraste para texto visible */
+.modal-header h3 {
+  color: #60a5fa !important; /* Azul claro */
+}
+
+.modal-subtitle {
+  color: #d1d5db !important; /* Gris claro */
+}
+
+.apt-number {
+  color: #86efac !important; /* Verde brillante */
+}
+
+.apt-address {
+  color: #f9fafb !important; /* Casi blanco */
+}
+
+.apartment-item {
+  background-color: #1f2937 !important; /* Gris oscuro */
+  border-color: #4b5563 !important;
+}
 </style>
