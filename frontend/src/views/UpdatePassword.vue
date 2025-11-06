@@ -3,6 +3,13 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '@/lib/supabase';
 
+// 🔥 CONGELAR TODO PARA DEBUGGING
+const FREEZE_FOR_DEBUG = true;
+
+if (FREEZE_FOR_DEBUG) {
+  console.log('🛑 MODO DEBUG ACTIVADO - NO SE REDIRIGIRÁ');
+}
+
 console.log('🔵 SCRIPT DE UpdatePassword.vue CARGANDO');
 console.log('🔍 URL completa:', window.location.href);
 console.log('🔍 Hash:', window.location.hash);
@@ -59,6 +66,14 @@ onMounted(async () => {
   
   // Si NO es recuperación, verificar sesión normal
   console.log('🔍 No es recuperación, verificando sesión...');
+  
+  if (FREEZE_FOR_DEBUG) {
+    console.log('🛑 DEBUG: NO verificaré sesión ni redigiré');
+    isLoading.value = false;
+    error.value = 'MODO DEBUG: Revisa la consola';
+    return;
+  }
+  
   const { data: { session } } = await supabase.auth.getSession();
   
   if (session) {
@@ -106,10 +121,12 @@ const handleSubmit = async () => {
       console.log('🔄 Cerrando sesión...');
       await supabase.auth.signOut();
       
-      setTimeout(() => {
-        console.log('➡️ Redirigiendo a /login');
-        router.push('/login');
-      }, 2500);
+      if (!FREEZE_FOR_DEBUG) {
+        setTimeout(() => {
+          console.log('➡️ Redirigiendo a /login');
+          router.push('/login');
+        }, 2500);
+      }
     }
   } catch (err) {
     console.error('❌ Error inesperado:', err);
@@ -121,13 +138,15 @@ const handleSubmit = async () => {
 <template>
   <div class="update-password-container">
     
-    <!-- Debug info (eliminar en producción) -->
-    <div style="background: #f0f0f0; padding: 10px; margin-bottom: 20px; font-size: 12px; text-align: left;">
-      <strong>🔍 DEBUG:</strong><br>
-      isLoading: {{ isLoading }}<br>
-      showForm: {{ showForm }}<br>
-      isPasswordRecovery: {{ isPasswordRecovery }}<br>
-      URL: {{ $route.fullPath }}
+    <!-- Debug info GRANDE Y VISIBLE -->
+    <div style="background: #ffeb3b; padding: 20px; margin-bottom: 20px; font-size: 14px; text-align: left; border: 3px solid #f44336;">
+      <strong style="font-size: 18px;">🔍 INFORMACIÓN DE DEBUG</strong><br><br>
+      <strong>isLoading:</strong> {{ isLoading }}<br>
+      <strong>showForm:</strong> {{ showForm }}<br>
+      <strong>isPasswordRecovery:</strong> {{ isPasswordRecovery }}<br>
+      <strong>URL actual:</strong> {{ $route.fullPath }}<br>
+      <strong>Hash completo:</strong> {{ $route.hash }}<br><br>
+      <strong style="color: red;">⚠️ MODO DEBUG ACTIVO - Revisa la consola del navegador (F12)</strong>
     </div>
 
     <div v-if="isLoading" class="loading-spinner">
