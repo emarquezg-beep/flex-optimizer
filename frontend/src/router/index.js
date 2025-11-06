@@ -43,7 +43,14 @@ const routes = [
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue'),
     meta: { requiresAuth: true, title: 'Ajustes' }
-  }
+  },
+  // ... (tus otras rutas)
+{
+  path: '/update-password',
+  name: 'UpdatePassword',
+  component: () => import('../views/UpdatePassword.vue') // Ruta al archivo que creaste
+}
+// ...
 ]
 
 const router = createRouter({
