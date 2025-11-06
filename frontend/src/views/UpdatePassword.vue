@@ -1,7 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router'; // Importa el hook del router
-import { supabase } from '@/lib/supabaseClient'; // Asegúrate que esta ruta sea correcta
+// BIEN ✅
+import { supabase } from '@/lib/supabase'; // Asegúrate que esta ruta sea correcta
 
 // --- Estado Reactivo ---
 const showForm = ref(false);
