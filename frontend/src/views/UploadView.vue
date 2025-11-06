@@ -2599,7 +2599,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 }
 
 /* ========================================
-   MODAL DE DOWNTOWN
+   MODAL DE DOWNTOWN - FIXED
    ======================================== */
 
 .modal-fade-enter-active,
@@ -2618,24 +2618,28 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.75);
+  background-color: rgba(0, 0, 0, 0.85); /* Más oscuro */
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 9999; /* Más alto */
   padding: 20px;
+  backdrop-filter: blur(4px); /* Efecto blur */
 }
 
 .modal-container {
   background-color: var(--color-surface);
+  border: 2px solid var(--color-border); /* Borde más visible */
   border-radius: 12px;
   max-width: 600px;
   width: 100%;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
   animation: slideUp 0.3s ease;
+  position: relative;
+  z-index: 10000; /* Asegurar que esté encima */
 }
 
 @keyframes slideUp {
@@ -2651,18 +2655,20 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 
 .modal-header {
   padding: 25px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 2px solid var(--color-border);
+  background-color: var(--color-background); /* Fondo más oscuro */
 }
 
 .modal-header h3 {
   margin: 0 0 10px 0;
   color: var(--color-primary);
   font-size: 1.4em;
+  font-weight: 700;
 }
 
 .modal-subtitle {
   margin: 0;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary); /* Más visible */
   font-size: 0.95em;
   line-height: 1.5;
 }
@@ -2671,6 +2677,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   padding: 20px 25px;
   overflow-y: auto;
   flex: 1;
+  background-color: var(--color-surface); /* Asegurar fondo */
 }
 
 .apartment-list {
@@ -2684,29 +2691,35 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   align-items: center;
   gap: 15px;
   padding: 15px;
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--color-border);
+  background-color: var(--color-background); /* Más oscuro */
+  border: 2px solid var(--color-border);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .apartment-item:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(59, 130, 246, 0.1);
   border-color: var(--color-primary);
+  transform: translateX(5px);
 }
 
 .downtown-checkbox-modal {
   appearance: none;
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  border: 2px solid var(--color-border);
-  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border: 2px solid var(--color-text-secondary);
+  border-radius: 6px;
   cursor: pointer;
   position: relative;
-  background-color: var(--color-background);
+  background-color: var(--color-surface);
   transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.downtown-checkbox-modal:hover {
+  border-color: var(--color-primary);
 }
 
 .downtown-checkbox-modal:checked {
@@ -2721,7 +2734,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: bold;
 }
 
@@ -2730,62 +2743,80 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   flex-direction: column;
   gap: 5px;
   flex: 1;
+  min-width: 0; /* Permite que el texto se corte */
 }
 
 .apt-number {
   font-weight: bold;
   color: var(--color-accent);
-  font-size: 0.9em;
+  font-size: 1em;
 }
 
 .apt-address {
   color: var(--color-text-primary);
   font-size: 0.95em;
+  word-break: break-word; /* Permite que direcciones largas se partan */
 }
 
 .modal-footer {
   padding: 20px 25px;
-  border-top: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-border);
   display: flex;
   gap: 12px;
+  background-color: var(--color-background);
 }
 
 .modal-footer button {
   flex: 1;
-  padding: 12px;
+  padding: 14px;
   font-size: 1em;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
+  border: none;
 }
 
 .modal-footer .button-secondary {
   background-color: var(--color-surface);
   color: var(--color-text-primary);
-  border: 1px solid var(--color-border);
+  border: 2px solid var(--color-border);
 }
 
 .modal-footer .button-secondary:hover {
   background-color: var(--color-border);
+  border-color: var(--color-text-secondary);
 }
 
 .modal-footer .button-primary {
   background-color: var(--color-primary);
   color: white;
   border: none;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 .modal-footer .button-primary:hover {
-  background-color: var(--color-primary-hover);
+  background-color: #4f94f7;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
 }
 
 /* Responsive */
 @media (max-width: 768px) {
+  .modal-overlay {
+    padding: 10px;
+  }
+  
   .modal-container {
     max-height: 90vh;
+  }
+  
+  .modal-header {
+    padding: 20px;
+  }
+  
+  .modal-body {
+    padding: 15px 20px;
   }
   
   .apartment-item {
@@ -2794,11 +2825,11 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   
   .modal-footer {
     flex-direction: column;
+    padding: 15px 20px;
   }
   
   .modal-footer button {
     width: 100%;
   }
 }
-
 </style>
