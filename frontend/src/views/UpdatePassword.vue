@@ -3,15 +3,14 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { supabase } from '@/lib/supabase';
 
-// ----> AÑADIR ESTE LOG #1 <----
 console.log('SCRIPT DE UpdatePassword.vue SE ESTÁ CARGANDO');
-// -----------------------------
 
 // --- Estado Reactivo ---
 const router = useRouter();
 const isLoading = ref(true);
 const showForm = ref(false);
-const hasCheckedAuth = ref(false); // Para saber si ya terminamos de revisar
+const hasCheckedAuth = ref(false);
+const isPasswordRecovery = ref(false); // 🔥 NUEVA FLAG CRÍTICA
 
 // --- Formulario ---
 const password = ref('');
@@ -19,50 +18,50 @@ const confirmPassword = ref('');
 const message = ref('');
 const error = ref('');
 
-// 1. EL LISTENER (CORREGIDO)
+// 1. EL LISTENER (CORREGIDO DE VERDAD)
 onMounted(() => {
-    // ----> AÑADIR ESTE LOG #2 <----
   console.log('UpdatePassword.vue onMounted() SE ESTÁ EJECUTANDO');
-  // -----------------------------
+  
   supabase.auth.onAuthStateChange(async (event, session) => {
     console.log('EVENTO:', event, '| SESIÓN:', session ? 'Sí, existe' : 'No');
-    // PRIORIDAD #1:
-    // Si el evento es de recuperación, mostramos el form y PARAmos.
-    // Esto evita que el siguiente evento 'session' nos redirija.
+    
+    // PRIORIDAD #1: Detectar PASSWORD_RECOVERY
     if (event === 'PASSWORD_RECOVERY') {
       console.log('¡Evento de recuperación detectado!');
+      isPasswordRecovery.value = true; // 🔥 Marcar que estamos en modo recuperación
       isLoading.value = false;
       showForm.value = true;
       hasCheckedAuth.value = true;
-      return; // ¡Importante! Salimos para no procesar más.
-    }
-
-    // PRIORIDAD #2:
-    // Si YA estamos mostrando el form, no hagas nada más.
-    // Ignora cualquier evento de 'session' que venga después.
-    if (showForm.value) {
       return;
     }
 
-    // PRIORIDAD #3:
-    // Si no es un recovery Y no estamos en el form,
-    // revisamos si es una sesión normal (alguien ya logueado).
-    if (session) {
+    // PRIORIDAD #2: Si ya estamos en modo recuperación, IGNORAR TODO LO DEMÁS
+    // Esto previene que eventos posteriores (SIGNED_IN, etc.) nos redirijan
+    if (isPasswordRecovery.value) {
+      console.log('Ignorando evento porque estamos en modo recuperación');
+      return;
+    }
+
+    // PRIORIDAD #3: Usuario con sesión normal (no es recuperación)
+    if (session && event !== 'PASSWORD_RECOVERY') {
+      console.log('Usuario ya tiene sesión, redirigiendo a dashboard');
       isLoading.value = false;
       hasCheckedAuth.value = true;
-      router.push('/dashboard'); // Redirigir a usuarios ya logueados
-    } 
-    // PRIORIDAD #4:
-    // Si no es nada de lo anterior, es un link inválido.
-    else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+      router.push('/dashboard');
+      return;
+    }
+    
+    // PRIORIDAD #4: Link inválido o expirado
+    if (!session && (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT')) {
+      console.log('No hay sesión válida, mostrando error');
       isLoading.value = false;
       hasCheckedAuth.value = true;
-      // No se redirige, el template mostrará el error.
+      // El template mostrará el error
     }
   });
 });
 
-// 2. EL MANEJADOR DEL FORMULARIO (Sigue igual)
+// 2. EL MANEJADOR DEL FORMULARIO
 const handleSubmit = async () => {
   error.value = '';
   message.value = '';
@@ -85,6 +84,10 @@ const handleSubmit = async () => {
   } else {
     message.value = '¡Contraseña actualizada con éxito! Redirigiendo al login...';
     showForm.value = false;
+    
+    // 🔥 IMPORTANTE: Cerrar sesión después de cambiar contraseña
+    await supabase.auth.signOut();
+    
     setTimeout(() => {
       router.push('/login');
     }, 2500);
@@ -145,7 +148,6 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-/* Contenedor principal de la página */
 .update-password-container {
   max-width: 450px;
   margin: 3rem auto;
@@ -156,41 +158,42 @@ const handleSubmit = async () => {
   font-family: Arial, sans-serif;
   text-align: center;
 }
-/* Mensaje de "Verificando..." */
+
 .loading-spinner {
   text-align: center;
   font-style: italic;
   color: #555;
   padding: 2rem;
 }
-/* El formulario */
+
 .update-form {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   text-align: left;
 }
-/* Grupo de (label + input) */
+
 .form-group {
   display: flex;
   flex-direction: column;
 }
+
 .form-group label {
   margin-bottom: 0.5rem;
   font-weight: bold;
   color: #333;
 }
-/* Campos de texto */
+
 .input-field {
   padding: 0.75rem;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 1rem;
 }
-/* Botón de enviar */
+
 .submit-button {
   padding: 0.85rem;
-  background-color: #007bff; /* Un color azul de ejemplo */
+  background-color: #007bff;
   color: white;
   font-size: 1rem;
   font-weight: bold;
@@ -200,21 +203,23 @@ const handleSubmit = async () => {
   transition: background-color 0.2s ease;
   margin-top: 1rem;
 }
+
 .submit-button:hover {
   background-color: #0056b3;
 }
-/* Mensajes de éxito y error */
+
 .success-message {
-  color: #155724; /* Verde oscuro */
-  background-color: #d4edda; /* Verde claro */
+  color: #155724;
+  background-color: #d4edda;
   border: 1px solid #c3e6cb;
   padding: 0.75rem;
   border-radius: 4px;
   margin-top: 1rem;
 }
+
 .error-message {
-  color: #721c24; /* Rojo oscuro */
-  background-color: #f8d7da; /* Rojo claro */
+  color: #721c24;
+  background-color: #f8d7da;
   border: 1px solid #f5c6cb;
   padding: 0.75rem;
   border-radius: 4px;
