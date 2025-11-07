@@ -69,6 +69,67 @@ export function useAuth() {
     }
   }
 
+  async function register(email, password) {
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password: password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/login`
+      }
+    })
+    
+    if (error) {
+      let errorMessage = 'Error al registrar usuario'
+      if (error.message.includes('already registered')) {
+        errorMessage = 'Este email ya está registrado'
+      }
+      return { success: false, error: errorMessage }
+    }
+    
+    // Nota: En Supabase, si tienes confirmación de email habilitada,
+    // el usuario debe confirmar antes de poder hacer login
+    return { 
+      success: true, 
+      user: data.user,
+      needsEmailConfirmation: data.user?.identities?.length === 0
+    }
+  } catch (error) {
+    return { success: false, error: 'Error inesperado al registrar' }
+  }
+}
+
+async function requestPasswordReset(email) {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`
+    })
+    
+    if (error) {
+      return { success: false, error: 'Error al enviar email de recuperación' }
+    }
+    
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Error inesperado' }
+  }
+}
+
+async function updatePassword(newPassword) {
+  try {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    })
+    
+    if (error) {
+      return { success: false, error: 'Error al actualizar contraseña' }
+    }
+    
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Error inesperado' }
+  }
+}
   async function checkAuth() {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession()
@@ -93,6 +154,9 @@ export function useAuth() {
     initialize,
     login,
     logout,
-    checkAuth
+    checkAuth,
+    register,              // NUEVO
+    requestPasswordReset,  // NUEVO
+    updatePassword         // NUEVO
   }
 }

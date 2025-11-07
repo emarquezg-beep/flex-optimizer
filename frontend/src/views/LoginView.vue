@@ -82,6 +82,14 @@ async function handleLogin() {
         <button type="submit" class="login-button" :disabled="isLoading">
           {{ isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión' }}
         </button>
+        <div class="login-links">
+          <router-link to="/register" class="link-text">
+            ¿No tienes cuenta? Regístrate
+          </router-link>
+          <router-link to="/forgot-password" class="link-text">
+            ¿Olvidaste tu contraseña?
+          </router-link>
+        </div>
       </form>
     </div>
   </div>
@@ -200,6 +208,25 @@ async function handleLogin() {
 .login-button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+.login-links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  text-align: center;
+}
+
+.link-text {
+  font-size: var(--text-sm);
+  color: var(--brand-primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.link-text:hover {
+  color: var(--brand-accent);
+  text-decoration: underline;
 }
 </style>
 

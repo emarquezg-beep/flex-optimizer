@@ -8,6 +8,28 @@ const routes = [
     component: () => import('@/views/LoginView.vue'),
     meta: { requiresAuth: false }
   },
+  
+  // ⬇️ AGREGAR ESTAS 3 RUTAS AQUÍ ⬇️
+  {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/RegisterView.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('@/views/ForgotPasswordView.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/reset-password',
+    name: 'ResetPassword',
+    component: () => import('@/views/ResetPasswordView.vue'),
+    meta: { requiresAuth: false }
+  },
+  // ⬆️ HASTA AQUÍ ⬆️
+  
   {
     path: '/update-password',
     name: 'UpdatePassword',
@@ -90,7 +112,7 @@ router.beforeEach(async (to, from, next) => {
     next()
   } 
   // Si ya está autenticado y va a login, redirigir a home
-  else if (to.name === 'Login' && isAuthenticated.value) {
+else if (['Login', 'Register', 'ForgotPassword', 'ResetPassword'].includes(to.name) && isAuthenticated.value) {
     next({ name: 'Home' })
   } 
   // Ruta pública, dejar pasar
