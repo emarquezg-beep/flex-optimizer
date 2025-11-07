@@ -21,15 +21,13 @@ onMounted(async () => {
     // Solo necesitamos verificar si hay una sesión activa de recovery
     const { data: { session } } = await supabase.auth.getSession()
     
-    alert('Session: ' + JSON.stringify(session))
-    
     if (session) {
       isValidToken.value = true
     } else {
       error.value = 'Link de recuperación inválido o expirado'
     }
   } catch (e) {
-    alert('ERROR: ' + e.message)
+    console.error('Error verificando token:', e)
     error.value = 'Error al verificar el link'
   }
 })
