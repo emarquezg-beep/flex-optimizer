@@ -37,7 +37,7 @@ const fileInputLabel = computed(() => {
 });
 
 const VEHICULO_OPTIONS = ['Pontiac', 'Trax', 'Kia', 'Otro Carro'];
-const DURACION_OPTIONS = [3, 3.5, 4, 4.5, 5];
+const DURACION_OPTIONS = [1, 1.5,2, 3, 3.5, 4, 4.5, 5];
 
 const warehouses = ref([
   { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL', commuteMiles: 23 },
@@ -555,7 +555,7 @@ const reportData = computed(() => {
       segmentBaseStopTime += 1.5;
       if (isDowntown) {
         downtownCount++;
-        segmentExtraStopTime += 4.5;
+        segmentExtraStopTime += 3;
       } else if (isApartment) {
         aptCount++;
         segmentExtraStopTime += 1.5;
@@ -610,7 +610,7 @@ const reportData = computed(() => {
         segmentBaseStopTime += 1.5;
         if (isDowntown) {
           downtownCount++;
-          segmentExtraStopTime += 4.5;
+          segmentExtraStopTime += 3;
         } else if (isApartment) {
           aptCount++;
           segmentExtraStopTime += 1.5;
@@ -701,7 +701,7 @@ const scenarioETAs = computed(() => {
   
   const calculateScenario = (baseDrive, commute, multiplier) => {
     const baseStopTime = stopCount * multiplier;
-    const extraAptTime = (regularApartmentCount * 1.5) + (downtownCount * 4.5);
+    const extraAptTime = (regularApartmentCount * 1.5) + (downtownCount * 3);
     const routeDurationMinutes = (Number(baseDrive) || 0) + baseStopTime + extraAptTime + (Number(commute) || 0);
     
     if (isNaN(routeDurationMinutes)) {
@@ -1145,7 +1145,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         <h3>🏢 Downtown Apartments Detected</h3>
         <p class="modal-subtitle">
           Found {{ orlandoApartments.length }} apartment(s) in Orlando. 
-          Select which ones are downtown (adds +4.5 min per stop).
+          Select which ones are downtown (adds +3 min per stop).
         </p>
       </div>
       
