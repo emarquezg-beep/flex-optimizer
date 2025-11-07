@@ -86,38 +86,32 @@ async function handleSubmit() {
       </div>
 
       <form v-if="isValidToken && !success" @submit.prevent="handleSubmit" class="reset-form">
-        <div class="input-group">
-        <label for="newPassword" class="input-label">
-            <Lock :size="16" />
-            Nueva Contraseña
-        </label>
-        </div>
- 
-<div class="input-group">
-  <label for="newPassword" class="input-label">
-    <Lock :size="16" />
-    Nueva Contraseña
-  </label>
-  <div class="password-input-wrapper">
-    <input
-      id="newPassword"
-      v-model="newPassword"
-      :type="showPassword ? 'text' : 'password'"
-      placeholder="Mínimo 6 caracteres"
-      class="reset-input"
-      :disabled="isLoading"
-      required
-    />
-    <button
-      type="button"
-      @click="showPassword = !showPassword"
-      class="toggle-password"
-      :disabled="isLoading"
-    >
-      <component :is="showPassword ? 'EyeOff' : 'Eye'" :size="20" />
-    </button>
-  </div>
-</div>
+      
+    <div class="input-group">
+    <label for="newPassword" class="input-label">
+        <Lock :size="16" />
+        Nueva Contraseña
+    </label>
+    <div class="password-input-wrapper">
+        <input
+        id="newPassword"
+        v-model="newPassword"
+        :type="showPassword ? 'text' : 'password'"
+        placeholder="Mínimo 6 caracteres"
+        class="reset-input"
+        :disabled="isLoading"
+        required
+        />
+        <button
+        type="button"
+        @click="showPassword = !showPassword"
+        class="toggle-password"
+        :disabled="isLoading"
+        >
+        <component :is="showPassword ? 'EyeOff' : 'Eye'" :size="20" />
+        </button>
+    </div>
+    </div>
 
 
     <div class="input-group">
