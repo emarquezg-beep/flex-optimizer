@@ -93,7 +93,8 @@ router.beforeEach(async (to, from, next) => {
   document.title = `${to.meta.title || to.name} | Flex Optimizer`
   
   // 🔥 EXCEPCIÓN: Siempre permitir /update-password
-  if (to.name === 'UpdatePassword') {
+// 🔥 EXCEPCIÓN: Siempre permitir estas rutas de recuperación
+  if (['UpdatePassword', 'ResetPassword'].includes(to.name)) {
     next()
     return
   }
@@ -111,10 +112,10 @@ router.beforeEach(async (to, from, next) => {
     }
     next()
   } 
-  // Si ya está autenticado y va a login, redirigir a home
-else if (['Login', 'Register', 'ForgotPassword', 'ResetPassword'].includes(to.name) && isAuthenticated.value) {
+// Si ya está autenticado y va a rutas de auth (excepto reset), redirigir a home
+  else if (['Login', 'Register', 'ForgotPassword'].includes(to.name) && isAuthenticated.value) {
     next({ name: 'Home' })
-  } 
+  }
   // Ruta pública, dejar pasar
   else {
     next()
