@@ -74,14 +74,15 @@ async function handleLogin() {
               class="login-input"
               :disabled="isLoading"
             />
-            <button
-              type="button"
-              @click="showPassword = !showPassword"
-              class="toggle-password"
-              :disabled="isLoading"
-            >
-              <component :is="showPassword ? 'EyeOff' : 'Eye'" :size="20" />
-            </button>
+        <button
+          type="button"
+          @click="showPassword = !showPassword"
+          class="toggle-password"
+          :disabled="isLoading"
+        >
+          <EyeOff v-if="showPassword" :size="20" />
+          <Eye v-else :size="20" />
+        </button>
           </div>
         </div>
 

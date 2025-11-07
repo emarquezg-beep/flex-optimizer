@@ -108,7 +108,8 @@ async function handleSubmit() {
         class="toggle-password"
         :disabled="isLoading"
         >
-        <component :is="showPassword ? 'EyeOff' : 'Eye'" :size="20" />
+        <EyeOff v-if="showPassword" :size="20" />
+        <Eye v-else :size="20" />
         </button>
     </div>
     </div>
@@ -129,14 +130,15 @@ async function handleSubmit() {
         :disabled="isLoading"
         required
         />
-        <button
-        type="button"
-        @click="showConfirmPassword = !showConfirmPassword"
-        class="toggle-password"
-        :disabled="isLoading"
-        >
-        <component :is="showConfirmPassword ? 'EyeOff' : 'Eye'" :size="20" />
-        </button>
+    <button
+    type="button"
+    @click="showConfirmPassword = !showConfirmPassword"
+    class="toggle-password"
+    :disabled="isLoading"
+    >
+    <EyeOff v-if="showConfirmPassword" :size="20" />
+    <Eye v-else :size="20" />
+    </button>
     </div>
     </div>
 
