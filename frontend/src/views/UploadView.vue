@@ -139,11 +139,6 @@ onMounted(() => {
 // FUNCIONES DE DETECCIÓN DE DOWNTOWN
 // ============================================
 
-function isApartment(address) {
-  if (!address) return false;
-  return /\b(APT|UNIT|#)\s*\d+[A-Z]?/i.test(address);
-}
-
 function isInOrlando(address) {
   if (!address) return false;
   return /\bORLANDO\b/i.test(address);
@@ -152,7 +147,7 @@ function isInOrlando(address) {
 function detectOrlandoApartments() {
   return extractedAddresses.value.filter(stop => 
     stop.address && 
-    isApartment(stop.address) && 
+    stop.isApartment && // ✅ Usa el campo del objeto
     isInOrlando(stop.address)
   );
 }
@@ -239,7 +234,8 @@ async function evaluateRoute() {
         return {
           number: item.stop_number || 0,
           address: fullAddress,
-          isDowntown: false  // Inicializar en false
+          isDowntown: false,
+          isApartment: item.apartment != null && item.apartment.trim() !== '' // ✅ NUEVO
         };
       });
 
