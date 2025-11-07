@@ -17,7 +17,12 @@ const isValidToken = ref(false)
 onMounted(() => {
   // Verificar si hay un hash en la URL (token de Supabase)
   const hash = window.location.hash
-  if (hash && hash.includes('type=recovery')) {
+  
+  // Supabase puede usar diferentes formatos de hash
+  const hasRecoveryType = hash && hash.includes('type=recovery')
+  const hasAccessToken = hash && hash.includes('access_token')
+  
+  if (hasRecoveryType || hasAccessToken) {
     isValidToken.value = true
   } else {
     error.value = 'Link de recuperación inválido o expirado'
