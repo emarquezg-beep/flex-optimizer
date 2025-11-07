@@ -101,8 +101,10 @@ export function useAuth() {
 
 async function requestPasswordReset(email) {
   try {
+    const baseUrl = window.location.origin
+    
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`
+      redirectTo: `${baseUrl}/reset-password`
     })
     
     if (error) {

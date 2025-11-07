@@ -1,4 +1,5 @@
 <script setup>
+import { supabase } from '@/lib/supabase'
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
@@ -14,28 +15,22 @@ const error = ref(null)
 const success = ref(false)
 const isValidToken = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
   try {
-    const fullUrl = window.location.href || 'no url'
-    const hash = window.location.hash || 'no hash'
-    const search = window.location.search || 'no search'
+    // Supabase maneja el token automáticamente cuando llegas desde el email
+    // Solo necesitamos verificar si hay una sesión activa de recovery
+    const { data: { session } } = await supabase.auth.getSession()
     
-    alert('URL: ' + fullUrl)
-    alert('Hash: ' + hash)
-    alert('Search: ' + search)
+    alert('Session: ' + JSON.stringify(session))
     
-    const hasRecoveryType = hash.includes('type=recovery')
-    const hasAccessToken = hash.includes('access_token')
-    
-    alert('Recovery: ' + hasRecoveryType + ', Token: ' + hasAccessToken)
-    
-    if (hasRecoveryType || hasAccessToken) {
+    if (session) {
       isValidToken.value = true
     } else {
       error.value = 'Link de recuperación inválido o expirado'
     }
   } catch (e) {
     alert('ERROR: ' + e.message)
+    error.value = 'Error al verificar el link'
   }
 })
 
