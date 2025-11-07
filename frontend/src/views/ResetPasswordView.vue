@@ -15,17 +15,17 @@ const success = ref(false)
 const isValidToken = ref(false)
 
 onMounted(() => {
-  // DEBUG: Ver qué hay en la URL
-  console.log('Full URL:', window.location.href)
-  console.log('Hash:', window.location.hash)
-  console.log('Search:', window.location.search)
+  // Alert visible para debug
+  alert('ResetPasswordView montado!')
   
+  const fullUrl = window.location.href
   const hash = window.location.hash
+  const search = window.location.search
+  
+  alert(`URL: ${fullUrl}\nHash: ${hash}\nSearch: ${search}`)
+  
   const hasRecoveryType = hash && hash.includes('type=recovery')
   const hasAccessToken = hash && hash.includes('access_token')
-  
-  console.log('Has recovery type:', hasRecoveryType)
-  console.log('Has access token:', hasAccessToken)
   
   if (hasRecoveryType || hasAccessToken) {
     isValidToken.value = true
