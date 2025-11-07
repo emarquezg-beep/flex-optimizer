@@ -53,10 +53,13 @@ async function handleSubmit() {
   isLoading.value = true
   
   const result = await updatePassword(newPassword.value)
-  isLoading.value = false
   
   if (result.success) {
     success.value = true
+    
+    // Hacer logout después de cambiar la contraseña
+    await supabase.auth.signOut()
+    
     // Redirigir al login después de 3 segundos
     setTimeout(() => {
       router.push('/login')
@@ -64,6 +67,8 @@ async function handleSubmit() {
   } else {
     error.value = result.error
   }
+  
+  isLoading.value = false
 }
 </script>
 
