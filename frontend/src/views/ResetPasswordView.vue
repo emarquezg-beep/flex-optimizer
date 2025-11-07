@@ -15,22 +15,27 @@ const success = ref(false)
 const isValidToken = ref(false)
 
 onMounted(() => {
-  // Alert visible para debug
-  alert('ResetPasswordView montado!')
-  
-  const fullUrl = window.location.href
-  const hash = window.location.hash
-  const search = window.location.search
-  
-  alert(`URL: ${fullUrl}\nHash: ${hash}\nSearch: ${search}`)
-  
-  const hasRecoveryType = hash && hash.includes('type=recovery')
-  const hasAccessToken = hash && hash.includes('access_token')
-  
-  if (hasRecoveryType || hasAccessToken) {
-    isValidToken.value = true
-  } else {
-    error.value = 'Link de recuperación inválido o expirado'
+  try {
+    const fullUrl = window.location.href || 'no url'
+    const hash = window.location.hash || 'no hash'
+    const search = window.location.search || 'no search'
+    
+    alert('URL: ' + fullUrl)
+    alert('Hash: ' + hash)
+    alert('Search: ' + search)
+    
+    const hasRecoveryType = hash.includes('type=recovery')
+    const hasAccessToken = hash.includes('access_token')
+    
+    alert('Recovery: ' + hasRecoveryType + ', Token: ' + hasAccessToken)
+    
+    if (hasRecoveryType || hasAccessToken) {
+      isValidToken.value = true
+    } else {
+      error.value = 'Link de recuperación inválido o expirado'
+    }
+  } catch (e) {
+    alert('ERROR: ' + e.message)
   }
 })
 
