@@ -2,7 +2,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { UserPlus, Mail, Lock, AlertCircle, CheckCircle } from 'lucide-vue-next'
+import { UserPlus, Mail, Lock, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-vue-next'
+
 
 const router = useRouter()
 const { register } = useAuth()
@@ -13,6 +14,8 @@ const confirmPassword = ref('')
 const isLoading = ref(false)
 const error = ref(null)
 const success = ref(false)
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 
 async function handleRegister() {
   // Validaciones
@@ -78,35 +81,55 @@ async function handleRegister() {
         </div>
 
         <div class="input-group">
-          <label for="password" class="input-label">
+        <label for="password" class="input-label">
             <Lock :size="16" />
             Contraseña
-          </label>
-          <input
+        </label>
+        <div class="password-input-wrapper">
+            <input
             id="password"
             v-model="password"
-            type="password"
+            :type="showPassword ? 'text' : 'password'"
             placeholder="Mínimo 6 caracteres"
             class="register-input"
             :disabled="isLoading"
             required
-          />
+            />
+            <button
+            type="button"
+            @click="showPassword = !showPassword"
+            class="toggle-password"
+            :disabled="isLoading"
+            >
+            <component :is="showPassword ? 'EyeOff' : 'Eye'" :size="20" />
+            </button>
+        </div>
         </div>
 
         <div class="input-group">
-          <label for="confirmPassword" class="input-label">
+        <label for="confirmPassword" class="input-label">
             <Lock :size="16" />
             Confirmar Contraseña
-          </label>
-          <input
+        </label>
+        <div class="password-input-wrapper">
+            <input
             id="confirmPassword"
             v-model="confirmPassword"
-            type="password"
+            :type="showConfirmPassword ? 'text' : 'password'"
             placeholder="Repite tu contraseña"
             class="register-input"
             :disabled="isLoading"
             required
-          />
+            />
+            <button
+            type="button"
+            @click="showConfirmPassword = !showConfirmPassword"
+            class="toggle-password"
+            :disabled="isLoading"
+            >
+            <component :is="showConfirmPassword ? 'EyeOff' : 'Eye'" :size="20" />
+            </button>
+        </div>
         </div>
 
         <div v-if="error" class="error-banner">
@@ -299,5 +322,37 @@ async function handleRegister() {
   font-size: var(--text-sm);
   color: var(--brand-primary);
   font-style: italic;
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper .register-input {
+  padding-right: var(--space-12);
+}
+
+.toggle-password {
+  position: absolute;
+  right: var(--space-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  padding: var(--space-2);
+  transition: color 0.2s;
+}
+
+.toggle-password:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.toggle-password:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 </style>

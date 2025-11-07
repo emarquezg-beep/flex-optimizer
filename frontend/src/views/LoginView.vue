@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { LogIn, Mail, Lock, AlertCircle } from 'lucide-vue-next'
+import { LogIn, Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-vue-next'
 
 const router = useRouter()
 const { login } = useAuth()
@@ -11,6 +11,7 @@ const email = ref('')
 const password = ref('')
 const isLoading = ref(false)
 const error = ref(null)
+const showPassword = ref(false)
 
 async function handleLogin() {
   if (!email.value || !password.value) {
@@ -64,14 +65,24 @@ async function handleLogin() {
             <Lock :size="16" />
             Contraseña
           </label>
-          <input
-            id="password"
-            v-model="password"
-            type="password"
-            placeholder="••••••••"
-            class="login-input"
-            :disabled="isLoading"
-          />
+          <div class="password-input-wrapper">
+            <input
+              id="password"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              placeholder="••••••••"
+              class="login-input"
+              :disabled="isLoading"
+            />
+            <button
+              type="button"
+              @click="showPassword = !showPassword"
+              class="toggle-password"
+              :disabled="isLoading"
+            >
+              <component :is="showPassword ? 'EyeOff' : 'Eye'" :size="20" />
+            </button>
+          </div>
         </div>
 
         <div v-if="error" class="error-banner">
@@ -228,6 +239,37 @@ async function handleLogin() {
   color: var(--brand-accent);
   text-decoration: underline;
 }
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper .login-input {
+  padding-right: var(--space-12);
+}
+
+.toggle-password {
+  position: absolute;
+  right: var(--space-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  padding: var(--space-2);
+  transition: color 0.2s;
+}
+
+.toggle-password:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.toggle-password:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 </style>
 
-// Forzando nuevo commit 
