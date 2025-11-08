@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { fetchWithAuth } from '@/lib/api'
-import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin } from 'lucide-vue-next'
+import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin, ChevronRight } from 'lucide-vue-next'
 import { BaseButton, BaseCard } from '@/components/base'
 
 const router = useRouter()
@@ -14,10 +14,18 @@ const { userId, userName: authUserName } = useAuth()
 
 // Estados
 const isLoading = ref(true)
-const weekSummary = ref(null)
-const scheduledBlocks = ref([])
+const currentWeekSummary = ref(null)
+const nextWeekSummary = ref(null)
+const currentWeekBlocks = ref([])
+const nextWeekBlocks = ref([])
 const selectedBlock = ref(null)
 const showBlockModal = ref(false)
+
+// 🆕 Control del slider (0 = semana actual, 1 = semana siguiente)
+const activeWeek = ref(0)
+
+// 🆕 Control de expansión de bloques semana siguiente
+const showNextWeekBlocks = ref(false)
 
 onMounted(async () => {
   await loadDashboard()
@@ -27,17 +35,19 @@ async function loadDashboard() {
   isLoading.value = true
   
   try {
-    // Cargar resumen semanal
+    // ========================================
+    // SEMANA ACTUAL
+    // ========================================
     const summaryResponse = await fetchWithAuth(
       `${backendUrl}/api/scheduled-blocks/${userId.value}/week-summary`
     )
     const summaryResult = await summaryResponse.json()
     
     if (summaryResult.success) {
-      weekSummary.value = summaryResult.summary
+      currentWeekSummary.value = summaryResult.summary
     }
     
-    // Cargar bloques agendados (próximos 7 días)
+    // Bloques semana actual (próximos 7 días desde hoy)
     const today = new Date().toISOString().split('T')[0]
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     
@@ -47,15 +57,47 @@ async function loadDashboard() {
     const blocksResult = await blocksResponse.json()
     
     if (blocksResult.success) {
-      scheduledBlocks.value = blocksResult.blocks
+      currentWeekBlocks.value = blocksResult.blocks
     }
     
-    console.log('✅ Dashboard cargado')
+    // ========================================
+    // 🆕 SEMANA SIGUIENTE
+    // ========================================
+    // Calcular rango de la semana siguiente (del día 8 al 14)
+    const nextWeekStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const nextWeekEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    
+    // Cargar bloques de la semana siguiente
+    const nextBlocksResponse = await fetchWithAuth(
+      `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${nextWeekStart}&endDate=${nextWeekEnd}`
+    )
+    const nextBlocksResult = await nextBlocksResponse.json()
+    
+    if (nextBlocksResult.success) {
+      nextWeekBlocks.value = nextBlocksResult.blocks
+      
+      // 🆕 Calcular resumen de la semana siguiente
+      nextWeekSummary.value = calculateNextWeekSummary(nextBlocksResult.blocks)
+    }
+    
+    console.log('✅ Dashboard cargado (semana actual + siguiente)')
     
   } catch (error) {
     console.error('❌ Error cargando dashboard:', error)
   } finally {
     isLoading.value = false
+  }
+}
+
+// 🆕 Calcular resumen de la semana siguiente
+function calculateNextWeekSummary(blocks) {
+  const totalHours = blocks.reduce((sum, block) => sum + parseFloat(block.duracion_horas || 0), 0)
+  const totalPay = blocks.reduce((sum, block) => sum + parseFloat(block.pago || 0), 0)
+  
+  return {
+    blocks: blocks.length,
+    hours: totalHours.toFixed(1),
+    pay: totalPay.toFixed(2)
   }
 }
 
@@ -71,7 +113,6 @@ function closeBlockModal() {
 
 async function startBlock(block) {
   closeBlockModal()
-  // Redirigir a UploadView con parámetros del bloque
   router.push({
     path: '/upload',
     query: {
@@ -125,6 +166,16 @@ function goToSchedule() {
   router.push('/schedule')
 }
 
+// 🆕 Cambiar entre semanas
+function switchWeek(weekIndex) {
+  activeWeek.value = weekIndex
+}
+
+// 🆕 Alternar visibilidad de bloques semana siguiente
+function toggleNextWeekBlocks() {
+  showNextWeekBlocks.value = !showNextWeekBlocks.value
+}
+
 // Formateo de fecha
 function formatDate(dateString) {
   const date = new Date(dateString + 'T00:00:00')
@@ -135,7 +186,7 @@ function formatDate(dateString) {
   })
 }
 
-// Formateo de hora (de "14:15:00" a "2:15 PM")
+// Formateo de hora
 function formatTime(timeString) {
   const [hours, minutes] = timeString.split(':')
   const hour = parseInt(hours)
@@ -154,19 +205,16 @@ const greeting = computed(() => {
 
 const userName = computed(() => authUserName.value)
 
-
 const hoursWorked = computed(() => {
-  if (!weekSummary.value) return 0
-  return parseFloat(weekSummary.value.completed.hours)
+  if (!currentWeekSummary.value) return 0
+  return parseFloat(currentWeekSummary.value.completed.hours)
 })
 
-// 🆕 Horas agendadas
 const hoursScheduled = computed(() => {
-  if (!weekSummary.value) return 0
-  return parseFloat(weekSummary.value.scheduled.hours || 0)
+  if (!currentWeekSummary.value) return 0
+  return parseFloat(currentWeekSummary.value.scheduled.hours || 0)
 })
 
-// 🆕 Horas libres
 const hoursFree = computed(() => {
   const worked = hoursWorked.value
   const scheduled = hoursScheduled.value
@@ -174,15 +222,27 @@ const hoursFree = computed(() => {
 })
 
 const hoursRemaining = computed(() => {
-  if (!weekSummary.value) return 0
-  const worked = parseFloat(weekSummary.value.completed.hours)
+  if (!currentWeekSummary.value) return 0
+  const worked = parseFloat(currentWeekSummary.value.completed.hours)
   return Math.max(0, 40 - worked)
 })
 
 const progressPercentage = computed(() => {
-  if (!weekSummary.value) return 0
-  const worked = parseFloat(weekSummary.value.completed.hours)
+  if (!currentWeekSummary.value) return 0
+  const worked = parseFloat(currentWeekSummary.value.completed.hours)
   return Math.min(100, (worked / 40) * 100)
+})
+
+// 🆕 Computeds para semana siguiente
+const nextWeekProgressPercentage = computed(() => {
+  if (!nextWeekSummary.value) return 0
+  const scheduled = parseFloat(nextWeekSummary.value.hours)
+  return Math.min(100, (scheduled / 40) * 100)
+})
+
+const nextWeekRemainingHours = computed(() => {
+  if (!nextWeekSummary.value) return 40
+  return Math.max(0, 40 - parseFloat(nextWeekSummary.value.hours))
 })
 </script>
 
@@ -195,164 +255,306 @@ const progressPercentage = computed(() => {
       <p class="header-subtitle">Aquí está tu resumen semanal</p>
     </div>
 
+    <!-- 🆕 Navegación de Semanas -->
+    <div class="week-tabs">
+      <button 
+        class="week-tab" 
+        :class="{ active: activeWeek === 0 }"
+        @click="switchWeek(0)"
+      >
+        <Calendar :size="16" />
+        Semana Actual
+      </button>
+      <button 
+        class="week-tab" 
+        :class="{ active: activeWeek === 1 }"
+        @click="switchWeek(1)"
+      >
+        <Calendar :size="16" />
+        Semana Siguiente
+      </button>
+    </div>
+
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-container">
       <div class="spinner"></div>
       <p>Cargando dashboard...</p>
     </div>
 
-    <!-- Dashboard Content -->
-    <div v-else class="dashboard-content">
-      
-      <!-- Resumen Semanal -->
-      <BaseCard v-if="weekSummary" padding="lg" class="summary-card" elevated>
-        <h2 class="section-title">
-          <Calendar :size="20" />
-          Resumen de la Semana
-        </h2>
+    <!-- 🆕 Slider Container -->
+    <div v-else class="slider-container">
+      <div class="slider-wrapper" :style="{ transform: `translateX(-${activeWeek * 100}%)` }">
         
-        <div class="progress-section">
-          <div class="progress-header">
-            <span class="progress-label">Horas trabajadas</span>
-            <span class="progress-value">
-              {{ weekSummary.completed.hours }} / 40h
-            </span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: progressPercentage + '%' }"></div>
-          </div>
-          <p class="progress-detail">
-            Te quedan {{ hoursRemaining.toFixed(1) }}h para completar las 40h semanales
-          </p>
-        </div>
-
-        <!-- 🆕 Grid de 6 cards (2 columnas en móvil, 3 en desktop) -->
-        <div class="stats-grid">
-          <!-- 1. Ganado esta semana -->
-          <div class="stat-card">
-            <div class="stat-icon stat-icon--green">
-              <DollarSign :size="24" />
-            </div>
-            <div class="stat-content">
-              <span class="stat-label">Ganado esta semana</span>
-              <span class="stat-value">${{ weekSummary.completed.pay }}</span>
-            </div>
-          </div>
-
-          <!-- 2. Millas recorridas -->
-          <div class="stat-card">
-            <div class="stat-icon stat-icon--blue">
-              <MapPin :size="24" />
-            </div>
-            <div class="stat-content">
-              <span class="stat-label">Millas recorridas</span>
-              <span class="stat-value">{{ weekSummary.completed.miles }} mi</span>
-            </div>
-          </div>
-
-          <!-- 3. Bloques completados -->
-          <div class="stat-card">
-            <div class="stat-icon stat-icon--purple">
-              <TrendingUp :size="24" />
-            </div>
-            <div class="stat-content">
-              <span class="stat-label">Bloques completados</span>
-              <span class="stat-value">{{ weekSummary.completed.routes }}</span>
-            </div>
-          </div>
-
-          <!-- 4. Bloques agendados -->
-          <div class="stat-card">
-            <div class="stat-icon stat-icon--orange">
-              <Clock :size="24" />
-            </div>
-            <div class="stat-content">
-              <span class="stat-label">Bloques agendados</span>
-              <span class="stat-value">{{ weekSummary.scheduled.blocks }}</span>
-            </div>
-          </div>
-
-          <!-- 🆕 5. Horas agendadas -->
-          <div class="stat-card">
-            <div class="stat-icon stat-icon--indigo">
-              <Calendar :size="24" />
-            </div>
-            <div class="stat-content">
-              <span class="stat-label">Horas agendadas</span>
-              <span class="stat-value">{{ hoursScheduled.toFixed(1) }}h</span>
-            </div>
-          </div>
-
-          <!-- 🆕 6. Horas libres -->
-          <div class="stat-card">
-            <div class="stat-icon stat-icon--teal">
-              <Clock :size="24" />
-            </div>
-            <div class="stat-content">
-              <span class="stat-label">Horas libres</span>
-              <span class="stat-value">{{ hoursFree.toFixed(1) }}h</span>
-            </div>
-          </div>
-        </div>
-      </BaseCard>
-
-      <!-- Bloques Agendados -->
-      <BaseCard padding="lg" class="blocks-card">
-        <div class="blocks-header">
-          <h2 class="section-title">
-            <Calendar :size="20" />
-            Próximos Bloques
-          </h2>
-          <BaseButton 
-            variant="primary" 
-            size="sm"
-            @click="goToSchedule"
-          >
-            <Plus :size="16" />
-            Nuevo Bloque
-          </BaseButton>
-        </div>
-
-        <!-- Lista de Bloques -->
-        <div v-if="scheduledBlocks.length > 0" class="blocks-list">
-          <div 
-            v-for="block in scheduledBlocks" 
-            :key="block.id"
-            class="block-item"
-            @click="openBlockModal(block)"
-          >
-            <div class="block-date">
-              <span class="block-day">{{ formatDate(block.fecha) }}</span>
-              <span class="block-time">{{ formatTime(block.hora) }}</span>
-            </div>
+        <!-- ========================================
+             SLIDE 1: SEMANA ACTUAL
+             ======================================== -->
+        <div class="slide">
+          <div class="dashboard-content">
             
-            <div class="block-details">
-              <div class="block-main">
-                <span class="block-warehouse">{{ block.warehouse }}</span>
-                <span class="block-duration">{{ block.duracion_horas }}h</span>
+            <!-- Resumen Semanal Actual -->
+            <BaseCard v-if="currentWeekSummary" padding="lg" class="summary-card" elevated>
+              <h2 class="section-title">
+                <Calendar :size="20" />
+                Resumen de la Semana
+              </h2>
+              
+              <div class="progress-section">
+                <div class="progress-header">
+                  <span class="progress-label">Horas trabajadas</span>
+                  <span class="progress-value">
+                    {{ currentWeekSummary.completed.hours }} / 40h
+                  </span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: progressPercentage + '%' }"></div>
+                </div>
+                <p class="progress-detail">
+                  Te quedan {{ hoursRemaining.toFixed(1) }}h para completar las 40h semanales
+                </p>
               </div>
-              <div class="block-meta">
-                <span class="block-vehicle">{{ block.vehiculo }}</span>
-                <span class="block-pay">${{ block.pago }}</span>
-              </div>
-            </div>
 
-            <div class="block-arrow">›</div>
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--green">
+                    <DollarSign :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Ganado esta semana</span>
+                    <span class="stat-value">${{ currentWeekSummary.completed.pay }}</span>
+                  </div>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--blue">
+                    <MapPin :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Millas recorridas</span>
+                    <span class="stat-value">{{ currentWeekSummary.completed.miles }} mi</span>
+                  </div>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--purple">
+                    <TrendingUp :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Bloques completados</span>
+                    <span class="stat-value">{{ currentWeekSummary.completed.routes }}</span>
+                  </div>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--orange">
+                    <Clock :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Bloques agendados</span>
+                    <span class="stat-value">{{ currentWeekSummary.scheduled.blocks }}</span>
+                  </div>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--indigo">
+                    <Calendar :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Horas agendadas</span>
+                    <span class="stat-value">{{ hoursScheduled.toFixed(1) }}h</span>
+                  </div>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--teal">
+                    <Clock :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Horas libres</span>
+                    <span class="stat-value">{{ hoursFree.toFixed(1) }}h</span>
+                  </div>
+                </div>
+              </div>
+            </BaseCard>
+
+            <!-- Bloques Agendados Semana Actual -->
+            <BaseCard padding="lg" class="blocks-card">
+              <div class="blocks-header">
+                <h2 class="section-title">
+                  <Calendar :size="20" />
+                  Próximos Bloques
+                </h2>
+                <BaseButton 
+                  variant="primary" 
+                  size="sm"
+                  @click="goToSchedule"
+                >
+                  <Plus :size="16" />
+                  Nuevo Bloque
+                </BaseButton>
+              </div>
+
+              <div v-if="currentWeekBlocks.length > 0" class="blocks-list">
+                <div 
+                  v-for="block in currentWeekBlocks" 
+                  :key="block.id"
+                  class="block-item"
+                  @click="openBlockModal(block)"
+                >
+                  <div class="block-date">
+                    <span class="block-day">{{ formatDate(block.fecha) }}</span>
+                    <span class="block-time">{{ formatTime(block.hora) }}</span>
+                  </div>
+                  
+                  <div class="block-details">
+                    <div class="block-main">
+                      <span class="block-warehouse">{{ block.warehouse }}</span>
+                      <span class="block-duration">{{ block.duracion_horas }}h</span>
+                    </div>
+                    <div class="block-meta">
+                      <span class="block-vehicle">{{ block.vehiculo }}</span>
+                      <span class="block-pay">${{ block.pago }}</span>
+                    </div>
+                  </div>
+                  
+                  <span class="block-arrow">›</span>
+                </div>
+              </div>
+
+              <div v-else class="empty-blocks">
+                <Calendar :size="48" class="empty-icon" />
+                <p class="empty-text">No tienes bloques agendados</p>
+                <BaseButton variant="primary" size="sm" @click="goToSchedule">
+                  Agendar Bloque
+                </BaseButton>
+              </div>
+            </BaseCard>
+
           </div>
         </div>
 
-        <!-- Empty State -->
-        <div v-else class="empty-blocks">
-          <Calendar :size="48" class="empty-icon" />
-          <p class="empty-text">No tienes bloques agendados para los próximos 7 días</p>
-          <BaseButton variant="primary" @click="goToSchedule">
-            Agendar Bloque
-          </BaseButton>
+        <!-- ========================================
+             SLIDE 2: SEMANA SIGUIENTE
+             ======================================== -->
+        <div class="slide">
+          <div class="dashboard-content">
+            
+            <!-- 🆕 Resumen Semana Siguiente -->
+            <BaseCard v-if="nextWeekSummary" padding="lg" class="summary-card" elevated>
+              <h2 class="section-title">
+                <Calendar :size="20" />
+                Semana Siguiente
+              </h2>
+              
+              <div class="progress-section">
+                <div class="progress-header">
+                  <span class="progress-label">Horas agendadas</span>
+                  <span class="progress-value">
+                    {{ nextWeekSummary.hours }} / 40h
+                  </span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill progress-fill--blue" :style="{ width: nextWeekProgressPercentage + '%' }"></div>
+                </div>
+                <p class="progress-detail">
+                  Te quedan {{ nextWeekRemainingHours.toFixed(1) }}h disponibles para agendar
+                </p>
+              </div>
+
+              <!-- 🆕 Stats compactos para semana siguiente -->
+              <div class="stats-grid stats-grid--compact">
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--orange">
+                    <Calendar :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Bloques agendados</span>
+                    <span class="stat-value">{{ nextWeekSummary.blocks }}</span>
+                  </div>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--green">
+                    <DollarSign :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Monto total</span>
+                    <span class="stat-value">${{ nextWeekSummary.pay }}</span>
+                  </div>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--indigo">
+                    <Clock :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Total de horas</span>
+                    <span class="stat-value">{{ nextWeekSummary.hours }}h</span>
+                  </div>
+                </div>
+              </div>
+            </BaseCard>
+
+            <!-- 🆕 Bloques Semana Siguiente (con botón expandible) -->
+            <BaseCard padding="lg" class="blocks-card">
+              <div class="blocks-header">
+                <h2 class="section-title">
+                  <Calendar :size="20" />
+                  Próximos Bloques
+                </h2>
+                <button 
+                  v-if="nextWeekBlocks.length > 0"
+                  class="toggle-blocks-btn"
+                  @click="toggleNextWeekBlocks"
+                >
+                  <span>{{ showNextWeekBlocks ? 'Ocultar' : 'Ver bloques' }}</span>
+                  <ChevronRight :size="16" :class="{ rotated: showNextWeekBlocks }" />
+                </button>
+              </div>
+
+              <!-- Lista expandible -->
+              <div v-if="nextWeekBlocks.length > 0 && showNextWeekBlocks" class="blocks-list blocks-list--animated">
+                <div 
+                  v-for="block in nextWeekBlocks" 
+                  :key="block.id"
+                  class="block-item"
+                  @click="openBlockModal(block)"
+                >
+                  <div class="block-date">
+                    <span class="block-day">{{ formatDate(block.fecha) }}</span>
+                    <span class="block-time">{{ formatTime(block.hora) }}</span>
+                  </div>
+                  
+                  <div class="block-details">
+                    <div class="block-main">
+                      <span class="block-warehouse">{{ block.warehouse }}</span>
+                      <span class="block-duration">{{ block.duracion_horas }}h</span>
+                    </div>
+                    <div class="block-meta">
+                      <span class="block-vehicle">{{ block.vehiculo }}</span>
+                      <span class="block-pay">${{ block.pago }}</span>
+                    </div>
+                  </div>
+                  
+                  <span class="block-arrow">›</span>
+                </div>
+              </div>
+
+              <div v-else-if="nextWeekBlocks.length === 0" class="empty-blocks">
+                <Calendar :size="48" class="empty-icon" />
+                <p class="empty-text">No tienes bloques agendados para la semana siguiente</p>
+                <BaseButton variant="primary" size="sm" @click="goToSchedule">
+                  Agendar Bloque
+                </BaseButton>
+              </div>
+            </BaseCard>
+
+          </div>
         </div>
-      </BaseCard>
+
+      </div>
     </div>
 
-    <!-- Modal de Detalles del Bloque -->
+    <!-- Modal de Bloque (sin cambios) -->
     <Teleport to="body">
       <div v-if="showBlockModal" class="modal-overlay" @click.self="closeBlockModal">
         <div class="modal-content">
@@ -361,80 +563,86 @@ const progressPercentage = computed(() => {
             <button class="close-btn" @click="closeBlockModal">×</button>
           </div>
           
-          <div v-if="selectedBlock" class="modal-body">
+          <div class="modal-body" v-if="selectedBlock">
             <div class="detail-row">
               <span class="detail-label">Fecha</span>
               <span class="detail-value">{{ formatDate(selectedBlock.fecha) }}</span>
             </div>
-            
             <div class="detail-row">
               <span class="detail-label">Hora</span>
               <span class="detail-value">{{ formatTime(selectedBlock.hora) }}</span>
             </div>
-            
-            <div class="detail-row">
-              <span class="detail-label">Warehouse</span>
-              <span class="detail-value">{{ selectedBlock.warehouse }}</span>
-            </div>
-            
             <div class="detail-row">
               <span class="detail-label">Duración</span>
               <span class="detail-value">{{ selectedBlock.duracion_horas }}h</span>
             </div>
-            
             <div class="detail-row">
-              <span class="detail-label">Pago</span>
-              <span class="detail-value">${{ selectedBlock.pago }}</span>
+              <span class="detail-label">Warehouse</span>
+              <span class="detail-value">{{ selectedBlock.warehouse }}</span>
             </div>
-            
             <div class="detail-row">
               <span class="detail-label">Vehículo</span>
               <span class="detail-value">{{ selectedBlock.vehiculo }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Pago</span>
+              <span class="detail-value">${{ selectedBlock.pago }}</span>
             </div>
           </div>
           
           <div class="modal-actions">
             <BaseButton 
               variant="primary" 
+              size="md" 
               class="modal-btn"
               @click="startBlock(selectedBlock)"
             >
-              Iniciar Bloque
+              Iniciar Ruta
             </BaseButton>
-            
             <BaseButton 
               variant="secondary" 
+              size="md" 
               class="modal-btn"
               @click="editBlock(selectedBlock)"
             >
               Editar
             </BaseButton>
-            
             <BaseButton 
               variant="danger" 
+              size="md" 
               class="modal-btn"
               @click="deleteBlock(selectedBlock)"
             >
-              Eliminar
+              Cancelar
             </BaseButton>
           </div>
         </div>
       </div>
     </Teleport>
+
   </div>
 </template>
 
 <style scoped>
 /* ============================================
-   🔥 CORRECCIÓN: Modal con padding-bottom seguro
+   Variables y Reset
    ============================================ */
+:root {
+  --color-primary: #3b82f6;
+  --color-primary-dark: #2563eb;
+  --color-text-primary: #1f2937;
+  --color-text-secondary: #6b7280;
+  --color-text-tertiary: #9ca3af;
+  --color-bg-secondary: #f9fafb;
+}
 
-/* Home View */
+/* ============================================
+   Layout Principal
+   ============================================ */
 .home-view {
-  padding: 20px;
-  padding-bottom: 100px;
-  background: var(--color-background);
   min-height: 100vh;
+  background: linear-gradient(to bottom, #f0f9ff, #ffffff);
+  padding: 20px 16px 100px;
 }
 
 /* Header */
@@ -443,7 +651,7 @@ const progressPercentage = computed(() => {
 }
 
 .greeting {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--color-text-primary);
   margin: 0 0 4px 0;
@@ -455,12 +663,61 @@ const progressPercentage = computed(() => {
   margin: 0;
 }
 
+/* 🆕 Navegación de Semanas (Tabs) */
+.week-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  background: white;
+  padding: 6px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.week-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.week-tab.active {
+  background: var(--color-primary);
+  color: white;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+/* 🆕 Slider Container */
+.slider-container {
+  overflow: hidden;
+  position: relative;
+}
+
+.slider-wrapper {
+  display: flex;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slide {
+  min-width: 100%;
+  flex-shrink: 0;
+}
+
 /* Loading */
 .loading-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 16px;
   padding: 60px 20px;
 }
@@ -468,10 +725,10 @@ const progressPercentage = computed(() => {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #f3f4f6;
+  border: 4px solid #e5e7eb;
   border-top-color: var(--color-primary);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
@@ -485,11 +742,7 @@ const progressPercentage = computed(() => {
   gap: 20px;
 }
 
-/* Summary Card */
-.summary-card {
-  background: white;
-}
-
+/* Section Title */
 .section-title {
   display: flex;
   align-items: center;
@@ -497,12 +750,19 @@ const progressPercentage = computed(() => {
   font-size: 18px;
   font-weight: 600;
   color: var(--color-text-primary);
-  margin: 0 0 20px 0;
+  margin: 0 0 16px 0;
+}
+
+/* ============================================
+   Summary Card
+   ============================================ */
+.summary-card {
+  background: white;
 }
 
 /* Progress Section */
 .progress-section {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .progress-header {
@@ -524,19 +784,23 @@ const progressPercentage = computed(() => {
 }
 
 .progress-bar {
-  width: 100%;
-  height: 8px;
+  height: 10px;
   background: #e5e7eb;
-  border-radius: 9999px;
+  border-radius: 999px;
   overflow: hidden;
   margin-bottom: 8px;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
-  border-radius: 9999px;
-  transition: width 0.3s ease;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+
+/* 🆕 Variante azul para horas agendadas */
+.progress-fill--blue {
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
 }
 
 .progress-detail {
@@ -545,103 +809,89 @@ const progressPercentage = computed(() => {
   margin: 0;
 }
 
-/* 🆕 Stats Grid - 2 columnas en móvil, 3 en desktop */
+/* Stats Grid */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
 
+/* 🆕 Grid compacto para semana siguiente (3 columnas en móvil) */
+.stats-grid--compact {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
 @media (min-width: 768px) {
   .stats-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
+  }
+  
+  .stats-grid--compact {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
 .stat-card {
   display: flex;
   align-items: center;
-  gap: 10px; /* Reducido de 12px */
-  padding: 12px; /* Reducido de 16px */
-  background: white;
-  border: 1px solid #e5e7eb;
+  gap: 10px;
+  padding: 14px;
+  background: var(--color-bg-secondary);
   border-radius: 12px;
   transition: all 0.2s;
-  cursor: default;
 }
 
 .stat-card:hover {
-  background: #f3f4f6;
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .stat-icon {
-  flex-shrink: 0;
-  width: 40px; /* Reducido de 48px */
-  height: 40px; /* Reducido de 48px */
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  background: white;
+  flex-shrink: 0;
 }
 
-.stat-icon--green { color: #10b981; }
-.stat-icon--blue { color: #3b82f6; }
-.stat-icon--purple { color: #8b5cf6; }
-.stat-icon--orange { color: #f59e0b; }
-.stat-icon--indigo { color: #6366f1; } /* 🆕 */
-.stat-icon--teal { color: #14b8a6; } /* 🆕 */
+.stat-icon--green { background: #d1fae5; color: #10b981; }
+.stat-icon--blue { background: #dbeafe; color: #3b82f6; }
+.stat-icon--purple { background: #ede9fe; color: #8b5cf6; }
+.stat-icon--orange { background: #fed7aa; color: #f59e0b; }
+.stat-icon--indigo { background: #e0e7ff; color: #6366f1; }
+.stat-icon--teal { background: #ccfbf1; color: #14b8a6; }
 
 .stat-content {
   display: flex;
   flex-direction: column;
-  gap: 2px; /* Reducido */
-  min-width: 0; /* Para permitir text-overflow */
-  flex: 1;
+  gap: 2px;
+  min-width: 0;
 }
 
 .stat-label {
-  font-size: 11px; /* Reducido de 12px */
+  font-size: 11px;
   color: var(--color-text-secondary);
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 2; /* Permite 2 líneas */
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
 .stat-value {
-  font-size: 18px; /* Reducido de 20px */
+  font-size: 18px;
   font-weight: 700;
   color: var(--color-text-primary);
   line-height: 1;
 }
 
-/* Ajustes específicos para desktop */
-@media (min-width: 768px) {
-  .stat-card {
-    padding: 16px;
-    gap: 12px;
-  }
-  
-  .stat-icon {
-    width: 48px;
-    height: 48px;
-  }
-  
-  .stat-label {
-    font-size: 12px;
-  }
-  
-  .stat-value {
-    font-size: 20px;
-  }
-}
-
-/* Blocks Card */
+/* ============================================
+   Blocks Card
+   ============================================ */
 .blocks-card {
   background: white;
 }
@@ -654,10 +904,55 @@ const progressPercentage = computed(() => {
   gap: 12px;
 }
 
+/* 🆕 Botón para mostrar/ocultar bloques */
+.toggle-blocks-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-blocks-btn:hover {
+  background: var(--color-primary-dark);
+}
+
+.toggle-blocks-btn svg {
+  transition: transform 0.3s;
+}
+
+.toggle-blocks-btn svg.rotated {
+  transform: rotate(90deg);
+}
+
+/* Lista de Bloques */
 .blocks-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* 🆕 Animación de entrada para bloques */
+.blocks-list--animated {
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .block-item {
@@ -777,9 +1072,8 @@ const progressPercentage = computed(() => {
 }
 
 /* ============================================
-   🔥 MODAL - CORRECCIÓN PRINCIPAL
+   MODAL
    ============================================ */
-
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -806,20 +1100,18 @@ const progressPercentage = computed(() => {
   border-radius: 20px 20px 0 0;
   width: 100%;
   max-width: 500px;
-  /* 🔥 CORRECCIÓN: Reducir altura máxima para dejar espacio al menú */
-  max-height: 75vh; /* Cambiado de 85vh a 75vh */
+  max-height: 75vh;
   display: flex;
   flex-direction: column;
   animation: slideUp 0.3s ease;
-  /* 🔥 CORRECCIÓN: Agregar margen inferior en móvil */
-  margin-bottom: 80px; /* Espacio para el menú de navegación */
+  margin-bottom: 80px;
 }
 
 @media (min-width: 768px) {
   .modal-content {
     border-radius: 20px;
     max-height: 90vh;
-    margin-bottom: 0; /* Sin margen en desktop */
+    margin-bottom: 0;
   }
 }
 
@@ -838,7 +1130,7 @@ const progressPercentage = computed(() => {
   align-items: center;
   padding: 20px;
   border-bottom: 1px solid #e5e7eb;
-  flex-shrink: 0; /* No permitir compresión */
+  flex-shrink: 0;
 }
 
 .modal-header h3 {
@@ -871,8 +1163,8 @@ const progressPercentage = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto; /* Permitir scroll si es necesario */
-  flex: 1; /* Tomar espacio disponible */
+  overflow-y: auto;
+  flex: 1;
 }
 
 .detail-row {
@@ -894,32 +1186,28 @@ const progressPercentage = computed(() => {
   color: var(--color-text-primary);
 }
 
-/* 🔥 CORRECCIÓN PRINCIPAL: Modal Actions con padding-bottom adicional */
 .modal-actions {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 20px;
-  /* 🔥 IMPORTANTE: Padding inferior adicional en móvil */
-  padding-bottom: 24px; /* Más espacio en la parte inferior */
+  padding-bottom: 24px;
   border-top: 1px solid #e5e7eb;
   background: white;
-  flex-shrink: 0; /* No permitir compresión */
-  /* 🔥 Asegurar que esté siempre visible */
+  flex-shrink: 0;
   position: relative;
   z-index: 10;
 }
 
 .modal-btn {
   width: 100%;
-  min-height: 44px; /* Asegurar altura táctil mínima */
+  min-height: 44px;
 }
 
-/* Desktop: botones en fila */
 @media (min-width: 768px) {
   .modal-actions {
     flex-direction: row;
-    padding-bottom: 20px; /* Padding normal en desktop */
+    padding-bottom: 20px;
   }
   
   .modal-btn {
@@ -927,7 +1215,6 @@ const progressPercentage = computed(() => {
   }
 }
 
-/* 🔥 CORRECCIÓN ADICIONAL: Safe area para dispositivos con notch */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .modal-content {
     margin-bottom: calc(80px + env(safe-area-inset-bottom));
