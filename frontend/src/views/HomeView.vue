@@ -48,11 +48,16 @@ async function loadDashboard() {
     }
     
     // Bloques semana actual (próximos 7 días desde hoy)
-    const today = new Date().toISOString().split('T')[0]
-    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const nextWeek = new Date(today)
+    nextWeek.setDate(today.getDate() + 7)
+    
+    const todayStr = today.toISOString().split('T')[0]
+    const nextWeekStr = nextWeek.toISOString().split('T')[0]
     
     const blocksResponse = await fetchWithAuth(
-      `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${today}&endDate=${nextWeek}`
+      `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${todayStr}&endDate=${nextWeekStr}`
     )
     const blocksResult = await blocksResponse.json()
     
@@ -63,13 +68,17 @@ async function loadDashboard() {
     // ========================================
     // 🆕 SEMANA SIGUIENTE
     // ========================================
-    // Calcular rango de la semana siguiente (del día 8 al 14)
-    const nextWeekStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    const nextWeekEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const nextWeekStart = new Date(today)
+    nextWeekStart.setDate(today.getDate() + 7)
+    const nextWeekEnd = new Date(today)
+    nextWeekEnd.setDate(today.getDate() + 14)
+    
+    const nextWeekStartStr = nextWeekStart.toISOString().split('T')[0]
+    const nextWeekEndStr = nextWeekEnd.toISOString().split('T')[0]
     
     // Cargar bloques de la semana siguiente
     const nextBlocksResponse = await fetchWithAuth(
-      `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${nextWeekStart}&endDate=${nextWeekEnd}`
+      `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${nextWeekStartStr}&endDate=${nextWeekEndStr}`
     )
     const nextBlocksResult = await nextBlocksResponse.json()
     
@@ -78,9 +87,14 @@ async function loadDashboard() {
       
       // 🆕 Calcular resumen de la semana siguiente
       nextWeekSummary.value = calculateNextWeekSummary(nextBlocksResult.blocks)
+      
+      console.log('✅ Semana siguiente:', {
+        bloques: nextWeekBlocks.value.length,
+        resumen: nextWeekSummary.value
+      })
     }
     
-    console.log('✅ Dashboard cargado (semana actual + siguiente)')
+    console.log('✅ Dashboard cargado completo')
     
   } catch (error) {
     console.error('❌ Error cargando dashboard:', error)
@@ -91,8 +105,23 @@ async function loadDashboard() {
 
 // 🆕 Calcular resumen de la semana siguiente
 function calculateNextWeekSummary(blocks) {
-  const totalHours = blocks.reduce((sum, block) => sum + parseFloat(block.duracion_horas || 0), 0)
-  const totalPay = blocks.reduce((sum, block) => sum + parseFloat(block.pago || 0), 0)
+  if (!blocks || blocks.length === 0) {
+    return {
+      blocks: 0,
+      hours: '0.0',
+      pay: '0.00'
+    }
+  }
+  
+  const totalHours = blocks.reduce((sum, block) => {
+    const hours = parseFloat(block.duracion_horas || 0)
+    return sum + hours
+  }, 0)
+  
+  const totalPay = blocks.reduce((sum, block) => {
+    const pay = parseFloat(block.pago || 0)
+    return sum + pay
+  }, 0)
   
   return {
     blocks: blocks.length,
@@ -169,6 +198,10 @@ function goToSchedule() {
 // 🆕 Cambiar entre semanas
 function switchWeek(weekIndex) {
   activeWeek.value = weekIndex
+  // Reset el estado de bloques expandidos al cambiar de semana
+  if (weekIndex === 1) {
+    showNextWeekBlocks.value = false
+  }
 }
 
 // 🆕 Alternar visibilidad de bloques semana siguiente
@@ -236,13 +269,13 @@ const progressPercentage = computed(() => {
 // 🆕 Computeds para semana siguiente
 const nextWeekProgressPercentage = computed(() => {
   if (!nextWeekSummary.value) return 0
-  const scheduled = parseFloat(nextWeekSummary.value.hours)
+  const scheduled = parseFloat(nextWeekSummary.value.hours || 0)
   return Math.min(100, (scheduled / 40) * 100)
 })
 
 const nextWeekRemainingHours = computed(() => {
   if (!nextWeekSummary.value) return 40
-  return Math.max(0, 40 - parseFloat(nextWeekSummary.value.hours))
+  return Math.max(0, 40 - parseFloat(nextWeekSummary.value.hours || 0))
 })
 </script>
 
@@ -283,7 +316,7 @@ const nextWeekRemainingHours = computed(() => {
 
     <!-- 🆕 Slider Container -->
     <div v-else class="slider-container">
-      <div class="slider-wrapper" :style="{ transform: `translateX(-${activeWeek * 100}%)` }">
+      <div class="slider-wrapper" :style="{ transform: `translateX(-${activeWeek * 50}%)` }">
         
         <!-- ========================================
              SLIDE 1: SEMANA ACTUAL
@@ -439,13 +472,13 @@ const nextWeekRemainingHours = computed(() => {
           <div class="dashboard-content">
             
             <!-- 🆕 Resumen Semana Siguiente -->
-            <BaseCard v-if="nextWeekSummary" padding="lg" class="summary-card" elevated>
+            <BaseCard padding="lg" class="summary-card" elevated>
               <h2 class="section-title">
                 <Calendar :size="20" />
                 Semana Siguiente
               </h2>
               
-              <div class="progress-section">
+              <div v-if="nextWeekSummary && nextWeekSummary.blocks > 0" class="progress-section">
                 <div class="progress-header">
                   <span class="progress-label">Horas agendadas</span>
                   <span class="progress-value">
@@ -460,6 +493,19 @@ const nextWeekRemainingHours = computed(() => {
                 </p>
               </div>
 
+              <div v-else class="progress-section">
+                <div class="progress-header">
+                  <span class="progress-label">Horas agendadas</span>
+                  <span class="progress-value">0.0 / 40h</span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill progress-fill--blue" style="width: 0%"></div>
+                </div>
+                <p class="progress-detail">
+                  Te quedan 40.0h disponibles para agendar
+                </p>
+              </div>
+
               <!-- 🆕 Stats compactos para semana siguiente -->
               <div class="stats-grid stats-grid--compact">
                 <div class="stat-card">
@@ -468,7 +514,7 @@ const nextWeekRemainingHours = computed(() => {
                   </div>
                   <div class="stat-content">
                     <span class="stat-label">Bloques agendados</span>
-                    <span class="stat-value">{{ nextWeekSummary.blocks }}</span>
+                    <span class="stat-value">{{ nextWeekSummary?.blocks || 0 }}</span>
                   </div>
                 </div>
 
@@ -478,7 +524,7 @@ const nextWeekRemainingHours = computed(() => {
                   </div>
                   <div class="stat-content">
                     <span class="stat-label">Monto total</span>
-                    <span class="stat-value">${{ nextWeekSummary.pay }}</span>
+                    <span class="stat-value">${{ nextWeekSummary?.pay || '0.00' }}</span>
                   </div>
                 </div>
 
@@ -488,7 +534,7 @@ const nextWeekRemainingHours = computed(() => {
                   </div>
                   <div class="stat-content">
                     <span class="stat-label">Total de horas</span>
-                    <span class="stat-value">{{ nextWeekSummary.hours }}h</span>
+                    <span class="stat-value">{{ nextWeekSummary?.hours || '0.0' }}h</span>
                   </div>
                 </div>
               </div>
@@ -554,7 +600,7 @@ const nextWeekRemainingHours = computed(() => {
       </div>
     </div>
 
-    <!-- Modal de Bloque (sin cambios) -->
+    <!-- Modal de Bloque -->
     <Teleport to="body">
       <div v-if="showBlockModal" class="modal-overlay" @click.self="closeBlockModal">
         <div class="modal-content">
@@ -701,15 +747,17 @@ const nextWeekRemainingHours = computed(() => {
 .slider-container {
   overflow: hidden;
   position: relative;
+  width: 100%;
 }
 
 .slider-wrapper {
   display: flex;
+  width: 200%; /* 2 slides = 200% */
   transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .slide {
-  min-width: 100%;
+  width: 50%; /* Cada slide ocupa 50% del wrapper (que es 200%) */
   flex-shrink: 0;
 }
 
@@ -740,6 +788,7 @@ const nextWeekRemainingHours = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  padding: 0 2px;
 }
 
 /* Section Title */
@@ -869,6 +918,7 @@ const nextWeekRemainingHours = computed(() => {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 
 .stat-label {
