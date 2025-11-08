@@ -48,31 +48,42 @@ async function loadDashboard() {
     }
     
     // ========================================
-    // 📅 CÁLCULO DE FECHAS
+    // 📅 CÁLCULO DE SEMANAS (LUNES-DOMINGO)
     // ========================================
     const now = new Date()
     now.setHours(0, 0, 0, 0)
     
-    // Semana actual: HOY hasta dentro de 6 días (7 días en total)
-    const currentWeekStart = new Date(now)
-    const currentWeekEnd = new Date(now)
-    currentWeekEnd.setDate(now.getDate() + 6)
+    // Obtener el día de la semana (0=Domingo, 1=Lunes, ..., 6=Sábado)
+    const dayOfWeek = now.getDay()
     
-    // Semana siguiente: Día 7 hasta día 13 (7 días también)
-    const nextWeekStart = new Date(now)
-    nextWeekStart.setDate(now.getDate() + 7)
-    const nextWeekEnd = new Date(now)
-    nextWeekEnd.setDate(now.getDate() + 13)
+    // Calcular días hasta el lunes (inicio de semana)
+    // Si es Domingo (0), retroceder 6 días
+    // Si es Lunes (1), retroceder 0 días
+    // Si es Martes (2), retroceder 1 día, etc.
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+    
+    // SEMANA ACTUAL: Lunes - Domingo
+    const currentWeekStart = new Date(now)
+    currentWeekStart.setDate(now.getDate() - daysToMonday)
+    
+    const currentWeekEnd = new Date(currentWeekStart)
+    currentWeekEnd.setDate(currentWeekStart.getDate() + 6) // +6 días = Domingo
+    
+    // SEMANA SIGUIENTE: Lunes - Domingo
+    const nextWeekStart = new Date(currentWeekStart)
+    nextWeekStart.setDate(currentWeekStart.getDate() + 7) // Siguiente lunes
+    
+    const nextWeekEnd = new Date(nextWeekStart)
+    nextWeekEnd.setDate(nextWeekStart.getDate() + 6) // +6 días = Domingo
     
     const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0]
     const currentWeekEndStr = currentWeekEnd.toISOString().split('T')[0]
     const nextWeekStartStr = nextWeekStart.toISOString().split('T')[0]
     const nextWeekEndStr = nextWeekEnd.toISOString().split('T')[0]
     
-    console.log('📅 Fechas calculadas:', {
-      semanaActual: { inicio: currentWeekStartStr, fin: currentWeekEndStr },
-      semanaSiguiente: { inicio: nextWeekStartStr, fin: nextWeekEndStr }
-    })
+    console.log('📅 HOY:', now.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }))
+    console.log('📅 Semana Actual (Lun-Dom):', currentWeekStartStr, '→', currentWeekEndStr)
+    console.log('📅 Semana Siguiente (Lun-Dom):', nextWeekStartStr, '→', nextWeekEndStr)
     
     // ========================================
     // BLOQUES SEMANA ACTUAL
@@ -84,7 +95,8 @@ async function loadDashboard() {
     
     if (blocksResult.success) {
       currentWeekBlocks.value = blocksResult.blocks
-      console.log('✅ Bloques semana actual:', blocksResult.blocks.length)
+      console.log('✅ Bloques semana actual:', blocksResult.blocks.length, 'bloques')
+      console.log('   Fechas:', blocksResult.blocks.map(b => b.fecha))
     }
     
     // ========================================
@@ -103,17 +115,21 @@ async function loadDashboard() {
       // 🆕 Calcular resumen de la semana siguiente
       nextWeekSummary.value = calculateNextWeekSummary(nextBlocksResult.blocks)
       
-      console.log('✅ Semana siguiente:', {
-        bloques: nextWeekBlocks.value.length,
-        resumen: nextWeekSummary.value,
-        detalles: nextBlocksResult.blocks.map(b => ({
+      console.log('✅ Bloques semana siguiente:', nextWeekBlocks.value.length, 'bloques')
+      console.log('   Fechas:', nextBlocksResult.blocks.map(b => b.fecha))
+      console.log('   📊 RESUMEN:', nextWeekSummary.value)
+      
+      if (nextBlocksResult.blocks.length > 0) {
+        console.log('   📋 Detalles:', nextBlocksResult.blocks.map(b => ({
           fecha: b.fecha,
+          warehouse: b.warehouse,
           horas: b.duracion_horas,
           pago: b.pago
-        }))
-      })
+        })))
+      }
     } else {
       console.log('⚠️ No se pudieron cargar bloques de semana siguiente')
+      console.log('   Error:', nextBlocksResult.error)
     }
     
     console.log('✅ Dashboard cargado completo')
