@@ -47,34 +47,49 @@ async function loadDashboard() {
       currentWeekSummary.value = summaryResult.summary
     }
     
-    // Bloques semana actual (próximos 7 días desde hoy)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const nextWeek = new Date(today)
-    nextWeek.setDate(today.getDate() + 7)
+    // ========================================
+    // 📅 CÁLCULO DE FECHAS
+    // ========================================
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
     
-    const todayStr = today.toISOString().split('T')[0]
-    const nextWeekStr = nextWeek.toISOString().split('T')[0]
+    // Semana actual: HOY hasta dentro de 6 días (7 días en total)
+    const currentWeekStart = new Date(now)
+    const currentWeekEnd = new Date(now)
+    currentWeekEnd.setDate(now.getDate() + 6)
     
+    // Semana siguiente: Día 7 hasta día 13 (7 días también)
+    const nextWeekStart = new Date(now)
+    nextWeekStart.setDate(now.getDate() + 7)
+    const nextWeekEnd = new Date(now)
+    nextWeekEnd.setDate(now.getDate() + 13)
+    
+    const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0]
+    const currentWeekEndStr = currentWeekEnd.toISOString().split('T')[0]
+    const nextWeekStartStr = nextWeekStart.toISOString().split('T')[0]
+    const nextWeekEndStr = nextWeekEnd.toISOString().split('T')[0]
+    
+    console.log('📅 Fechas calculadas:', {
+      semanaActual: { inicio: currentWeekStartStr, fin: currentWeekEndStr },
+      semanaSiguiente: { inicio: nextWeekStartStr, fin: nextWeekEndStr }
+    })
+    
+    // ========================================
+    // BLOQUES SEMANA ACTUAL
+    // ========================================
     const blocksResponse = await fetchWithAuth(
-      `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${todayStr}&endDate=${nextWeekStr}`
+      `${backendUrl}/api/scheduled-blocks/${userId.value}?status=scheduled&startDate=${currentWeekStartStr}&endDate=${currentWeekEndStr}`
     )
     const blocksResult = await blocksResponse.json()
     
     if (blocksResult.success) {
       currentWeekBlocks.value = blocksResult.blocks
+      console.log('✅ Bloques semana actual:', blocksResult.blocks.length)
     }
     
     // ========================================
-    // 🆕 SEMANA SIGUIENTE
+    // 🆕 BLOQUES SEMANA SIGUIENTE
     // ========================================
-    const nextWeekStart = new Date(today)
-    nextWeekStart.setDate(today.getDate() + 7)
-    const nextWeekEnd = new Date(today)
-    nextWeekEnd.setDate(today.getDate() + 14)
-    
-    const nextWeekStartStr = nextWeekStart.toISOString().split('T')[0]
-    const nextWeekEndStr = nextWeekEnd.toISOString().split('T')[0]
     
     // Cargar bloques de la semana siguiente
     const nextBlocksResponse = await fetchWithAuth(
@@ -90,8 +105,15 @@ async function loadDashboard() {
       
       console.log('✅ Semana siguiente:', {
         bloques: nextWeekBlocks.value.length,
-        resumen: nextWeekSummary.value
+        resumen: nextWeekSummary.value,
+        detalles: nextBlocksResult.blocks.map(b => ({
+          fecha: b.fecha,
+          horas: b.duracion_horas,
+          pago: b.pago
+        }))
       })
+    } else {
+      console.log('⚠️ No se pudieron cargar bloques de semana siguiente')
     }
     
     console.log('✅ Dashboard cargado completo')
