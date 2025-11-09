@@ -30,6 +30,9 @@ const showDowntownModal = ref(false);
 const orlandoApartments = ref([]);
 const downtownSelection = ref({});
 
+// 🤖 ARIA: Datos del sistema inteligente
+const ariaData = ref(null);
+
 // ✅ Usuario autenticado
 const { userId } = useAuth();
 const fileInputLabel = computed(() => {
@@ -552,17 +555,20 @@ const reportData = computed(() => {
       const isDowntown = stopData ? stopData.isDowntown : false;
       const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
       
-      segmentBaseStopTime += 1.5;
+      // ✅ NUEVO: No sumamos tiempo base aquí, se suma con multiplier en scenarioETAs
+      // segmentBaseStopTime += 1.5;  ← ELIMINADO
+      
       if (isDowntown) {
         downtownCount++;
-        segmentExtraStopTime += 3;
+        segmentExtraStopTime += 3;  // Downtown sigue siendo +3 min fijo
       } else if (isApartment) {
         aptCount++;
-        segmentExtraStopTime += 1.5;
+        segmentExtraStopTime += 0.75;  // ✅ NUEVO: Apartamentos +0.75 min
       }
     });
     
-    totalBaseStopTime += segmentBaseStopTime;
+    // ✅ NUEVO: Solo acumulamos extras, NO el tiempo base
+    // totalBaseStopTime += segmentBaseStopTime;  ← ELIMINADO
     totalExtraStopTime += segmentExtraStopTime;
     totalApartmentCount += aptCount + downtownCount;
     totalDowntownCount += downtownCount;
@@ -607,13 +613,15 @@ const reportData = computed(() => {
         const isDowntown = stopData ? stopData.isDowntown : false;
         const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
         
-        segmentBaseStopTime += 1.5;
+        // ✅ NUEVO: No sumamos tiempo base aquí
+        // segmentBaseStopTime += 1.5;  ← ELIMINADO
+        
         if (isDowntown) {
           downtownCount++;
-          segmentExtraStopTime += 3;
+          segmentExtraStopTime += 3;  // Downtown +3 min fijo
         } else if (isApartment) {
           aptCount++;
-          segmentExtraStopTime += 1.5;
+          segmentExtraStopTime += 0.75;  // ✅ NUEVO: Apartamentos +0.75 min
         }
       });
       
@@ -644,12 +652,14 @@ const reportData = computed(() => {
   const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
 
   const totalWorkMiles = toFirstStopDist + totalBlockMiles;
-  const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
+  // ✅ NUEVO: Solo sumamos totalExtraStopTime (apartamentos y downtown)
+  // El tiempo base por parada se suma con multipliers en scenarioETAs
+  const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalExtraStopTime;
   const totalNormalMiles = totalWorkMiles + toFinalDestDist;
   const totalNormalDuration = totalWorkDuration + toFinalDestDur;
   // 🆕 USAR SEGMENTOS INVERSOS REALES
   const totalInverseWorkMiles = toLastStopDist + inverseBlockMiles;
-  const totalInverseWorkDuration = toLastStopDur + inverseBlockDriveDuration + totalBaseStopTime + totalExtraStopTime;
+  const totalInverseWorkDuration = toLastStopDur + inverseBlockDriveDuration + totalExtraStopTime;
   const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
   const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
   
@@ -663,18 +673,18 @@ const reportData = computed(() => {
       totalWorkDuration: Math.round(totalWorkDuration),
       totalMiles: totalNormalMiles.toFixed(2),
       totalDuration: Math.round(totalNormalDuration),
-      baseDriveDuration: toFirstStopDur + totalBlockDriveDuration,
+      baseDriveDuration: toFirstStopDur + totalBlockDriveDuration + totalExtraStopTime, // ✅ Incluye extras
       commuteDuration: toFinalDestDur,
     },
     inverse: {
       toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
-      segments: inverseProcessedSegments,  // ✅ CORRECTO
+      segments: inverseProcessedSegments,
       toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
       totalWorkMiles: totalInverseWorkMiles.toFixed(2),
       totalWorkDuration: Math.round(totalInverseWorkDuration),
       totalMiles: totalInverseMiles.toFixed(2),
       totalDuration: Math.round(totalInverseDuration),
-      baseDriveDuration: toLastStopDur + inverseBlockDriveDuration,  // ✅ CORRECTO
+      baseDriveDuration: toLastStopDur + inverseBlockDriveDuration + totalExtraStopTime, // ✅ Incluye extras
       commuteDuration: fromFirstStopDur,
     },
     stopCount: totalStopCount,
@@ -700,14 +710,18 @@ const scenarioETAs = computed(() => {
   const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000);
   
   const calculateScenario = (baseDrive, commute, multiplier) => {
-    // 🐛 FIX: baseDrive ya incluye todos los tiempos de parada calculados en reportData:
-    // - totalBaseStopTime (1.5 min × número de paradas)
-    // - totalExtraStopTime (1.5 min × apartamentos regulares + 3 min × downtown)
-    // Por lo tanto, NO debemos volver a sumarlos aquí para evitar duplicación.
+    // ✅ NUEVA LÓGICA:
+    // - Tiempo base por parada: stopCount × multiplier minutos
+    // - Apartamentos regulares: ya sumados en totalExtraStopTime como +0.75 min c/u
+    // - Downtown: ya sumados en totalExtraStopTime como +3 min c/u
     
-    // Aplicar el multiplier al tiempo total de manejo (incluyendo paradas ya calculadas)
-    const adjustedDrive = (Number(baseDrive) || 0) * multiplier;
-    const routeDurationMinutes = adjustedDrive + (Number(commute) || 0);
+    const baseStopTime = stopCount * multiplier;
+    
+    // totalExtraStopTime ya viene calculado del reportData con los nuevos valores
+    // (0.75 por apt regular, 3 por downtown)
+    const routeDurationMinutes = (Number(baseDrive) || 0) 
+                               + baseStopTime 
+                               + (Number(commute) || 0);
     
     if (isNaN(routeDurationMinutes)) {
       return { totalDuration: 'N/A', eta: 'Error' };
@@ -725,16 +739,21 @@ const scenarioETAs = computed(() => {
   const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
   const inverseCommute = reportData.value.inverse.commuteDuration;
   
+  // 🤖 ARIA: Usar multiplier dinámico si está disponible, sino usar default
+  const ariaMultiplier = ariaData.value?.multiplier || 0.9;
+  const optimisticMultiplier = ariaMultiplier * 0.44; // ~45% del normal
+  const pessimisticMultiplier = ariaMultiplier * 1.39; // ~140% del normal
+  
   return {
     normal: {
-      optimistic: calculateScenario(normalBaseDrive, normalCommute, 0.90),
-      normal: calculateScenario(normalBaseDrive, normalCommute, 1.10),
-      pessimistic: calculateScenario(normalBaseDrive, normalCommute, 1.50)
+      optimistic: calculateScenario(normalBaseDrive, normalCommute, optimisticMultiplier),
+      normal: calculateScenario(normalBaseDrive, normalCommute, ariaMultiplier),
+      pessimistic: calculateScenario(normalBaseDrive, normalCommute, pessimisticMultiplier)
     },
     inverse: {
-      optimistic: calculateScenario(inverseBaseDrive, inverseCommute, 0.90),
-      normal: calculateScenario(inverseBaseDrive, inverseCommute, 1.10),
-      pessimistic: calculateScenario(inverseBaseDrive, inverseCommute, 1.50)
+      optimistic: calculateScenario(inverseBaseDrive, inverseCommute, optimisticMultiplier),
+      normal: calculateScenario(inverseBaseDrive, inverseCommute, ariaMultiplier),
+      pessimistic: calculateScenario(inverseBaseDrive, inverseCommute, pessimisticMultiplier)
     }
   };
 });
@@ -950,6 +969,12 @@ async function sendToBackend() {
       // 🆕 ASIGNAR RESULTADO (CON O SIN ERRORES)
       backendResponse.value = result;
       
+      // 🤖 ARIA: Capturar datos del sistema inteligente
+      if (result.aria) {
+        ariaData.value = result.aria;
+        console.log('🤖 ARIA: Multiplier recibido:', result.aria.multiplier);
+      }
+      
       // 🆕 SI HAY ERRORES, HACER SCROLL AUTOMÁTICO A LA ADVERTENCIA
       if (result.hasErrors) {
         console.error('❌ Errores detectados en la ruta:', result.failedAddresses);
@@ -997,7 +1022,9 @@ async function saveToLogbook() {
       stops_json: extractedAddresses.value,
       eta_optimista: scenarioETAs.value[selectedScenarioForLog.value].optimistic.eta, 
       eta_normal: scenarioETAs.value[selectedScenarioForLog.value].normal.eta, 
-      eta_pesimista: scenarioETAs.value[selectedScenarioForLog.value].pessimistic.eta 
+      eta_pesimista: scenarioETAs.value[selectedScenarioForLog.value].pessimistic.eta,
+      // 🤖 ARIA: Guardar multiplier usado
+      multiplier_usado: ariaData.value?.multiplier || 0.9
     };
 
     try {
@@ -1270,7 +1297,21 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
             </div>
             <hr>
             <div class="result-block">
-              <h4>➡️ Normal Route Breakdown</h4>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h4 style="margin: 0;">➡️ Normal Route Breakdown</h4>
+                <!-- 🤖 ARIA Badge -->
+                <div v-if="ariaData" class="aria-badge">
+                  <span class="aria-icon">🤖</span>
+                  <div class="aria-content">
+                    <span class="aria-label">ARIA</span>
+                    <span class="aria-value">{{ ariaData.multiplier.toFixed(2) }} min/stop</span>
+                  </div>
+                  <div class="aria-tooltip">
+                    Adaptive Route Intelligence Algorithm<br>
+                    Based on {{ ariaData.rutasAnalizadas }} recent routes
+                  </div>
+                </div>
+              </div>
               <p>To 1st Stop: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
               <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
                 <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
@@ -2854,4 +2895,102 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   background-color: #1f2937 !important; /* Gris oscuro */
   border-color: #4b5563 !important;
 }
+
+/* ========================================
+   🤖 ARIA BADGE STYLES
+   ======================================== */
+.aria-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 8px 14px;
+  border-radius: 20px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  position: relative;
+  cursor: help;
+  transition: all 0.3s ease;
+}
+
+.aria-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+}
+
+.aria-icon {
+  font-size: 1.2em;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.aria-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aria-label {
+  font-size: 0.65em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.aria-value {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: white;
+}
+
+.aria-tooltip {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  background: rgba(0, 0, 0, 0.95);
+  color: white;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.8em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  margin-bottom: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.aria-badge:hover .aria-tooltip {
+  opacity: 1;
+}
+
+.aria-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 20px;
+  border: 6px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.95);
+}
+
+@media (max-width: 768px) {
+  .aria-badge {
+    padding: 6px 10px;
+  }
+  
+  .aria-value {
+    font-size: 0.75em;
+  }
+  
+  .aria-tooltip {
+    right: -10px;
+    white-space: normal;
+    max-width: 200px;
+  }
+}
+
 </style>

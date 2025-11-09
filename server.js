@@ -153,6 +153,85 @@ function decryptStops(encryptedText) {
 }
 // --- Fin FASE 2 ---
 
+// ═══════════════════════════════════════════════════════════════
+// 🤖 ARIA SYSTEM (Adaptive Route Intelligence Algorithm)
+// ═══════════════════════════════════════════════════════════════
+
+async function calcularMultiplierARIA(userId) {
+  try {
+    console.log('🤖 ARIA: Calculando multiplier dinámico para user:', userId);
+    
+    // Obtener últimas 20 rutas con ETA normal Y real
+    const { data, error } = await supabase
+      .from('routes')
+      .select('error_por_parada, numero_paradas, fecha')
+      .eq('user_id', userId)
+      .not('eta_normal', 'is', null)
+      .not('eta_real', 'is', null)
+      .not('numero_paradas', 'is', null)
+      .gt('numero_paradas', 10) // Filtrar rutas muy cortas
+      .order('fecha', { ascending: false })
+      .limit(20);
+    
+    if (error) {
+      console.error('❌ ARIA: Error al obtener datos:', error);
+      return { multiplier: 0.9, rutasAnalizadas: 0, ajuste: 0 };
+    }
+    
+    if (!data || data.length < 5) {
+      console.log('⚠️ ARIA: No hay suficientes datos (mínimo 5 rutas), usando default 0.9');
+      return { multiplier: 0.9, rutasAnalizadas: data?.length || 0, ajuste: 0 };
+    }
+    
+    // Calcular promedio del error por parada
+    const erroresValidos = data.filter(r => 
+      r.error_por_parada !== null && 
+      Math.abs(r.error_por_parada) < 3 // Filtrar outliers extremos (>3 min/parada)
+    );
+    
+    if (erroresValidos.length === 0) {
+      console.log('⚠️ ARIA: No hay errores válidos, usando default 0.9');
+      return { multiplier: 0.9, rutasAnalizadas: 0, ajuste: 0 };
+    }
+    
+    const avgError = erroresValidos.reduce((sum, r) => sum + r.error_por_parada, 0) / erroresValidos.length;
+    
+    // Ajustar multiplier base (0.9)
+    let nuevoMultiplier = 0.9 + avgError;
+    
+    // Límites de seguridad
+    nuevoMultiplier = Math.max(0.3, Math.min(2.0, nuevoMultiplier));
+    
+    console.log('✅ ARIA: Multiplier calculado');
+    console.log(`   📊 Rutas analizadas: ${erroresValidos.length}`);
+    console.log(`   📉 Error promedio: ${avgError.toFixed(3)} min/parada`);
+    console.log(`   🎯 Multiplier ajustado: ${nuevoMultiplier.toFixed(2)} (base: 0.9)`);
+    
+    return {
+      multiplier: nuevoMultiplier,
+      rutasAnalizadas: erroresValidos.length,
+      ajuste: avgError
+    };
+    
+  } catch (error) {
+    console.error('❌ ARIA: Error inesperado:', error);
+    return { multiplier: 0.9, rutasAnalizadas: 0, ajuste: 0 };
+  }
+}
+
+// 🤖 ARIA: Helper para convertir TIME a minutos desde medianoche
+function convertTimeToMinutes(timeString) {
+  // timeString formato: "10:33:00" o "22:15:00"
+  const [hours, minutes] = timeString.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+console.log('🤖 ARIA System activado');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN ARIA SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
 // --- Tu función `calculateLeg` (sin cambios) ---
 async function calculateLeg(origin, destination, waypoints = []) {
     try {
@@ -195,16 +274,10 @@ async function calculateLeg(origin, destination, waypoints = []) {
         
         let totalDistance = 0;
         let totalDuration = 0;
-        
-        console.log(`   📊 Google Maps devolvió ${route.legs.length} legs para esta ruta:`);
-        route.legs.forEach((leg, idx) => {
-            const distMiles = (leg.distance.value / 1609.34).toFixed(2);
-            const durMinutes = Math.round(leg.duration.value / 60);
-            console.log(`      Leg ${idx + 1}: ${distMiles} mi | ${durMinutes} min`);
+        route.legs.forEach(leg => {
             totalDistance += leg.distance.value;
             totalDuration += leg.duration.value;
         });
-        console.log(`   📊 Total sumado: ${(totalDistance / 1609.34).toFixed(2)} mi | ${Math.round(totalDuration / 60)} min`);
 
         return {
             distance: (totalDistance / 1609.34).toFixed(2),
@@ -240,6 +313,10 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
   }
 
   try {
+    // 🤖 ARIA: Calcular multiplier dinámico ANTES de calcular la ruta
+    const ariaResult = await calcularMultiplierARIA(req.userId);
+    console.log(`🤖 ARIA: Usando multiplier ${ariaResult.multiplier.toFixed(2)} para esta ruta`);
+    
     const origin = addresses[0]; // Warehouse
     const finalDestination = addresses[addresses.length - 1]; // Último destino
     
@@ -435,18 +512,18 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
 
     console.log('🎉 v1.8: Cálculo completado correctamente (con ruta inversa real)');
     console.log('   RUTA NORMAL:');
-    console.log(`   Warehouse → Primera: ${toFirstStop.distance} mi | ${toFirstStop.duration} min`);
+    console.log(`   Warehouse → Primera: ${toFirstStop.distance} mi`);
     segmentsWithStops.forEach((seg, idx) => {
-        console.log(`   Segmento ${idx + 1}: ${seg.distance} mi | ${seg.duration} min (${seg.stops.length} paradas)`);
+        console.log(`   Segmento ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
     });
-    console.log(`   Última → Destino: ${toFinalDestination.distance} mi | ${toFinalDestination.duration} min`);
+    console.log(`   Última → Destino: ${toFinalDestination.distance} mi`);
     console.log('   ');
     console.log('   RUTA INVERSA:');
-    console.log(`   Warehouse → Última: ${toLastStopForInverse.distance} mi | ${toLastStopForInverse.duration} min`);
+    console.log(`   Warehouse → Última: ${toLastStopForInverse.distance} mi`);
     inverseSegmentsWithStops.forEach((seg, idx) => {
-        console.log(`   Segmento Inverso ${idx + 1}: ${seg.distance} mi | ${seg.duration} min (${seg.stops.length} paradas)`);
+        console.log(`   Segmento Inverso ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
     });
-    console.log(`   Primera → Destino: ${fromFirstStopToHome.distance} mi | ${fromFirstStopToHome.duration} min`);
+    console.log(`   Primera → Destino: ${fromFirstStopToHome.distance} mi`);
 
     res.json({
         hasErrors: false,
@@ -457,6 +534,12 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
             toLastStop: toLastStopForInverse,
             fromFirstStop: fromFirstStopToHome,
             segments: inverseSegmentsWithStops // 🆕 SEGMENTOS INVERSOS REALES
+        },
+        // 🤖 ARIA: Devolver datos del sistema inteligente
+        aria: {
+            multiplier: ariaResult.multiplier,
+            rutasAnalizadas: ariaResult.rutasAnalizadas,
+            ajuste: ariaResult.ajuste
         }
     });
 
@@ -547,7 +630,10 @@ app.post('/api/log-route', authenticateUser, async (req, res) => {    const logD
         stops_json: encryptedStops,
         eta_real: null,
         eta_real_input_date: null,
-        notes: null
+        notes: null,
+        
+        // 🤖 ARIA: Guardar multiplier usado
+        multiplier_usado: logData.multiplier_usado || null
     };
 
     Object.keys(dataToInsert).forEach(key => {
@@ -1189,6 +1275,39 @@ app.post('/api/complete-route', authenticateUser, async (req, res) => {
       return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
     };
     const timeFormatted = convertToTime(etaReal);
+    
+    // 🤖 ARIA: Obtener datos de la ruta para calcular error
+    const { data: routeData, error: fetchError } = await supabase
+      .from('routes')
+      .select('eta_normal, numero_paradas')
+      .eq('id', routeId)
+      .single();
+    
+    if (fetchError) {
+      console.error('⚠️ ARIA: No se pudo obtener datos de la ruta:', fetchError);
+    }
+    
+    // 🤖 ARIA: Calcular error si tenemos los datos necesarios
+    let errorMinutos = null;
+    let errorPorParada = null;
+    
+    if (routeData && routeData.eta_normal && routeData.numero_paradas) {
+      try {
+        // Convertir ambos tiempos a minutos desde medianoche
+        const realMinutes = convertTimeToMinutes(timeFormatted);
+        const normalMinutes = convertTimeToMinutes(routeData.eta_normal);
+        
+        errorMinutos = realMinutes - normalMinutes;
+        errorPorParada = errorMinutos / routeData.numero_paradas;
+        
+        console.log('🤖 ARIA: Error calculado');
+        console.log(`   ETA Normal: ${routeData.eta_normal}`);
+        console.log(`   ETA Real: ${timeFormatted}`);
+        console.log(`   Error: ${errorMinutos} min (${errorPorParada.toFixed(3)} min/parada)`);
+      } catch (e) {
+        console.error('⚠️ ARIA: Error al calcular diferencia:', e);
+      }
+    }
 
     const { data, error } = await supabase
       .from('routes')
@@ -1196,7 +1315,10 @@ app.post('/api/complete-route', authenticateUser, async (req, res) => {
         status: 0,
         eta_real: timeFormatted,
         eta_real_input_date: new Date().toISOString(),
-        stops_json: null // BORRAR DIRECCIONES
+        stops_json: null, // BORRAR DIRECCIONES
+        // 🤖 ARIA: Guardar error calculado
+        error_minutos: errorMinutos,
+        error_por_parada: errorPorParada
       })
       .eq('id', routeId)
       //.eq('status', 1) // Quitado para permitir actualizar rutas pendientes
