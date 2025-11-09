@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { fetchWithAuth } from '@/lib/api'
-import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin, ChevronRight } from 'lucide-vue-next'
+import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin } from 'lucide-vue-next'
 import { BaseButton, BaseCard } from '@/components/base'
 
 const router = useRouter()
@@ -23,9 +23,6 @@ const showBlockModal = ref(false)
 
 // 🆕 Control del slider (0 = semana actual, 1 = semana siguiente)
 const activeWeek = ref(0)
-
-// 🆕 Control de expansión de bloques semana siguiente
-const showNextWeekBlocks = ref(false)
 
 onMounted(async () => {
   await loadDashboard()
@@ -236,15 +233,6 @@ function goToSchedule() {
 // 🆕 Cambiar entre semanas
 function switchWeek(weekIndex) {
   activeWeek.value = weekIndex
-  // Reset el estado de bloques expandidos al cambiar de semana
-  if (weekIndex === 1) {
-    showNextWeekBlocks.value = false
-  }
-}
-
-// 🆕 Alternar visibilidad de bloques semana siguiente
-function toggleNextWeekBlocks() {
-  showNextWeekBlocks.value = !showNextWeekBlocks.value
 }
 
 // Formateo de fecha
@@ -578,25 +566,25 @@ const nextWeekRemainingHours = computed(() => {
               </div>
             </BaseCard>
 
-            <!-- 🆕 Bloques Semana Siguiente (con botón expandible) -->
+            <!-- 🆕 Bloques Semana Siguiente -->
             <BaseCard padding="lg" class="blocks-card">
               <div class="blocks-header">
                 <h2 class="section-title">
                   <Calendar :size="20" />
                   Próximos Bloques
                 </h2>
-                <button 
-                  v-if="nextWeekBlocks.length > 0"
-                  class="toggle-blocks-btn"
-                  @click="toggleNextWeekBlocks"
+                <BaseButton 
+                  variant="primary" 
+                  size="sm"
+                  @click="goToSchedule"
                 >
-                  <span>{{ showNextWeekBlocks ? 'Ocultar' : 'Ver bloques' }}</span>
-                  <ChevronRight :size="16" :class="{ rotated: showNextWeekBlocks }" />
-                </button>
+                  <Plus :size="16" />
+                  Nuevo Bloque
+                </BaseButton>
               </div>
 
-              <!-- Lista expandible -->
-              <div v-if="nextWeekBlocks.length > 0 && showNextWeekBlocks" class="blocks-list blocks-list--animated">
+              <!-- Lista siempre visible -->
+              <div v-if="nextWeekBlocks.length > 0" class="blocks-list">
                 <div 
                   v-for="block in nextWeekBlocks" 
                   :key="block.id"
@@ -623,7 +611,7 @@ const nextWeekRemainingHours = computed(() => {
                 </div>
               </div>
 
-              <div v-else-if="nextWeekBlocks.length === 0" class="empty-blocks">
+              <div v-else class="empty-blocks">
                 <Calendar :size="48" class="empty-icon" />
                 <p class="empty-text">No tienes bloques agendados para la semana siguiente</p>
                 <BaseButton variant="primary" size="sm" @click="goToSchedule">
@@ -992,55 +980,11 @@ const nextWeekRemainingHours = computed(() => {
   gap: 12px;
 }
 
-/* 🆕 Botón para mostrar/ocultar bloques */
-.toggle-blocks-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.toggle-blocks-btn:hover {
-  background: var(--color-primary-dark);
-}
-
-.toggle-blocks-btn svg {
-  transition: transform 0.3s;
-}
-
-.toggle-blocks-btn svg.rotated {
-  transform: rotate(90deg);
-}
-
 /* Lista de Bloques */
 .blocks-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-/* 🆕 Animación de entrada para bloques */
-.blocks-list--animated {
-  animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .block-item {
