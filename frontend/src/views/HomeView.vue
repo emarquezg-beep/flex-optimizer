@@ -318,7 +318,7 @@ const nextWeekRemainingHours = computed(() => {
     </div>
 
     <!-- 🆕 Navegación de Semanas -->
-    <div class="week-tabs">
+    <div v-show="!isLoading" class="week-tabs">
       <button 
         class="week-tab" 
         :class="{ active: activeWeek === 0 }"
@@ -749,6 +749,8 @@ const nextWeekRemainingHours = computed(() => {
   padding: 6px;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 10;
 }
 
 .week-tab {
