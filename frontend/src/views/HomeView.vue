@@ -20,6 +20,7 @@ const currentWeekBlocks = ref([])
 const nextWeekBlocks = ref([])
 const selectedBlock = ref(null)
 const showBlockModal = ref(false)
+const isNextWeekBlock = ref(false) // 🆕 Indica si el bloque es de la semana siguiente
 
 // 🆕 Control del slider (0 = semana actual, 1 = semana siguiente)
 const activeWeek = ref(0)
@@ -165,14 +166,16 @@ function calculateNextWeekSummary(blocks) {
   }
 }
 
-function openBlockModal(block) {
+function openBlockModal(block, isFromNextWeek = false) {
   selectedBlock.value = block
+  isNextWeekBlock.value = isFromNextWeek
   showBlockModal.value = true
 }
 
 function closeBlockModal() {
   showBlockModal.value = false
   selectedBlock.value = null
+  isNextWeekBlock.value = false
 }
 
 async function startBlock(block) {
@@ -589,7 +592,7 @@ const nextWeekRemainingHours = computed(() => {
                   v-for="block in nextWeekBlocks" 
                   :key="block.id"
                   class="block-item"
-                  @click="openBlockModal(block)"
+                  @click="openBlockModal(block, true)"
                 >
                   <div class="block-date">
                     <span class="block-day">{{ formatDate(block.fecha) }}</span>
@@ -663,7 +666,9 @@ const nextWeekRemainingHours = computed(() => {
           </div>
           
           <div class="modal-actions">
+            <!-- 🆕 Botón "Iniciar Ruta" solo para bloques de la semana actual -->
             <BaseButton 
+              v-if="!isNextWeekBlock"
               variant="primary" 
               size="md" 
               class="modal-btn"
