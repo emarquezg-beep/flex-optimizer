@@ -195,10 +195,16 @@ async function calculateLeg(origin, destination, waypoints = []) {
         
         let totalDistance = 0;
         let totalDuration = 0;
-        route.legs.forEach(leg => {
+        
+        console.log(`   📊 Google Maps devolvió ${route.legs.length} legs para esta ruta:`);
+        route.legs.forEach((leg, idx) => {
+            const distMiles = (leg.distance.value / 1609.34).toFixed(2);
+            const durMinutes = Math.round(leg.duration.value / 60);
+            console.log(`      Leg ${idx + 1}: ${distMiles} mi | ${durMinutes} min`);
             totalDistance += leg.distance.value;
             totalDuration += leg.duration.value;
         });
+        console.log(`   📊 Total sumado: ${(totalDistance / 1609.34).toFixed(2)} mi | ${Math.round(totalDuration / 60)} min`);
 
         return {
             distance: (totalDistance / 1609.34).toFixed(2),
@@ -429,18 +435,18 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
 
     console.log('🎉 v1.8: Cálculo completado correctamente (con ruta inversa real)');
     console.log('   RUTA NORMAL:');
-    console.log(`   Warehouse → Primera: ${toFirstStop.distance} mi`);
+    console.log(`   Warehouse → Primera: ${toFirstStop.distance} mi | ${toFirstStop.duration} min`);
     segmentsWithStops.forEach((seg, idx) => {
-        console.log(`   Segmento ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
+        console.log(`   Segmento ${idx + 1}: ${seg.distance} mi | ${seg.duration} min (${seg.stops.length} paradas)`);
     });
-    console.log(`   Última → Destino: ${toFinalDestination.distance} mi`);
+    console.log(`   Última → Destino: ${toFinalDestination.distance} mi | ${toFinalDestination.duration} min`);
     console.log('   ');
     console.log('   RUTA INVERSA:');
-    console.log(`   Warehouse → Última: ${toLastStopForInverse.distance} mi`);
+    console.log(`   Warehouse → Última: ${toLastStopForInverse.distance} mi | ${toLastStopForInverse.duration} min`);
     inverseSegmentsWithStops.forEach((seg, idx) => {
-        console.log(`   Segmento Inverso ${idx + 1}: ${seg.distance} mi (${seg.stops.length} paradas)`);
+        console.log(`   Segmento Inverso ${idx + 1}: ${seg.distance} mi | ${seg.duration} min (${seg.stops.length} paradas)`);
     });
-    console.log(`   Primera → Destino: ${fromFirstStopToHome.distance} mi`);
+    console.log(`   Primera → Destino: ${fromFirstStopToHome.distance} mi | ${fromFirstStopToHome.duration} min`);
 
     res.json({
         hasErrors: false,
