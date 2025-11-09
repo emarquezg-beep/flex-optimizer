@@ -700,9 +700,14 @@ const scenarioETAs = computed(() => {
   const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000);
   
   const calculateScenario = (baseDrive, commute, multiplier) => {
-    const baseStopTime = stopCount * multiplier;
-    const extraAptTime = (regularApartmentCount * 1.5) + (downtownCount * 3);
-    const routeDurationMinutes = (Number(baseDrive) || 0) + baseStopTime + extraAptTime + (Number(commute) || 0);
+    // 🐛 FIX: baseDrive ya incluye todos los tiempos de parada calculados en reportData:
+    // - totalBaseStopTime (1.5 min × número de paradas)
+    // - totalExtraStopTime (1.5 min × apartamentos regulares + 3 min × downtown)
+    // Por lo tanto, NO debemos volver a sumarlos aquí para evitar duplicación.
+    
+    // Aplicar el multiplier al tiempo total de manejo (incluyendo paradas ya calculadas)
+    const adjustedDrive = (Number(baseDrive) || 0) * multiplier;
+    const routeDurationMinutes = adjustedDrive + (Number(commute) || 0);
     
     if (isNaN(routeDurationMinutes)) {
       return { totalDuration: 'N/A', eta: 'Error' };
