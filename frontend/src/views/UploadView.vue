@@ -553,7 +553,8 @@ const reportData = computed(() => {
     (seg.stops || []).forEach(addr => {
       const stopData = extractedAddresses.value.find(s => s.address === addr);
       const isDowntown = stopData ? stopData.isDowntown : false;
-      const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
+      // ✅ FIX: Usar stopData.isApartment en lugar de regex en addr
+      const isApartment = stopData ? stopData.isApartment : (addr && addr.toUpperCase().match(/APT|UNIT|#/));
       
       // ✅ NUEVO: No sumamos tiempo base aquí, se suma con multiplier en scenarioETAs
       // segmentBaseStopTime += 1.5;  ← ELIMINADO
@@ -611,7 +612,8 @@ const reportData = computed(() => {
       (seg.stops || []).forEach(addr => {
         const stopData = extractedAddresses.value.find(s => s.address === addr);
         const isDowntown = stopData ? stopData.isDowntown : false;
-        const isApartment = addr && addr.toUpperCase().match(/APT|UNIT|#/);
+        // ✅ FIX: Usar stopData.isApartment en lugar de regex en addr
+        const isApartment = stopData ? stopData.isApartment : (addr && addr.toUpperCase().match(/APT|UNIT|#/));
         
         // ✅ NUEVO: No sumamos tiempo base aquí
         // segmentBaseStopTime += 1.5;  ← ELIMINADO
