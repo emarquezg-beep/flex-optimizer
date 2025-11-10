@@ -9,8 +9,6 @@ import { Client } from '@googlemaps/google-maps-services-js';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
-// --- 🆕 FASE 2: Dependencias de Encriptación ---
-const crypto = require('crypto');
 // IMPORTANTE: Asegúrate que STOPS_ENCRYPTION_KEY esté en tu .env
 const ENCRYPTION_KEY = process.env.STOPS_ENCRYPTION_KEY; // Debe ser 32 bytes (64 hex)
 const IV_LENGTH = 16;
