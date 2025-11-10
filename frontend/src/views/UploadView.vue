@@ -1345,7 +1345,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               <p class="total-time"><strong>Total Work: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
               <p>From 1st Stop to Destination: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
               <hr class="dotted-hr">
-              <p class="total-time grand-total"><strong>Total Route: {{ reportData.inverse.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
+              <p class="total-time grand-total"><strong>Total Route: {{ scenarioETAs.inverse.normal.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
             </div>
             <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
               <h4>⏱️ Arrival Estimates (Inverse Route)</h4>
