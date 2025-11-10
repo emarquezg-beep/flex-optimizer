@@ -1,11 +1,13 @@
 // server.js (v3.1 - ETA en Caliente + Segmentos Inversos v1.8)
 
-const { DateTime } = require('luxon');
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const { Client } = require('@googlemaps/google-maps-services-js');
-const { createClient } = require('@supabase/supabase-js');
+import { DateTime } from 'luxon';
+import dotenv from 'dotenv';
+dotenv.config();
+import express from 'express';
+import cors from 'cors';
+import { Client } from '@googlemaps/google-maps-services-js';
+import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 // --- 🆕 FASE 2: Dependencias de Encriptación ---
 const crypto = require('crypto');
