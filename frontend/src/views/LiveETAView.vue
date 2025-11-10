@@ -14,6 +14,7 @@ const isLoading = ref(true)
 const hasActiveRoute = ref(false)
 const activeRoute = ref(null)
 const currentStopInput = ref('')
+const customDestinationInput = ref('') // 🆕 Nuevo
 const isCalculating = ref(false)
 const liveETAs = ref(null)
 const etaRealInput = ref('')
@@ -93,11 +94,16 @@ async function calculateLiveETA() {
       method: 'POST',
       body: JSON.stringify({
         routeId: activeRoute.value.id,
-        currentStopNumber: stopNumber
+        currentStopNumber: stopNumber,
+        customDestination: customDestinationInput.value.trim() || null // 🆕 Enviar destino custom
       })
     })
 
     const result = await response.json()
+
+    if (result.destinationChanged) {
+    console.warn('⚠️ Destino modificado - Esta ruta no se usará para ARIA');
+    }
 
     if (result.success) {
       liveETAs.value = result
@@ -133,7 +139,8 @@ async function completeRoute() {
       method: 'POST',
       body: JSON.stringify({
         routeId: activeRoute.value.id,
-        etaReal: etaRealInput.value.trim()
+        etaReal: etaRealInput.value.trim(),
+        destinationUsed: liveETAs.value?.destinationUsed || activeRoute.value.destination_address // 🆕
       })
     })
 
@@ -277,6 +284,15 @@ const canComplete = computed(() => {
             label="¿En qué parada estás?"
             :disabled="isCalculating"
             class="stop-input"
+          />
+            <!-- 🆕 Nuevo input para destino -->
+          <BaseInput
+            v-model="customDestinationInput"
+            type="text"
+            placeholder="Ej: 123 Main St Orlando, FL"
+            label="Destino final (opcional)"
+            :disabled="isCalculating"
+            class="destination-input"
           />
           <BaseButton
             @click="calculateLiveETA"

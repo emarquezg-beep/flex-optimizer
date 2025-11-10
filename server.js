@@ -166,6 +166,7 @@ async function calcularMultiplierARIA(userId) {
       .from('routes')
       .select('error_por_parada, numero_paradas, fecha')
       .eq('user_id', userId)
+      .eq('destination_changed', false) // 🆕 SOLO rutas válidas para ARIA
       .not('eta_normal', 'is', null)
       .not('eta_real', 'is', null)
       .not('numero_paradas', 'is', null)
@@ -631,7 +632,9 @@ app.post('/api/log-route', authenticateUser, async (req, res) => {    const logD
         eta_real: null,
         eta_real_input_date: null,
         notes: null,
-        
+        // 🆕 Guardar destino final original
+        destination_address: logData.destination_address || null,
+        destination_changed: false, // Por defecto, no ha cambiado
         // 🤖 ARIA: Guardar multiplier usado
         multiplier_usado: logData.multiplier_usado || null
     };
@@ -787,14 +790,29 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     if (error || !route) {
       throw new Error('Ruta no encontrada o ya finalizada');
     }
+     // 2. Determinar destino final a usar
+    let finalDestinationAddress = customDestination || 
+                                  route.destination_address || 
+                                  '513 Alafaya Woods Blvd Oviedo, FL'; // Default fallback
     
-    // 2. Desencriptar paradas
+    // 3. 🆕 Detectar si el destino cambió
+    const destinationChanged = customDestination && 
+                              customDestination.trim() !== '' && 
+                              route.destination_address && 
+                              customDestination.trim().toLowerCase() !== route.destination_address.toLowerCase();
+    
+    if (destinationChanged) {
+      console.log(`⚠️ Destino cambió: "${route.destination_address}" → "${customDestination}"`);
+      console.log(`⚠️ Esta ruta NO se usará para ARIA al finalizarse`);
+    }
+       
+    // 4. Desencriptar paradas
     const allStops = decryptStops(route.stops_json);
     if (!allStops) {
       throw new Error('Error desencriptando paradas');
     }
     
-    // 3. Filtrar paradas restantes
+    // 5. Filtrar paradas restantes
     const remainingStops = allStops.filter(
       stop => stop.number >= currentStopNumber && stop.address
     );
@@ -808,12 +826,11 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
 
     console.log(`   📍 Paradas restantes: ${remainingStops.length}`);
     
-    // 4. 🤖 ARIA: Calcular multiplier dinámico
+    // 6. 🤖 ARIA: Calcular multiplier dinámico
     const ariaResult = await calcularMultiplierARIA(req.userId);
     console.log(`   🤖 ARIA multiplier: ${ariaResult.multiplier.toFixed(2)}`);
     
-    // 5. Construir ruta segmentada para Google Maps
-    const finalDestinationAddress = '513 Alafaya Woods Blvd Oviedo, FL';
+    // 7. Construir ruta segmentada para Google Maps
     const allRemainingPoints = remainingStops.map(s => s.address);
     allRemainingPoints.push(finalDestinationAddress);
 
@@ -838,14 +855,14 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     
     console.log(`   🗺️  Segmentos creados: ${routeSegments.length}`);
     
-    // 6. Llamar a Google Maps API
+    // 8. Llamar a Google Maps API
     const segmentPromises = routeSegments.map(seg => 
       calculateLeg(seg.origin, seg.destination, seg.waypoints)
     );
     
     const segmentResults = await Promise.all(segmentPromises);
     
-    // 7. Sumar distancias y tiempos de Google Maps
+    // 9. Sumar distancias y tiempos de Google Maps
     let totalDistance = 0;
     let totalGoogleDuration = 0;
     
@@ -856,7 +873,7 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     
     console.log(`   📊 Google Maps: ${totalDistance.toFixed(2)} mi, ${totalGoogleDuration} min`);
     
-    // 8. Detectar apartamentos y downtown (usando campo isApartment del JSON)
+    // 10. Detectar apartamentos y downtown (usando campo isApartment del JSON)
     let aptCount = 0;
     let downtownCount = 0;
     
@@ -875,7 +892,7 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     
     console.log(`   🏢 Apartamentos: ${aptCount}, Downtown: ${downtownCount}`);
     
-    // 9. Calcular tiempos de parada con ARIA
+    // 11. Calcular tiempos de parada con ARIA
     const stopCount = remainingStops.length;
     const baseStopTime = stopCount * ariaResult.multiplier;
     const extraAptTime = aptCount * 0.75;
@@ -884,7 +901,7 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     
     console.log(`   ⏱️  Tiempo paradas: ${totalStopTime.toFixed(1)} min (${baseStopTime.toFixed(1)} base + ${extraAptTime.toFixed(1)} apts + ${extraDowntownTime.toFixed(1)} DT)`);
     
-   // 10. Calcular ETAs (optimista, normal, pesimista)
+   // 11. Calcular ETAs (optimista, normal, pesimista)
 const nowEST = DateTime.now().setZone('America/New_York');
 const totalNormalMinutes = totalGoogleDuration + totalStopTime;
 
@@ -902,12 +919,14 @@ const etaPessimistic = nowEST.plus({ minutes: totalGoogleDuration + pessimisticS
 console.log(`   🎯 ETA Normal: ${etaNormal.toLocaleString(DateTime.TIME_SIMPLE)}`);
 console.log(`✅ Live ETA calculado exitosamente`);
 
-// 11. Respuesta
+// 12. Respuesta
 res.json({
   success: true,
   remainingStops: stopCount,
   remainingMiles: totalDistance.toFixed(2),
   remainingMinutes: Math.round(totalNormalMinutes),
+  destinationChanged: destinationChanged, // 🆕 Informar al frontend
+  destinationUsed: finalDestinationAddress, // 🆕 Mostrar qué destino se usó
   aria: {
     multiplier: ariaResult.multiplier,
     rutasAnalizadas: ariaResult.rutasAnalizadas,
@@ -1272,7 +1291,7 @@ app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (r
 
 // 3. POST /api/complete-route
 app.post('/api/complete-route', authenticateUser, async (req, res) => {
-  const { userId: userIdFromBody, routeId, etaReal } = req.body; // etaReal: "5:11 PM"
+  const { userId: userIdFromBody, routeId, etaReal, destinationUsed } = req.body; // etaReal: "5:11 PM"
   // Validar que el usuario solo complete sus propias rutas
   if (userIdFromBody && userIdFromBody !== req.userId) {
     return res.status(403).json({
@@ -1301,35 +1320,44 @@ app.post('/api/complete-route', authenticateUser, async (req, res) => {
     // 🤖 ARIA: Obtener datos de la ruta para calcular error
     const { data: routeData, error: fetchError } = await supabase
       .from('routes')
-      .select('eta_normal, numero_paradas')
+      .select('eta_normal, numero_paradas, destination_address')
       .eq('id', routeId)
       .single();
-    
-    if (fetchError) {
+
+      if (fetchError) {
       console.error('⚠️ ARIA: No se pudo obtener datos de la ruta:', fetchError);
     }
+    
+    // 🆕 Verificar si el destino cambió
+    const destinationChanged = destinationUsed && 
+                            routeData.destination_address &&
+                            destinationUsed.toLowerCase() !== routeData.destination_address.toLowerCase();
+  
     
     // 🤖 ARIA: Calcular error si tenemos los datos necesarios
     let errorMinutos = null;
     let errorPorParada = null;
     
-    if (routeData && routeData.eta_normal && routeData.numero_paradas) {
-      try {
-        // Convertir ambos tiempos a minutos desde medianoche
-        const realMinutes = convertTimeToMinutes(timeFormatted);
-        const normalMinutes = convertTimeToMinutes(routeData.eta_normal);
-        
-        errorMinutos = realMinutes - normalMinutes;
-        errorPorParada = errorMinutos / routeData.numero_paradas;
-        
-        console.log('🤖 ARIA: Error calculado');
-        console.log(`   ETA Normal: ${routeData.eta_normal}`);
-        console.log(`   ETA Real: ${timeFormatted}`);
-        console.log(`   Error: ${errorMinutos} min (${errorPorParada.toFixed(3)} min/parada)`);
-      } catch (e) {
-        console.error('⚠️ ARIA: Error al calcular diferencia:', e);
-      }
+  // Solo calcular error si el destino NO cambió
+  if (routeData && routeData.eta_normal && routeData.numero_paradas && !destinationChanged) {
+    try {
+      const realMinutes = convertTimeToMinutes(timeFormatted);
+      const normalMinutes = convertTimeToMinutes(routeData.eta_normal);
+      
+      errorMinutos = realMinutes - normalMinutes;
+      errorPorParada = errorMinutos / routeData.numero_paradas;
+      
+      console.log('🤖 ARIA: Error calculado');
+      console.log(`   ETA Normal: ${routeData.eta_normal}`);
+      console.log(`   ETA Real: ${timeFormatted}`);
+      console.log(`   Error: ${errorMinutos} min (${errorPorParada.toFixed(3)} min/parada)`);
+    } catch (e) {
+      console.error('⚠️ ARIA: Error al calcular diferencia:', e);
     }
+  } else if (destinationChanged) {
+    console.log('⚠️ ARIA: Destino cambió - NO se calculará error para ARIA');
+  }
+
 
     const { data, error } = await supabase
       .from('routes')
@@ -1338,9 +1366,10 @@ app.post('/api/complete-route', authenticateUser, async (req, res) => {
         eta_real: timeFormatted,
         eta_real_input_date: new Date().toISOString(),
         stops_json: null, // BORRAR DIRECCIONES
-        // 🤖 ARIA: Guardar error calculado
-        error_minutos: errorMinutos,
-        error_por_parada: errorPorParada
+       // 🤖 ARIA: Guardar error calculado (o NULL si destino cambió)
+      error_minutos: errorMinutos,
+      error_por_parada: errorPorParada,
+      destination_changed: destinationChanged // 🆕 Marcar si cambió
       })
       .eq('id', routeId)
       //.eq('status', 1) // Quitado para permitir actualizar rutas pendientes

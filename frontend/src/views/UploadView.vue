@@ -1035,7 +1035,11 @@ async function saveToLogbook() {
       eta_normal: scenarioETAs.value[selectedScenarioForLog.value].normal.eta, 
       eta_pesimista: scenarioETAs.value[selectedScenarioForLog.value].pessimistic.eta,
       // 🤖 ARIA: Guardar multiplier usado
-      multiplier_usado: ariaData.value?.multiplier || 0.9
+      multiplier_usado: ariaData.value?.multiplier || 0.9,
+        // 🆕 Agregar destino final
+      destination_address: selectedDestination.value === 'custom' 
+      ? customDestination.value 
+      : selectedDestination.value
     };
 
     try {
