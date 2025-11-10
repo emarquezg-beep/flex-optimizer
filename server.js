@@ -885,7 +885,7 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     console.log(`   ⏱️  Tiempo paradas: ${totalStopTime.toFixed(1)} min (${baseStopTime.toFixed(1)} base + ${extraAptTime.toFixed(1)} apts + ${extraDowntownTime.toFixed(1)} DT)`);
     
     // 10. Calcular ETAs (optimista, normal, pesimista)
-    const now = new Date();
+    const now = DateTime.now().setZone('America/New_York').toJSDate();
     const totalNormalMinutes = totalGoogleDuration + totalStopTime;
     
     const optimisticMultiplier = ariaResult.multiplier * 0.44;
