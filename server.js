@@ -758,43 +758,34 @@ app.get('/api/active-route/:userId', authenticateUser, async (req, res) => {
     console.log('🕐 Hora servidor (now):', new Date().toString());
     console.log('🕐 Hora servidor (ISO):', new Date().toISOString());
 
-// 2. POST /api/calculate-live-eta (CON SEGMENTACIÓN)
+// REEMPLAZA TU ENDPOINT /api/calculate-live-eta CON ESTE:
+
+// ========================================
+// LIVE ETA CALCULATION - CON ARIA
+// ========================================
 app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
-  // 🚫 DEPRECADO: userId ya no se usa, se obtiene del token
   const { routeId, currentStopNumber } = req.body;
-  
-  // Validar que el usuario solo calcule ETA para sus propias rutas
-  // (req.userId viene del middleware authenticateUser)
-  if (!req.userId) {
-    return res.status(401).json({
-      success: false,
-      error: 'Usuario no autenticado'
-    });
-  }
   
   if (!routeId || !currentStopNumber) {
     return res.status(400).json({
+      success: false,
       error: 'Falta routeId o currentStopNumber'
     });
   }
 
   try {
-    // 🤖 NUEVO: Obtener el multiplier de ARIA primero
-    const ariaResult = await calcularMultiplierARIA(req.userId);
-    console.log(`🤖 ARIA: Usando multiplier ${ariaResult.multiplier.toFixed(2)} para cálculo en vivo`);
-
-    // 1. Obtener ruta (validando que sea del usuario)
+    console.log(`🔄 Calculando Live ETA para ruta ${routeId} desde parada ${currentStopNumber}`);
+    
+    // 1. Obtener ruta activa
     const { data: route, error } = await supabase
       .from('routes')
       .select('*')
       .eq('id', routeId)
-      .eq('user_id', req.userId) // ⬅️ NUEVO: Seguridad
       .eq('status', 1)
       .single();
 
-    if (error) {
-      console.error('❌ Error obteniendo ruta:', error);
-      throw new Error('Ruta no encontrada, no pertenece al usuario o ya finalizó');
+    if (error || !route) {
+      throw new Error('Ruta no encontrada o ya finalizada');
     }
     
     // 2. Desencriptar paradas
@@ -803,133 +794,150 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
       throw new Error('Error desencriptando paradas');
     }
     
-    // 3. Filtrar paradas
+    // 3. Filtrar paradas restantes
     const remainingStops = allStops.filter(
       stop => stop.number >= currentStopNumber && stop.address
     );
+    
     if (remainingStops.length === 0) {
       return res.status(400).json({
+        success: false,
         error: 'No hay paradas restantes desde esa posición'
       });
     }
 
-    console.log(`Recalculando desde parada ${currentStopNumber}`);
-    console.log(`Paradas restantes: ${remainingStops.length} `);
+    console.log(`   📍 Paradas restantes: ${remainingStops.length}`);
     
-    // 4. CONSTRUIR RUTA SEGMENTADA
-    const finalDestinationAddress = '513 Alafaya Woods Blvd Oviedo, FL'; // Asumido, o podrías guardarlo en la ruta
+    // 4. 🤖 ARIA: Calcular multiplier dinámico
+    const ariaResult = await calcularMultiplierARIA(req.userId);
+    console.log(`   🤖 ARIA multiplier: ${ariaResult.multiplier.toFixed(2)}`);
+    
+    // 5. Construir ruta segmentada para Google Maps
+    const finalDestinationAddress = '513 Alafaya Woods Blvd Oviedo, FL';
     const allRemainingPoints = remainingStops.map(s => s.address);
     allRemainingPoints.push(finalDestinationAddress);
 
-    const STOPS_PER_SEGMENT = 26; 
+    const STOPS_PER_SEGMENT = 26;
     const routeSegments = [];
 
     for (let i = 0; i < allRemainingPoints.length; i += (STOPS_PER_SEGMENT - 1)) {
-        const segmentPoints = allRemainingPoints.slice(i, i + STOPS_PER_SEGMENT);
-        
-        if (segmentPoints.length > 0) {
-            if (segmentPoints.length === 1 && i > 0) {
-               break; 
-            }
-            routeSegments.push({
-                origin: segmentPoints[0],
-                destination: segmentPoints[segmentPoints.length - 1],
-                waypoints: segmentPoints.slice(1, -1)
-            });
+      const segmentPoints = allRemainingPoints.slice(i, i + STOPS_PER_SEGMENT);
+      
+      if (segmentPoints.length > 0) {
+        if (segmentPoints.length === 1 && i > 0) {
+          break;
         }
+
+        routeSegments.push({
+          origin: segmentPoints[0],
+          destination: segmentPoints[segmentPoints.length - 1],
+          waypoints: segmentPoints.slice(1, -1)
+        });
+      }
     }
     
-    // 5. LLAMAR A GOOGLE MAPS API POR SEGMENTOS
+    console.log(`   🗺️  Segmentos creados: ${routeSegments.length}`);
+    
+    // 6. Llamar a Google Maps API
     const segmentPromises = routeSegments.map(seg => 
-        calculateLeg(seg.origin, seg.destination, seg.waypoints)
+      calculateLeg(seg.origin, seg.destination, seg.waypoints)
     );
     
     const segmentResults = await Promise.all(segmentPromises);
-
-    // 6. CALCULAR TOTALES Y ETAs
+    
+    // 7. Sumar distancias y tiempos de Google Maps
     let totalDistance = 0;
-    let totalDuration = 0;
-    let hasError = false;
-
-    segmentResults.forEach(res => {
-      if (res.error) hasError = true;
-      totalDuration += res.duration;
-      totalDistance += parseFloat(res.distance);
+    let totalGoogleDuration = 0;
+    
+    segmentResults.forEach(result => {
+      totalDistance += parseFloat(result.distance || 0);
+      totalGoogleDuration += parseFloat(result.duration || 0);
     });
-
-    if (hasError) {
-      throw new Error('Error calculando un segmento de la ruta con Google Maps');
-    }
     
-    const baseDriveMinutes = totalDuration;
-    const remainingMiles = totalDistance;
+    console.log(`   📊 Google Maps: ${totalDistance.toFixed(2)} mi, ${totalGoogleDuration} min`);
     
-    // 🤖 NUEVO: Lógica de conteo (como en UploadView)
-    const stopCount = remainingStops.length; 
-    let aptCount = 0;         // Apartamentos regulares
+    // 8. Detectar apartamentos y downtown (usando campo isApartment del JSON)
+    let aptCount = 0;
     let downtownCount = 0;
     
     remainingStops.forEach(stop => {
+      // Asegurar que isApartment existe (para rutas viejas)
+      if (stop.isApartment === undefined) {
+        stop.isApartment = stop.address && stop.address.toUpperCase().match(/APT|UNIT|#/);
+      }
+      
       if (stop.isDowntown) {
         downtownCount++;
-      } else if (stop.isApartment) { // <-- Lógica corregida (isApartment == true)
+      } else if (stop.isApartment) {
         aptCount++;
       }
     });
-
-    // 🤖 NUEVO: Helper de cálculo con la lógica de tiempo correcta
-    const calculateETA = (multiplier) => {
-      const baseStopTime = stopCount * multiplier;
-      
-      // ⬇️ Lógica de tiempo corregida (0.75 min y 3.0 min)
-      const extraAptTime = (aptCount * 0.75) + (downtownCount * 3.0);
-      
-      const totalMinutes = baseDriveMinutes + baseStopTime + extraAptTime; 
-      const now = new Date();
-      const etaTime = new Date(now.getTime() + totalMinutes * 60000);
-      
-      return {
-        totalMinutes: Math.round(totalMinutes),
-        eta: etaTime.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZone: 'America/New_York' 
-        })
-      };
-    };
-
-    // 🤖 NUEVO: Usar multipliers de ARIA
-    const ariaMultiplier = ariaResult.multiplier || 0.9;
-    const optimisticMultiplier = ariaMultiplier * 0.44;
-    const pessimisticMultiplier = ariaMultiplier * 1.39;
-
-    const liveETAs = {
-      optimistic: calculateETA(optimisticMultiplier),
-      normal: calculateETA(ariaMultiplier),
-      pessimistic: calculateETA(pessimisticMultiplier)
-    };
-
-    console.log('✅ ETAs recalculados (con ARIA y lógica v4.2):', liveETAs);
+    
+    console.log(`   🏢 Apartamentos: ${aptCount}, Downtown: ${downtownCount}`);
+    
+    // 9. Calcular tiempos de parada con ARIA
+    const stopCount = remainingStops.length;
+    const baseStopTime = stopCount * ariaResult.multiplier;
+    const extraAptTime = aptCount * 0.75;
+    const extraDowntownTime = downtownCount * 3;
+    const totalStopTime = baseStopTime + extraAptTime + extraDowntownTime;
+    
+    console.log(`   ⏱️  Tiempo paradas: ${totalStopTime.toFixed(1)} min (${baseStopTime.toFixed(1)} base + ${extraAptTime.toFixed(1)} apts + ${extraDowntownTime.toFixed(1)} DT)`);
+    
+    // 10. Calcular ETAs (optimista, normal, pesimista)
+    const now = new Date();
+    const totalNormalMinutes = totalGoogleDuration + totalStopTime;
+    
+    const optimisticMultiplier = ariaResult.multiplier * 0.44;
+    const pessimisticMultiplier = ariaResult.multiplier * 1.39;
+    
+    const optimisticStopTime = stopCount * optimisticMultiplier + extraAptTime + extraDowntownTime;
+    const pessimisticStopTime = stopCount * pessimisticMultiplier + extraAptTime + extraDowntownTime;
+    
+    const etaOptimistic = new Date(now.getTime() + (totalGoogleDuration + optimisticStopTime) * 60000);
+    const etaNormal = new Date(now.getTime() + totalNormalMinutes * 60000);
+    const etaPessimistic = new Date(now.getTime() + (totalGoogleDuration + pessimisticStopTime) * 60000);
+    
+    console.log(`   🎯 ETA Normal: ${etaNormal.toLocaleTimeString()}`);
+    console.log(`✅ Live ETA calculado exitosamente`);
+    
+    // 11. Respuesta
     res.json({
       success: true,
-      currentStop: currentStopNumber,
-      remainingStops: remainingStops.length,
-      remainingMiles: remainingMiles.toFixed(2),
-      etas: liveETAs,
-      breakdown: {
-        baseDriveMinutes: Math.round(baseDriveMinutes),
-        stopCount,
-        aptCount: aptCount, // Esto es aptos REGULARES
-        downtownCount
-      },
-      // 🤖 NUEVO: Enviar datos de ARIA al frontend
+      remainingStops: stopCount,
+      remainingMiles: totalDistance.toFixed(2),
+      remainingMinutes: Math.round(totalNormalMinutes),
       aria: {
         multiplier: ariaResult.multiplier,
         rutasAnalizadas: ariaResult.rutasAnalizadas,
         ajuste: ariaResult.ajuste
+      },
+      breakdown: {
+        googleTime: Math.round(totalGoogleDuration),
+        googleMiles: totalDistance.toFixed(2),
+        baseStopTime: Math.round(baseStopTime),
+        apartmentCount: aptCount,
+        apartmentTime: Math.round(extraAptTime),
+        downtownCount: downtownCount,
+        downtownTime: Math.round(extraDowntownTime),
+        totalStopTime: Math.round(totalStopTime)
+      },
+      etas: {
+        optimistic: {
+          time: etaOptimistic.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+          minutes: Math.round(totalGoogleDuration + optimisticStopTime)
+        },
+        normal: {
+          time: etaNormal.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+          minutes: Math.round(totalNormalMinutes)
+        },
+        pessimistic: {
+          time: etaPessimistic.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+          minutes: Math.round(totalGoogleDuration + pessimisticStopTime)
+        }
       }
     });
-
+    
   } catch (error) {
     console.error('❌ Error en calculate-live-eta:', error);
     res.status(500).json({
@@ -938,6 +946,7 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     });
   }
 });
+
     // ========================================
 // SCHEDULED BLOCKS ENDPOINTS - v4.1
 // ========================================
@@ -1340,7 +1349,6 @@ app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (r
         downtownCount
       }
     });
-
 
 // 3. POST /api/complete-route
 app.post('/api/complete-route', authenticateUser, async (req, res) => {

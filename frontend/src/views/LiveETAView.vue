@@ -19,7 +19,6 @@ const liveETAs = ref(null)
 const etaRealInput = ref('')
 const isCompleting = ref(false)
 const completionStatus = ref(null)
-const ariaData = ref(null)
 
 onMounted(async () => {
   await loadActiveRoute()
@@ -85,7 +84,6 @@ async function calculateLiveETA() {
 
   isCalculating.value = true
   liveETAs.value = null
-  ariaData.value = null // ⬅️ NUEVO: Resetea ARIA
 
   try {
     const response = await fetchWithAuth(`${backendUrl}/api/calculate-live-eta`, {
@@ -101,13 +99,6 @@ async function calculateLiveETA() {
     if (result.success) {
       liveETAs.value = result
       console.log('🔥 ETAs en caliente calculados:', result)
-
-      // 🤖 NUEVO: Capturar datos de ARIA
-      if (result.aria) {
-        ariaData.value = result.aria
-        console.log('🤖 ARIA: Multiplier (en vivo) recibido:', result.aria.multiplier)
-      }
-
     } else {
       throw new Error(result.error || 'Error calculando ETAs')
     }
@@ -267,27 +258,10 @@ const canComplete = computed(() => {
       <!-- Live Calculation Section -->
       <BaseCard padding="lg" class="calculation-card">
         <div class="section-header">
-          
-          <div class="flex-header">
-            <div>
-              <h2 class="section-title">🔥 Cálculo en Caliente</h2>
-              <p class="section-description">
-                Ingresa en qué parada estás para recalcular tu ETA
-              </p>
-            </div>
-            
-            <div v-if="ariaData" class="aria-badge">
-              <span class="aria-icon">🤖</span>
-              <div class="aria-content">
-                <span class="aria-label">ARIA</span>
-                <span class="aria-value">{{ ariaData.multiplier.toFixed(2) }} min/stop</span>
-              </div>
-              <div class="aria-tooltip">
-                Adaptive Route Intelligence Algorithm<br>
-                Based on {{ ariaData.rutasAnalizadas }} recent routes
-              </div>
-            </div>
-            </div>
+          <h2 class="section-title">🔥 Cálculo en Caliente</h2>
+          <p class="section-description">
+            Ingresa en qué parada estás para recalcular tu ETA
+          </p>
         </div>
         
         <div class="input-row">
@@ -1031,114 +1005,6 @@ const canComplete = computed(() => {
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
-  }
-}
-
-/* ========================================
-   HEADER FLEX & ARIA BADGE
-   ======================================== */
-
-.flex-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-4);
-}
-
-.aria-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 8px 14px;
-  border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-  position: relative;
-  cursor: help;
-  transition: all 0.3s ease;
-  flex-shrink: 0;
-  margin-top: var(--space-1);
-}
-
-.aria-badge:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
-}
-
-.aria-icon {
-  font-size: 1.2em;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-}
-
-.aria-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.aria-label {
-  font-size: 0.65em;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.aria-value {
-  font-size: 0.9em;
-  font-weight: 600;
-  color: white;
-}
-
-.aria-tooltip {
-  position: absolute;
-  bottom: 100%;
-  right: 0;
-  background: rgba(0, 0, 0, 0.95);
-  color: white;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 0.8em;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease;
-  margin-bottom: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 10;
-}
-
-.aria-badge:hover .aria-tooltip {
-  opacity: 1;
-}
-
-.aria-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 20px;
-  border: 6px solid transparent;
-  border-top-color: rgba(0, 0, 0, 0.95);
-}
-
-@media (max-width: 768px) {
-  .aria-badge {
-    padding: 6px 10px;
-  }
-  
-  .aria-value {
-    font-size: 0.75em;
-  }
-  
-  .aria-tooltip {
-    right: -10px;
-    white-space: normal;
-    max-width: 200px;
   }
 }
 </style>
