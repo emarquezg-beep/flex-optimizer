@@ -665,6 +665,15 @@ const reportData = computed(() => {
   const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
   const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
   
+    // 🐛 DEBUG: Logs de detección
+  console.log('═══════════════════════════════════════');
+  console.log('📊 ARIA Debug - Detección de Paradas:');
+  console.log('  🏠 Total paradas:', totalStopCount);
+  console.log('  🏢 Apartamentos detectados:', totalApartmentCount);
+  console.log('  🏙️ Downtown detectados:', totalDowntownCount);
+  console.log('  ⏱️ Tiempo extra acumulado:', totalExtraStopTime.toFixed(1), 'min');
+  console.log('  📐 Breakdown: ', totalApartmentCount - totalDowntownCount, 'apts × 0.75 +', totalDowntownCount, 'DT × 3');
+  console.log('═══════════════════════════════════════');
   return {
     savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
     normal: {
@@ -1313,6 +1322,20 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
                     Based on {{ ariaData.rutasAnalizadas }} recent routes
                   </div>
                 </div>
+              </div>
+                            <!-- 📊 ARIA Breakdown Detail -->
+              <div v-if="ariaData && reportData" class="aria-breakdown">
+                <small>
+                  <strong>Calculation:</strong> 
+                  {{ reportData.stopCount }} stops × {{ ariaData.multiplier.toFixed(2) }} 
+                  <span v-if="reportData.apartmentCount > 0">
+                    + {{ reportData.apartmentCount - reportData.downtownCount }} apts × 0.75
+                  </span>
+                  <span v-if="reportData.downtownCount > 0">
+                    + {{ reportData.downtownCount }} DT × 3
+                  </span>
+                  = {{ (reportData.stopCount * ariaData.multiplier + (reportData.apartmentCount - reportData.downtownCount) * 0.75 + reportData.downtownCount * 3).toFixed(1) }} min added
+                </small>
               </div>
               <p>To 1st Stop: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
               <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
@@ -2993,6 +3016,47 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
     white-space: normal;
     max-width: 200px;
   }
+}
+
+@media (max-width: 768px) {
+  .aria-badge {
+    padding: 6px 10px;
+  }
+  
+  .aria-value {
+    font-size: 0.75em;
+  }
+  
+  .aria-tooltip {
+    right: -10px;
+    white-space: normal;
+    max-width: 200px;
+  }
+}
+
+/* 📊 ARIA Breakdown Detail */
+.aria-breakdown {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-left: 3px solid #667eea;
+  padding: 8px 12px;
+  margin: 8px 0 12px 0;
+  border-radius: 4px;
+}
+
+.aria-breakdown small {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.aria-breakdown strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.aria-breakdown span {
+  color: #667eea;
+  font-weight: 500;
 }
 
 </style>
