@@ -19,6 +19,9 @@ const liveETAs = ref(null)
 const etaRealInput = ref('')
 const isCompleting = ref(false)
 const completionStatus = ref(null)
+// 🤖 ARIA: Datos del sistema inteligente
+const ariaData = computed(() => liveETAs.value?.aria || null)
+const breakdownData = computed(() => liveETAs.value?.breakdown || null)
 
 onMounted(async () => {
   await loadActiveRoute()
@@ -255,7 +258,7 @@ const canComplete = computed(() => {
         </p>
       </BaseCard>
 
-      <!-- Live Calculation Section -->
+<!-- Live Calculation Section -->
       <BaseCard padding="lg" class="calculation-card">
         <div class="section-header">
           <h2 class="section-title">🔥 Cálculo en Caliente</h2>
@@ -289,28 +292,62 @@ const canComplete = computed(() => {
 
         <!-- ETA Results -->
         <div v-if="liveETAs" class="eta-results">
-          <div class="results-header">
+          <!-- 🤖 ARIA Header with Badge -->
+          <div class="aria-header">
             <h3 class="results-title">⏱️ Llegada Estimada</h3>
-            <div class="results-stats">
-              <span class="stat-item">
-                <MapPin :size="14" />
-                {{ liveETAs.remainingStops }} paradas
-              </span>
-              <span class="stat-item">
-                <Navigation :size="14" />
-                {{ liveETAs.remainingMiles }} mi
-              </span>
+            <div v-if="ariaData" class="aria-badge-live">
+              <span class="aria-icon">🤖</span>
+              <div class="aria-content">
+                <span class="aria-label">ARIA</span>
+                <span class="aria-value">{{ ariaData.multiplier.toFixed(2) }} min/stop</span>
+              </div>
+              <div class="aria-tooltip">
+                Adaptive Route Intelligence Algorithm<br>
+                Based on {{ ariaData.rutasAnalizadas }} recent routes
+              </div>
             </div>
           </div>
 
+          <!-- 📊 ARIA Breakdown -->
+          <div v-if="ariaData && breakdownData" class="aria-breakdown-live">
+            <small>
+              <strong>Calculation:</strong> 
+              {{ liveETAs.remainingStops }} stops × {{ ariaData.multiplier.toFixed(2) }} 
+              <span v-if="breakdownData.apartmentCount > 0">
+                + {{ breakdownData.apartmentCount }} apts × 0.75
+              </span>
+              <span v-if="breakdownData.downtownCount > 0">
+                + {{ breakdownData.downtownCount }} DT × 3
+              </span>
+              = {{ breakdownData.totalStopTime }} min added to {{ breakdownData.googleTime }} min driving
+            </small>
+          </div>
+
+          <!-- Stats Row -->
+          <div class="results-stats">
+            <span class="stat-item">
+              <MapPin :size="14" />
+              {{ liveETAs.remainingStops }} paradas
+            </span>
+            <span class="stat-item">
+              <Navigation :size="14" />
+              {{ liveETAs.remainingMiles }} mi
+            </span>
+            <span class="stat-item">
+              <Clock :size="14" />
+              {{ liveETAs.remainingMinutes }} min
+            </span>
+          </div>
+
+          <!-- ETA Cards Grid -->
           <div class="eta-cards-grid">
             <div class="eta-card eta-card--optimistic">
               <div class="eta-card-header">
                 <span class="eta-emoji">😊</span>
                 <span class="eta-label">Optimista</span>
               </div>
-              <div class="eta-time">{{ liveETAs.etas.optimistic.eta }}</div>
-              <div class="eta-duration">{{ liveETAs.etas.optimistic.totalMinutes }} min</div>
+              <div class="eta-time">{{ liveETAs.etas.optimistic.time }}</div>
+              <div class="eta-duration">{{ liveETAs.etas.optimistic.minutes }} min</div>
             </div>
             
             <div class="eta-card eta-card--normal">
@@ -318,8 +355,8 @@ const canComplete = computed(() => {
                 <span class="eta-emoji">😐</span>
                 <span class="eta-label">Normal</span>
               </div>
-              <div class="eta-time">{{ liveETAs.etas.normal.eta }}</div>
-              <div class="eta-duration">{{ liveETAs.etas.normal.totalMinutes }} min</div>
+              <div class="eta-time">{{ liveETAs.etas.normal.time }}</div>
+              <div class="eta-duration">{{ liveETAs.etas.normal.minutes }} min</div>
             </div>
             
             <div class="eta-card eta-card--pessimistic">
@@ -327,8 +364,8 @@ const canComplete = computed(() => {
                 <span class="eta-emoji">😰</span>
                 <span class="eta-label">Pesimista</span>
               </div>
-              <div class="eta-time">{{ liveETAs.etas.pessimistic.eta }}</div>
-              <div class="eta-duration">{{ liveETAs.etas.pessimistic.totalMinutes }} min</div>
+              <div class="eta-time">{{ liveETAs.etas.pessimistic.time }}</div>
+              <div class="eta-duration">{{ liveETAs.etas.pessimistic.minutes }} min</div>
             </div>
           </div>
 
@@ -337,20 +374,28 @@ const canComplete = computed(() => {
             <summary class="tech-summary">Ver detalles técnicos</summary>
             <div class="tech-grid">
               <div class="tech-item">
-                <span class="tech-label">Drive Base</span>
-                <span class="tech-value">{{ liveETAs.breakdown.baseDriveMinutes }} min</span>
+                <span class="tech-label">Google Maps Time</span>
+                <span class="tech-value">{{ breakdownData?.googleTime || 0 }} min</span>
               </div>
               <div class="tech-item">
-                <span class="tech-label">Paradas</span>
-                <span class="tech-value">{{ liveETAs.breakdown.stopCount }}</span>
+                <span class="tech-label">Base Stop Time</span>
+                <span class="tech-value">{{ breakdownData?.baseStopTime || 0 }} min</span>
+              </div>
+              <div class="tech-item">
+                <span class="tech-label">Paradas Restantes</span>
+                <span class="tech-value">{{ liveETAs.remainingStops }}</span>
               </div>
               <div class="tech-item">
                 <span class="tech-label">Apartamentos</span>
-                <span class="tech-value">{{ liveETAs.breakdown.aptCount }}</span>
+                <span class="tech-value">{{ breakdownData?.apartmentCount || 0 }} (+{{ breakdownData?.apartmentTime || 0 }} min)</span>
               </div>
               <div class="tech-item">
                 <span class="tech-label">Downtown</span>
-                <span class="tech-value">{{ liveETAs.breakdown.downtownCount }}</span>
+                <span class="tech-value">{{ breakdownData?.downtownCount || 0 }} (+{{ breakdownData?.downtownTime || 0 }} min)</span>
+              </div>
+              <div class="tech-item">
+                <span class="tech-label">ARIA Multiplier</span>
+                <span class="tech-value">{{ ariaData?.multiplier.toFixed(2) || '0.90' }}</span>
               </div>
             </div>
           </details>
@@ -1005,6 +1050,171 @@ const canComplete = computed(() => {
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
+  }
+}
+
+/* ========================================
+   🤖 ARIA STYLES - LIVE ETA
+   ======================================== */
+.aria-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--border-primary);
+}
+
+.aria-header .results-title {
+  margin: 0;
+}
+
+.aria-badge-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 10px 16px;
+  border-radius: 24px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  position: relative;
+  cursor: help;
+  transition: all 0.3s ease;
+}
+
+.aria-badge-live:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+}
+
+.aria-icon {
+  font-size: 1.3em;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.aria-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aria-label {
+  font-size: 0.7em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
+
+.aria-value {
+  font-size: 0.95em;
+  font-weight: 600;
+  color: white;
+}
+
+.aria-tooltip {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  background: rgba(0, 0, 0, 0.95);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.85em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+}
+
+.aria-badge-live:hover .aria-tooltip {
+  opacity: 1;
+}
+
+.aria-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 24px;
+  border: 7px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.95);
+}
+
+.aria-breakdown-live {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-left: 3px solid #667eea;
+  padding: 12px 16px;
+  margin-bottom: var(--space-4);
+  border-radius: 6px;
+}
+
+.aria-breakdown-live small {
+  color: var(--text-secondary);
+  font-size: 0.9em;
+  line-height: 1.6;
+}
+
+.aria-breakdown-live strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.aria-breakdown-live span {
+  color: #667eea;
+  font-weight: 500;
+}
+
+.results-stats {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+@media (max-width: 768px) {
+  .aria-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  
+  .aria-badge-live {
+    padding: 8px 12px;
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .aria-tooltip {
+    right: 50%;
+    transform: translateX(50%);
+    white-space: normal;
+    max-width: 240px;
+    text-align: center;
+  }
+  
+  .aria-tooltip::after {
+    right: 50%;
+    transform: translateX(50%);
+  }
+
+  .results-stats {
+    justify-content: space-between;
   }
 }
 </style>
