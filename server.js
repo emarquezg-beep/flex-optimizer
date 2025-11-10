@@ -884,59 +884,60 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     
     console.log(`   ⏱️  Tiempo paradas: ${totalStopTime.toFixed(1)} min (${baseStopTime.toFixed(1)} base + ${extraAptTime.toFixed(1)} apts + ${extraDowntownTime.toFixed(1)} DT)`);
     
-    // 10. Calcular ETAs (optimista, normal, pesimista)
-    const now = DateTime.now().setZone('America/New_York').toJSDate();
-    const totalNormalMinutes = totalGoogleDuration + totalStopTime;
-    
-    const optimisticMultiplier = ariaResult.multiplier * 0.44;
-    const pessimisticMultiplier = ariaResult.multiplier * 1.39;
-    
-    const optimisticStopTime = stopCount * optimisticMultiplier + extraAptTime + extraDowntownTime;
-    const pessimisticStopTime = stopCount * pessimisticMultiplier + extraAptTime + extraDowntownTime;
-    
-    const etaOptimistic = new Date(now.getTime() + (totalGoogleDuration + optimisticStopTime) * 60000);
-    const etaNormal = new Date(now.getTime() + totalNormalMinutes * 60000);
-    const etaPessimistic = new Date(now.getTime() + (totalGoogleDuration + pessimisticStopTime) * 60000);
-    
-    console.log(`   🎯 ETA Normal: ${etaNormal.toLocaleTimeString()}`);
-    console.log(`✅ Live ETA calculado exitosamente`);
-    
-    // 11. Respuesta
-    res.json({
-      success: true,
-      remainingStops: stopCount,
-      remainingMiles: totalDistance.toFixed(2),
-      remainingMinutes: Math.round(totalNormalMinutes),
-      aria: {
-        multiplier: ariaResult.multiplier,
-        rutasAnalizadas: ariaResult.rutasAnalizadas,
-        ajuste: ariaResult.ajuste
-      },
-      breakdown: {
-        googleTime: Math.round(totalGoogleDuration),
-        googleMiles: totalDistance.toFixed(2),
-        baseStopTime: Math.round(baseStopTime),
-        apartmentCount: aptCount,
-        apartmentTime: Math.round(extraAptTime),
-        downtownCount: downtownCount,
-        downtownTime: Math.round(extraDowntownTime),
-        totalStopTime: Math.round(totalStopTime)
-      },
-      etas: {
-        optimistic: {
-          time: etaOptimistic.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-          minutes: Math.round(totalGoogleDuration + optimisticStopTime)
-        },
-        normal: {
-          time: etaNormal.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-          minutes: Math.round(totalNormalMinutes)
-        },
-        pessimistic: {
-          time: etaPessimistic.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-          minutes: Math.round(totalGoogleDuration + pessimisticStopTime)
-        }
-      }
-    });
+   // 10. Calcular ETAs (optimista, normal, pesimista)
+const nowEST = DateTime.now().setZone('America/New_York');
+const totalNormalMinutes = totalGoogleDuration + totalStopTime;
+
+const optimisticMultiplier = ariaResult.multiplier * 0.44;
+const pessimisticMultiplier = ariaResult.multiplier * 1.39;
+
+const optimisticStopTime = stopCount * optimisticMultiplier + extraAptTime + extraDowntownTime;
+const pessimisticStopTime = stopCount * pessimisticMultiplier + extraAptTime + extraDowntownTime;
+
+// ✅ Usar Luxon para todo el cálculo
+const etaOptimistic = nowEST.plus({ minutes: totalGoogleDuration + optimisticStopTime });
+const etaNormal = nowEST.plus({ minutes: totalNormalMinutes });
+const etaPessimistic = nowEST.plus({ minutes: totalGoogleDuration + pessimisticStopTime });
+
+console.log(`   🎯 ETA Normal: ${etaNormal.toLocaleString(DateTime.TIME_SIMPLE)}`);
+console.log(`✅ Live ETA calculado exitosamente`);
+
+// 11. Respuesta
+res.json({
+  success: true,
+  remainingStops: stopCount,
+  remainingMiles: totalDistance.toFixed(2),
+  remainingMinutes: Math.round(totalNormalMinutes),
+  aria: {
+    multiplier: ariaResult.multiplier,
+    rutasAnalizadas: ariaResult.rutasAnalizadas,
+    ajuste: ariaResult.ajuste
+  },
+  breakdown: {
+    googleTime: Math.round(totalGoogleDuration),
+    googleMiles: totalDistance.toFixed(2),
+    baseStopTime: Math.round(baseStopTime),
+    apartmentCount: aptCount,
+    apartmentTime: Math.round(extraAptTime),
+    downtownCount: downtownCount,
+    downtownTime: Math.round(extraDowntownTime),
+    totalStopTime: Math.round(totalStopTime)
+  },
+  etas: {
+    optimistic: {
+      time: etaOptimistic.toLocaleString(DateTime.TIME_SIMPLE),
+      minutes: Math.round(totalGoogleDuration + optimisticStopTime)
+    },
+    normal: {
+      time: etaNormal.toLocaleString(DateTime.TIME_SIMPLE),
+      minutes: Math.round(totalNormalMinutes)
+    },
+    pessimistic: {
+      time: etaPessimistic.toLocaleString(DateTime.TIME_SIMPLE),
+      minutes: Math.round(totalGoogleDuration + pessimisticStopTime)
+    }
+  }
+});
     
   } catch (error) {
     console.error('❌ Error en calculate-live-eta:', error);
