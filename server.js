@@ -303,7 +303,7 @@ async function calculateLeg(origin, destination, waypoints = []) {
 
 // --- Tu endpoint `/api/optimize-route` (sin cambios) ---
 app.post('/api/optimize-route', authenticateUser, async (req, res) => {
-    let { addresses } = req.body;
+    let { addresses, finalDestination: customFinalDestination } = req.body;
   addresses = addresses.filter(addr => addr && addr.trim() !== '');
 
   if (!addresses || addresses.length < 3) {
@@ -319,7 +319,6 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     console.log(`🤖 ARIA: Usando multiplier ${ariaResult.multiplier.toFixed(2)} para esta ruta`);
     
     const origin = addresses[0]; // Warehouse
-    const { addresses, finalDestination: customFinalDestination } = req.body;
     const finalDestination = customFinalDestination || addresses[addresses.length - 1];
     
     const workStops = addresses.slice(1, -1); 
