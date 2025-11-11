@@ -1175,9 +1175,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
         </div>
       </div>
-      </div>
-      </div>
-
+    
       <!-- 🤖 LINK AL GEM -->
       <div class="gem-link-container">
       <!-- 🤖 LINK AL GEM -->
@@ -1649,7 +1647,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
     {{ saveStatus.message }}
   </div>
 </div>
-        </div> </div> </div> </div> </div> </template>
+        </div> </div> </div> </div> </div></div></div> </template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
