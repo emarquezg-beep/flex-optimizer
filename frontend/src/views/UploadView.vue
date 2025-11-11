@@ -3076,4 +3076,15 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 .route-config-card {
   margin-top: 1.5rem; /* En lugar de espacio gigante */
 }
+.route-config-card {
+  background: var(--color-surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem; /* ← Cambiar esto */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.gem-link-container {
+  margin-top: 0; /* ← Asegurar que no tenga margin top extra */
+}
 </style>
