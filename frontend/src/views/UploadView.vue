@@ -1121,7 +1121,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   <div class="view-container">
     <div class="uploader-container">
 
-      <!-- 📦 DATOS DEL BLOQUE -->
+<!-- 📦 DATOS DEL BLOQUE -->
       <div class="block-info-card">
         <h2>📦 Block Details</h2>
         <div class="block-info-grid">
@@ -1151,30 +1151,35 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           </div>
         </div>
       </div>
-    </div>
-                   <!-- Controles de configuración (colapsados en una sección limpia) -->
-    <div class="route-config-card">
-          <h3>🎯 Route Configuration</h3>
-          <div class="controls-container">
-            <div class="control-group">
-              <label for="warehouse-select">Departure Point</label>
-              <select id="warehouse-select" v-model="selectedWarehouseCode">
-                <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
-                  {{ wh.code }} ({{ wh.commuteMiles }} mi)
-                </option>
-              </select>
-            </div>
-            <div class="control-group">
-              <label for="destination-select">Final Destination</label>
-              <select id="destination-select" v-model="selectedDestination">
-                <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
-              </select>
-            </div>
+
+      <!-- 🎯 ROUTE CONFIGURATION -->
+      <div class="route-config-card">
+        <h3>🎯 Route Configuration</h3>
+        <div class="controls-container">
+          <div class="control-group">
+            <label for="warehouse-select">Departure Point</label>
+            <select id="warehouse-select" v-model="selectedWarehouseCode">
+              <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
+                {{ wh.code }} ({{ wh.commuteMiles }} mi)
+              </option>
+            </select>
           </div>
-          <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-            <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
+          <div class="control-group">
+            <label for="destination-select">Final Destination</label>
+            <select id="destination-select" v-model="selectedDestination">
+              <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
+            </select>
           </div>
         </div>
+        <div v-if="selectedDestination === 'custom'" class="custom-input-container">
+          <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
+        </div>
+      </div>
+      </div>
+      </div>
+
+      <!-- 🤖 LINK AL GEM -->
+      <div class="gem-link-container">
       <!-- 🤖 LINK AL GEM -->
       <div class="gem-link-container">
         <a 
@@ -3068,4 +3073,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   font-weight: 500;
 }
 
+.route-config-card {
+  margin-top: 1.5rem; /* En lugar de espacio gigante */
+}
 </style>
