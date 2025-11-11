@@ -319,7 +319,8 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     console.log(`🤖 ARIA: Usando multiplier ${ariaResult.multiplier.toFixed(2)} para esta ruta`);
     
     const origin = addresses[0]; // Warehouse
-    const finalDestination = addresses[addresses.length - 1]; // Último destino
+    const { addresses, finalDestination: customFinalDestination } = req.body;
+    const finalDestination = customFinalDestination || addresses[addresses.length - 1];
     
     const workStops = addresses.slice(1, -1); 
     const firstStop = workStops[0]; 
