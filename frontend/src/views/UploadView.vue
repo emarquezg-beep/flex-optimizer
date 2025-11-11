@@ -974,6 +974,10 @@ async function sendToBackend() {
     const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
       method: 'POST',
       body: JSON.stringify({ addresses: fullRoute }),
+      departurePoint: selectedDeparturePoint.value, // 🆕
+      finalDestination: selectedDestination.value === 'custom' 
+        ? customDestination.value 
+        : selectedDestination.value // 🆕
     });
       const result = await response.json();
       
