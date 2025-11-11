@@ -767,7 +767,7 @@ app.get('/api/active-route/:userId', authenticateUser, async (req, res) => {
 // LIVE ETA CALCULATION - CON ARIA
 // ========================================
 app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
-  const { routeId, currentStopNumber } = req.body;
+  const { routeId, currentStopNumber, customDestination } = req.body;
   
   if (!routeId || !currentStopNumber) {
     return res.status(400).json({
