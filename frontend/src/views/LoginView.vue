@@ -40,7 +40,7 @@ async function handleLogin() {
         <div class="logo-container">
           <LogIn :size="48" class="logo-icon" />
         </div>
-        <h1 class="login-title">Flex Optimizer</h1>
+        <h1 class="login-title">Flex Pilot v2.0</h1>
         <p class="login-subtitle">Inicia sesión para continuar</p>
       </div>
 
