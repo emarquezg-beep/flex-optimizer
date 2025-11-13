@@ -1232,18 +1232,32 @@ app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (r
     const startOfWeek = today.startOf('week').toISODate();
     const endOfWeek = today.endOf('week').toISODate();
     
-    console.log(`📊 Resumen semanal: ${startOfWeek} a ${endOfWeek}`);
+    console.log(`📊 === WEEK SUMMARY REQUEST ===`);
+    console.log(`📅 Rango: ${startOfWeek} a ${endOfWeek}`);
+    console.log(`👤 User: ${userId}`);
     
-    // Bloques agendados esta semana
+    // 🔥 QUERY CON LOGGING DETALLADO
     const { data: blocks, error: blocksError } = await supabase
       .from('scheduled_blocks')
-      .select('*')
+      .select('id, fecha, duracion_horas, pago, status')  // ← Especifica columnas
       .eq('user_id', userId)
       .gte('fecha', startOfWeek)
       .lte('fecha', endOfWeek)
-      .neq('status', 'cancelled');
+      .neq('status', 'cancelled')
+      .order('fecha', { ascending: true });
     
-    if (blocksError) throw blocksError;
+    if (blocksError) {
+      console.error('❌ Error en query de blocks:', blocksError);
+      throw blocksError;
+    }
+    
+    console.log(`📦 Bloques encontrados: ${blocks?.length || 0}`);
+    if (blocks && blocks.length > 0) {
+      console.log('📋 Detalle de bloques:');
+      blocks.forEach(b => {
+        console.log(`  - ID: ${b.id}, Fecha: ${b.fecha}, Status: ${b.status}, Horas: ${b.duracion_horas}, Pago: ${b.pago}`);
+      });
+    }
     
     // Rutas completadas esta semana
     const { data: routes, error: routesError } = await supabase
@@ -1254,33 +1268,56 @@ app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (r
       .lte('fecha', endOfWeek)
       .eq('status', 0); // Completadas
     
-    if (routesError) throw routesError;
+    if (routesError) {
+      console.error('❌ Error en query de routes:', routesError);
+      throw routesError;
+    }
     
-    // Calcular totales
-    const totalHorasAgendadas = blocks.reduce((sum, b) => sum + (b.duracion_horas || 0), 0);
-    const totalPagoAgendado = blocks.reduce((sum, b) => sum + (b.pago || 0), 0);
+    console.log(`✅ Rutas completadas: ${routes?.length || 0}`);
     
-    const totalHorasTrabajadas = routes.reduce((sum, r) => sum + (r.duracion_horas || 0), 0);
-    const totalPagoGanado = routes.reduce((sum, r) => sum + (r.pago || 0), 0);
-    const totalMillas = routes.reduce((sum, r) => sum + (r.millas_totales || 0), 0);
+    // 🔥 CALCULAR TOTALES - INICIALIZADOS EN CADA REQUEST
+    let totalHorasAgendadas = 0;
+    let totalPagoAgendado = 0;
+    
+    if (blocks && Array.isArray(blocks)) {
+      totalHorasAgendadas = blocks.reduce((sum, b) => sum + (parseFloat(b.duracion_horas) || 0), 0);
+      totalPagoAgendado = blocks.reduce((sum, b) => sum + (parseFloat(b.pago) || 0), 0);
+    }
+    
+    console.log(`💰 Total calculado: ${totalHorasAgendadas}h, $${totalPagoAgendado}`);
+    
+    let totalHorasTrabajadas = 0;
+    let totalPagoGanado = 0;
+    let totalMillas = 0;
+    
+    if (routes && Array.isArray(routes)) {
+      totalHorasTrabajadas = routes.reduce((sum, r) => sum + (parseFloat(r.duracion_horas) || 0), 0);
+      totalPagoGanado = routes.reduce((sum, r) => sum + (parseFloat(r.pago) || 0), 0);
+      totalMillas = routes.reduce((sum, r) => sum + (parseFloat(r.millas_totales) || 0), 0);
+    }
+    
+    const summary = {
+      weekStart: startOfWeek,
+      weekEnd: endOfWeek,
+      scheduled: {
+        blocks: blocks?.length || 0,
+        hours: totalHorasAgendadas.toFixed(1),
+        pay: totalPagoAgendado.toFixed(2)
+      },
+      completed: {
+        routes: routes?.length || 0,
+        hours: totalHorasTrabajadas.toFixed(1),
+        pay: totalPagoGanado.toFixed(2),
+        miles: totalMillas.toFixed(1)
+      }
+    };
+    
+    console.log(`📊 Summary response:`, JSON.stringify(summary, null, 2));
+    console.log(`=== END WEEK SUMMARY ===\n`);
     
     res.json({
       success: true,
-      summary: {
-        weekStart: startOfWeek,
-        weekEnd: endOfWeek,
-        scheduled: {
-          blocks: blocks.length,
-          hours: totalHorasAgendadas.toFixed(1),
-          pay: totalPagoAgendado.toFixed(2)
-        },
-        completed: {
-          routes: routes.length,
-          hours: totalHorasTrabajadas.toFixed(1),
-          pay: totalPagoGanado.toFixed(2),
-          miles: totalMillas.toFixed(1)
-        }
-      }
+      summary: summary
     });
     
   } catch (error) {
