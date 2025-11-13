@@ -1243,7 +1243,7 @@ app.get('/api/scheduled-blocks/:userId/week-summary', authenticateUser, async (r
       .eq('user_id', userId)
       .gte('fecha', startOfWeek)
       .lte('fecha', endOfWeek)
-      .neq('status', 'cancelled')
+      .eq('status', 'scheduled')
       .order('fecha', { ascending: true });
     
     if (blocksError) {
