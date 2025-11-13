@@ -41,8 +41,14 @@ async function loadDashboard() {
     )
     const summaryResult = await summaryResponse.json()
     
+    console.log('📊 Respuesta del backend - week-summary:', summaryResult)
+    
     if (summaryResult.success) {
       currentWeekSummary.value = summaryResult.summary
+      console.log('✅ Resumen cargado:', {
+        completed: summaryResult.summary.completed,
+        scheduled: summaryResult.summary.scheduled
+      })
     }
     
     // ========================================
@@ -207,6 +213,8 @@ async function deleteBlock(block) {
     return
   }
   
+  console.log('🗑️ Eliminando bloque:', block.id)
+  
   try {
     const response = await fetchWithAuth(
       `${backendUrl}/api/scheduled-blocks/${block.id}?soft=true`,
@@ -215,10 +223,14 @@ async function deleteBlock(block) {
     
     const result = await response.json()
     
+    console.log('📥 Respuesta del DELETE:', result)
+    
     if (result.success) {
       alert('Bloque cancelado')
       closeBlockModal()
+      console.log('🔄 Recargando dashboard...')
       await loadDashboard()
+      console.log('✅ Dashboard recargado')
     } else {
       alert('Error: ' + result.error)
     }
