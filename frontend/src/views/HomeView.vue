@@ -307,6 +307,20 @@ const progressPercentage = computed(() => {
   return Math.min(100, (worked / 40) * 100)
 })
 
+// 🆕 Total agendado
+const totalScheduledPay = computed(() => {
+  if (!currentWeekSummary.value) return 0
+  return parseFloat(currentWeekSummary.value.scheduled.pay || 0)
+})
+
+// 🆕 Total estimado de la semana (ganado + agendado)
+const totalEstimatedWeek = computed(() => {
+  if (!currentWeekSummary.value) return 0
+  const completed = parseFloat(currentWeekSummary.value.completed.pay || 0)
+  const scheduled = parseFloat(currentWeekSummary.value.scheduled.pay || 0)
+  return completed + scheduled
+})
+
 // 🆕 Computeds para semana siguiente
 const nextWeekProgressPercentage = computed(() => {
   if (!nextWeekSummary.value) return 0
@@ -445,6 +459,27 @@ const nextWeekRemainingHours = computed(() => {
                   <div class="stat-content">
                     <span class="stat-label">Horas libres</span>
                     <span class="stat-value">{{ hoursFree.toFixed(1) }}h</span>
+                  </div>
+                </div>
+                <!-- 🆕 7. Total agendado -->
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--yellow">
+                    <DollarSign :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Total agendado</span>
+                    <span class="stat-value">${{ totalScheduledPay.toFixed(2) }}</span>
+                  </div>
+                </div>
+
+                <!-- 🆕 8. Total estimado semana -->
+                <div class="stat-card">
+                  <div class="stat-icon stat-icon--emerald">
+                    <TrendingUp :size="24" />
+                  </div>
+                  <div class="stat-content">
+                    <span class="stat-label">Estimado semana</span>
+                    <span class="stat-value">${{ totalEstimatedWeek.toFixed(2) }}</span>
                   </div>
                 </div>
               </div>
@@ -912,7 +947,7 @@ const nextWeekRemainingHours = computed(() => {
 
 /* 🆕 Grid compacto para semana siguiente (3 columnas en móvil) */
 .stats-grid--compact {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
 
@@ -957,6 +992,8 @@ const nextWeekRemainingHours = computed(() => {
 .stat-icon--orange { background: #fed7aa; color: #f59e0b; }
 .stat-icon--indigo { background: #e0e7ff; color: #6366f1; }
 .stat-icon--teal { background: #ccfbf1; color: #14b8a6; }
+.stat-icon--yellow { background: #fef3c7; color: #f59e0b; }
+.stat-icon--emerald { background: #d1fae5; color: #059669; }
 
 .stat-content {
   display: flex;
