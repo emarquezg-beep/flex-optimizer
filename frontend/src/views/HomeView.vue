@@ -2,15 +2,21 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useUserProfile } from '@/composables/useUserProfile'
 import { fetchWithAuth } from '@/lib/api'
 import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin } from 'lucide-vue-next'
 import { BaseButton, BaseCard } from '@/components/base'
+import CompleteProfileModal from '@/components/CompleteProfileModal.vue'
 
 const router = useRouter()
 const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 // ✅ Usuario autenticado
-const { userId, userName: authUserName } = useAuth()
+const { userId, userName: authUserName, needsProfileCompletion, refreshProfile } = useAuth()
+const { userProfile } = useUserProfile()
+
+// ✅ Control del modal de completar perfil
+const showCompleteProfileModal = ref(false)
 
 // Estados
 const isLoading = ref(true)
@@ -27,6 +33,11 @@ const activeWeek = ref(0)
 
 onMounted(async () => {
   await loadDashboard()
+  
+  // ✅ Verificar si necesita completar perfil
+  if (needsProfileCompletion.value) {
+    showCompleteProfileModal.value = true
+  }
 })
 
 async function loadDashboard() {
@@ -332,6 +343,18 @@ const nextWeekRemainingHours = computed(() => {
   if (!nextWeekSummary.value) return 40
   return Math.max(0, 40 - parseFloat(nextWeekSummary.value.hours || 0))
 })
+
+// ✅ Funciones para manejar el modal de completar perfil
+function handleProfileCompleted(profile) {
+  console.log('✅ Perfil completado:', profile)
+  showCompleteProfileModal.value = false
+  // Refrescar el perfil en useAuth
+  refreshProfile()
+}
+
+function closeProfileModal() {
+  showCompleteProfileModal.value = false
+}
 </script>
 
 <template>
@@ -743,6 +766,13 @@ const nextWeekRemainingHours = computed(() => {
         </div>
       </div>
     </Teleport>
+
+    <!-- ✅ Modal de Completar Perfil -->
+    <CompleteProfileModal 
+      :show="showCompleteProfileModal"
+      @completed="handleProfileCompleted"
+      @close="closeProfileModal"
+    />
 
   </div>
 </template>
