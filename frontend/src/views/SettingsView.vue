@@ -6,8 +6,8 @@ import { useUserProfile } from '@/composables/useUserProfile'
 import { LogOut, User, Mail, Phone, MapPin, Edit2, Save, X, CheckCircle, AlertCircle } from 'lucide-vue-next'
 
 const router = useRouter()
-const { logout, user } = useAuth()
-const { userProfile, isLoadingProfile, fetchUserProfile, updateUserProfile } = useUserProfile()
+const { logout, user, userProfile, refreshProfile } = useAuth()
+const { updateUserProfile } = useUserProfile()
 
 const isLoggingOut = ref(false)
 const isEditingProfile = ref(false)
@@ -33,17 +33,14 @@ const userName = computed(() => {
   return 'Usuario'
 })
 
-onMounted(async () => {
-  if (user.value?.id) {
-    await fetchUserProfile(user.value.id)
-    // Inicializar el formulario con los datos actuales
-    if (userProfile.value) {
-      editForm.value = {
-        full_name: userProfile.value.full_name || '',
-        telefono: userProfile.value.telefono || '',
-        ciudad: userProfile.value.ciudad || '',
-        zona_trabajo: userProfile.value.zona_trabajo || ''
-      }
+onMounted(() => {
+  // Inicializar el formulario con los datos actuales
+  if (userProfile.value) {
+    editForm.value = {
+      full_name: userProfile.value.full_name || '',
+      telefono: userProfile.value.telefono || '',
+      ciudad: userProfile.value.ciudad || '',
+      zona_trabajo: userProfile.value.zona_trabajo || ''
     }
   }
 })
@@ -82,6 +79,9 @@ async function saveProfile() {
   if (result.success) {
     successMessage.value = '¡Perfil actualizado exitosamente!'
     isEditingProfile.value = false
+    
+    // Refrescar el perfil en useAuth
+    await refreshProfile()
     
     // Limpiar mensaje después de 3 segundos
     setTimeout(() => {
@@ -133,7 +133,6 @@ async function handleLogout() {
           v-if="!isEditingProfile" 
           @click="startEditing"
           class="edit-button"
-          :disabled="isLoadingProfile"
         >
           <Edit2 :size="16" />
           Editar
