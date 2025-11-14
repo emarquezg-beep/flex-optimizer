@@ -69,13 +69,16 @@ export function useAuth() {
     }
   }
 
-  async function register(email, password) {
+  async function register(email, password, fullName = null) {
   try {
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password: password,
       options: {
-        emailRedirectTo: `${window.location.origin}/login`
+        emailRedirectTo: `${window.location.origin}/login`,
+        data: {
+          full_name: fullName // Guardar en user_metadata también
+        }
       }
     })
     
@@ -87,8 +90,18 @@ export function useAuth() {
       return { success: false, error: errorMessage }
     }
     
-    // Nota: En Supabase, si tienes confirmación de email habilitada,
-    // el usuario debe confirmar antes de poder hacer login
+    // Si se proporcionó un nombre, actualizarlo en user_profiles
+    if (fullName && data.user) {
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ full_name: fullName })
+        .eq('user_id', data.user.id)
+      
+      if (profileError) {
+        console.error('Error actualizando perfil:', profileError)
+      }
+    }
+    
     return { 
       success: true, 
       user: data.user,
