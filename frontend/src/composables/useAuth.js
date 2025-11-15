@@ -6,6 +6,9 @@ const session = ref(null)
 const isLoading = ref(true)
 const userProfile = ref(null)
 
+// Variable para almacenar la función de cleanup del listener
+let authStateChangeUnsubscribe = null
+
 export function useAuth() {
   const isAuthenticated = computed(() => !!user.value && !!session.value)
   const userId = computed(() => user.value?.id || null)
@@ -28,22 +31,35 @@ export function useAuth() {
   async function loadUserProfile(userId) {
     if (!userId) return
     
+    console.log('🔵 Cargando perfil para:', userId)
+    
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
       
       if (!error && data) {
         userProfile.value = data
+        console.log('✅ Perfil cargado:', data)
+      } else if (error) {
+        console.error('❌ Error cargando perfil:', error)
       }
     } catch (error) {
-      console.error('Error cargando perfil:', error)
+      console.error('❌ Error inesperado cargando perfil:', error)
     }
   }
 
   async function initialize() {
+    console.log('🔵 INICIO: initialize()')
+    
+    // Si ya hay un listener activo, no crear otro
+    if (authStateChangeUnsubscribe) {
+      console.log('⚠️ Auth ya está inicializado, saltando...')
+      return
+    }
+
     isLoading.value = true
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession()
@@ -51,11 +67,18 @@ export function useAuth() {
       if (currentSession) {
         session.value = currentSession
         user.value = currentSession.user
-        // Cargar perfil al inicializar
+        console.log('✅ Sesión encontrada:', currentSession.user.id)
+        
+        // ✅ CARGAR PERFIL SOLO UNA VEZ AL INICIALIZAR
         await loadUserProfile(currentSession.user.id)
       }
       
-      supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+      // ❌ DESACTIVAR TEMPORALMENTE EL LISTENER
+      console.log('⚠️ Listener de onAuthStateChange DESACTIVADO para diagnóstico')
+      
+      /* 
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+        console.log('🔔 onAuthStateChange disparado:', _event)
         session.value = currentSession
         user.value = currentSession?.user || null
         
@@ -65,10 +88,17 @@ export function useAuth() {
           userProfile.value = null
         }
       })
+      
+      authStateChangeUnsubscribe = () => {
+        subscription.unsubscribe()
+      }
+      */
+      
     } catch (error) {
-      console.error('Error inicializando auth:', error)
+      console.error('❌ Error inicializando auth:', error)
     } finally {
       isLoading.value = false
+      console.log('🟢 FIN: initialize()')
     }
   }
 
@@ -204,8 +234,16 @@ export function useAuth() {
   }
 
   async function refreshProfile() {
+    console.log('🔄 Refrescando perfil...')
     if (user.value?.id) {
       await loadUserProfile(user.value.id)
+    }
+  }
+
+  function cleanup() {
+    if (authStateChangeUnsubscribe) {
+      authStateChangeUnsubscribe()
+      authStateChangeUnsubscribe = null
     }
   }
 
@@ -225,6 +263,7 @@ export function useAuth() {
     register,
     requestPasswordReset,
     updatePassword,
-    refreshProfile
+    refreshProfile,
+    cleanup
   }
 }
