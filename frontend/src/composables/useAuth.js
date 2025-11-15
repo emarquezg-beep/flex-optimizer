@@ -6,8 +6,9 @@ const session = ref(null)
 const isLoading = ref(true)
 const userProfile = ref(null)
 
-// Variable para almacenar la función de cleanup del listener
+// Variable para el cleanup del listener
 let authStateChangeUnsubscribe = null
+let isInitialized = false
 
 export function useAuth() {
   const isAuthenticated = computed(() => !!user.value && !!session.value)
@@ -31,8 +32,6 @@ export function useAuth() {
   async function loadUserProfile(userId) {
     if (!userId) return
     
-    console.log('🔵 Cargando perfil para:', userId)
-    
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -42,49 +41,46 @@ export function useAuth() {
       
       if (!error && data) {
         userProfile.value = data
-        console.log('✅ Perfil cargado:', data)
-      } else if (error) {
-        console.error('❌ Error cargando perfil:', error)
       }
     } catch (error) {
-      console.error('❌ Error inesperado cargando perfil:', error)
+      console.error('Error cargando perfil:', error)
     }
   }
 
   async function initialize() {
-    console.log('🔵 INICIO: initialize()')
-    
-    // Si ya hay un listener activo, no crear otro
-    if (authStateChangeUnsubscribe) {
-      console.log('⚠️ Auth ya está inicializado, saltando...')
+    // ✅ Evitar múltiples inicializaciones
+    if (isInitialized) {
+      console.log('Auth ya inicializado, saltando...')
       return
     }
 
     isLoading.value = true
     try {
+      // Cargar sesión actual
       const { data: { session: currentSession } } = await supabase.auth.getSession()
       
       if (currentSession) {
         session.value = currentSession
         user.value = currentSession.user
-        console.log('✅ Sesión encontrada:', currentSession.user.id)
-        
-        // ✅ CARGAR PERFIL SOLO UNA VEZ AL INICIALIZAR
         await loadUserProfile(currentSession.user.id)
       }
       
-      // ❌ DESACTIVAR TEMPORALMENTE EL LISTENER
-      console.log('⚠️ Listener de onAuthStateChange DESACTIVADO para diagnóstico')
-      
-      /* 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
-        console.log('🔔 onAuthStateChange disparado:', _event)
-        session.value = currentSession
-        user.value = currentSession?.user || null
+      // ✅ Listener optimizado - solo para cambios de sesión
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+        console.log('🔔 Auth event:', event)
         
-        if (currentSession?.user) {
-          await loadUserProfile(currentSession.user.id)
-        } else {
+        // Solo actuar en eventos importantes
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          session.value = currentSession
+          user.value = currentSession?.user || null
+          
+          // Cargar perfil solo si cambió el usuario
+          if (currentSession?.user && currentSession.user.id !== user.value?.id) {
+            await loadUserProfile(currentSession.user.id)
+          }
+        } else if (event === 'SIGNED_OUT') {
+          session.value = null
+          user.value = null
           userProfile.value = null
         }
       })
@@ -92,13 +88,13 @@ export function useAuth() {
       authStateChangeUnsubscribe = () => {
         subscription.unsubscribe()
       }
-      */
+      
+      isInitialized = true
       
     } catch (error) {
-      console.error('❌ Error inicializando auth:', error)
+      console.error('Error inicializando auth:', error)
     } finally {
       isLoading.value = false
-      console.log('🟢 FIN: initialize()')
     }
   }
 
@@ -234,7 +230,6 @@ export function useAuth() {
   }
 
   async function refreshProfile() {
-    console.log('🔄 Refrescando perfil...')
     if (user.value?.id) {
       await loadUserProfile(user.value.id)
     }
@@ -245,6 +240,7 @@ export function useAuth() {
       authStateChangeUnsubscribe()
       authStateChangeUnsubscribe = null
     }
+    isInitialized = false
   }
 
   return {
