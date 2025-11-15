@@ -18,6 +18,7 @@ const app = express();
 const PORT = 3000;
 
 // Tu configuración de CORS (sin cambios)
+// forzando commit
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
