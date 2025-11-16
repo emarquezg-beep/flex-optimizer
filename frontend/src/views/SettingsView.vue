@@ -1,98 +1,34 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { useUserProfile } from '@/composables/useUserProfile'
-import { LogOut, User, Mail, Phone, MapPin, Edit2, Save, X, CheckCircle, AlertCircle } from 'lucide-vue-next'
+import { useVehicles } from '@/composables/useVehicles'
+import { LogOut, User, Mail, Car, Plus, Edit2, Archive, Star, RotateCcw } from 'lucide-vue-next'
+import VehicleModal from '@/components/VehicleModal.vue'
 
 const router = useRouter()
-const { logout, user, userProfile, refreshProfile } = useAuth()
-const { updateUserProfile } = useUserProfile()
+const { logout, user, userName } = useAuth()
+const { 
+  vehicles, 
+  isLoadingVehicles, 
+  fetchVehicles, 
+  createVehicle, 
+  updateVehicle, 
+  archiveVehicle,
+  unarchiveVehicle,
+  setPrimaryVehicle 
+} = useVehicles()
 
 const isLoggingOut = ref(false)
-const isEditingProfile = ref(false)
-const isSavingProfile = ref(false)
-const successMessage = ref('')
-const errorMessage = ref('')
+const showVehicleModal = ref(false)
+const editingVehicle = ref(null)
 
-// Form fields
-const editForm = ref({
-  full_name: '',
-  telefono: '',
-  ciudad: '',
-  zona_trabajo: ''
-})
-
-const userName = computed(() => {
-  if (userProfile.value?.full_name) {
-    return userProfile.value.full_name
-  }
-  if (user.value?.email) {
-    return user.value.email.split('@')[0]
-  }
-  return 'Usuario'
-})
-
-onMounted(() => {
-  // Inicializar el formulario con los datos actuales
-  if (userProfile.value) {
-    editForm.value = {
-      full_name: userProfile.value.full_name || '',
-      telefono: userProfile.value.telefono || '',
-      ciudad: userProfile.value.ciudad || '',
-      zona_trabajo: userProfile.value.zona_trabajo || ''
-    }
+// Cargar vehículos al montar
+onMounted(async () => {
+  if (user.value?.id) {
+    await fetchVehicles(user.value.id)
   }
 })
-
-function startEditing() {
-  isEditingProfile.value = true
-  successMessage.value = ''
-  errorMessage.value = ''
-}
-
-function cancelEditing() {
-  isEditingProfile.value = false
-  // Restaurar valores originales
-  if (userProfile.value) {
-    editForm.value = {
-      full_name: userProfile.value.full_name || '',
-      telefono: userProfile.value.telefono || '',
-      ciudad: userProfile.value.ciudad || '',
-      zona_trabajo: userProfile.value.zona_trabajo || ''
-    }
-  }
-}
-
-async function saveProfile() {
-  if (!editForm.value.full_name?.trim()) {
-    errorMessage.value = 'El nombre completo es obligatorio'
-    return
-  }
-
-  isSavingProfile.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
-
-  const result = await updateUserProfile(user.value.id, editForm.value)
-
-  if (result.success) {
-    successMessage.value = '¡Perfil actualizado exitosamente!'
-    isEditingProfile.value = false
-    
-    // Refrescar el perfil en useAuth
-    await refreshProfile()
-    
-    // Limpiar mensaje después de 3 segundos
-    setTimeout(() => {
-      successMessage.value = ''
-    }, 3000)
-  } else {
-    errorMessage.value = result.error || 'Error al actualizar el perfil'
-  }
-
-  isSavingProfile.value = false
-}
 
 async function handleLogout() {
   isLoggingOut.value = true
@@ -105,6 +41,75 @@ async function handleLogout() {
     isLoggingOut.value = false
   }
 }
+
+function openCreateVehicleModal() {
+  editingVehicle.value = null
+  showVehicleModal.value = true
+}
+
+function openEditVehicleModal(vehicle) {
+  editingVehicle.value = vehicle
+  showVehicleModal.value = true
+}
+
+function closeVehicleModal() {
+  showVehicleModal.value = false
+  editingVehicle.value = null
+}
+
+async function handleSaveVehicle(vehicleData) {
+  if (!user.value?.id) return
+  
+  let result
+  
+  if (editingVehicle.value) {
+    // Modo edición
+    result = await updateVehicle(user.value.id, editingVehicle.value.id, vehicleData)
+  } else {
+    // Modo creación
+    result = await createVehicle(user.value.id, vehicleData)
+  }
+  
+  if (result.success) {
+    closeVehicleModal()
+  } else {
+    alert(result.error || 'Error al guardar vehículo')
+  }
+}
+
+async function handleArchiveVehicle(vehicleId) {
+  if (!user.value?.id) return
+  
+  if (confirm('¿Archivar este vehículo? Podrás restaurarlo después.')) {
+    const result = await archiveVehicle(user.value.id, vehicleId)
+    if (!result.success) {
+      alert(result.error || 'Error al archivar vehículo')
+    }
+  }
+}
+
+async function handleUnarchiveVehicle(vehicleId) {
+  if (!user.value?.id) return
+  
+  const result = await unarchiveVehicle(user.value.id, vehicleId)
+  if (!result.success) {
+    alert(result.error || 'Error al restaurar vehículo')
+  }
+}
+
+async function handleSetPrimary(vehicleId) {
+  if (!user.value?.id) return
+  
+  const result = await setPrimaryVehicle(user.value.id, vehicleId)
+  if (!result.success) {
+    alert(result.error || 'Error al marcar como principal')
+  }
+}
+
+function formatMileage(mileage) {
+  if (!mileage) return '0'
+  return new Intl.NumberFormat('en-US').format(Math.round(mileage))
+}
 </script>
 
 <template>
@@ -114,38 +119,16 @@ async function handleLogout() {
       <p class="settings-subtitle">Gestiona tu cuenta y preferencias</p>
     </div>
 
-    <!-- Success/Error Messages -->
-    <div v-if="successMessage" class="message-banner success-banner">
-      <CheckCircle :size="20" />
-      <span>{{ successMessage }}</span>
-    </div>
-
-    <div v-if="errorMessage" class="message-banner error-banner">
-      <AlertCircle :size="20" />
-      <span>{{ errorMessage }}</span>
-    </div>
-
-    <!-- Profile Section -->
+    <!-- ==================== SECCIÓN: INFORMACIÓN DE USUARIO ==================== -->
     <div class="settings-section">
-      <div class="section-header">
-        <h2 class="section-title">👤 Información Personal</h2>
-        <button 
-          v-if="!isEditingProfile" 
-          @click="startEditing"
-          class="edit-button"
-        >
-          <Edit2 :size="16" />
-          Editar
-        </button>
-      </div>
+      <h2 class="section-title">👤 Información de Usuario</h2>
       
-      <!-- View Mode -->
-      <div v-if="!isEditingProfile" class="user-info-card">
+      <div class="user-info-card">
         <div class="info-row">
           <User :size="20" class="info-icon" />
           <div class="info-content">
-            <span class="info-label">Nombre Completo</span>
-            <span class="info-value">{{ userProfile?.full_name || 'No configurado' }}</span>
+            <span class="info-label">Nombre</span>
+            <span class="info-value">{{ userName }}</span>
           </div>
         </div>
         
@@ -156,117 +139,122 @@ async function handleLogout() {
             <span class="info-value">{{ user?.email }}</span>
           </div>
         </div>
-
-        <div class="info-row">
-          <Phone :size="20" class="info-icon" />
-          <div class="info-content">
-            <span class="info-label">Teléfono</span>
-            <span class="info-value">{{ userProfile?.telefono || 'No configurado' }}</span>
-          </div>
-        </div>
-
-        <div class="info-row">
-          <MapPin :size="20" class="info-icon" />
-          <div class="info-content">
-            <span class="info-label">Ciudad</span>
-            <span class="info-value">{{ userProfile?.ciudad || 'No configurado' }}</span>
-          </div>
-        </div>
-
-        <div class="info-row">
-          <MapPin :size="20" class="info-icon" />
-          <div class="info-content">
-            <span class="info-label">Zona de Trabajo</span>
-            <span class="info-value">{{ userProfile?.zona_trabajo || 'No configurado' }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Edit Mode -->
-      <div v-else class="edit-form">
-        <div class="form-group">
-          <label for="fullName" class="form-label">
-            <User :size="16" />
-            Nombre Completo *
-          </label>
-          <input
-            id="fullName"
-            v-model="editForm.full_name"
-            type="text"
-            placeholder="Tu nombre completo"
-            class="form-input"
-            :disabled="isSavingProfile"
-            required
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="phone" class="form-label">
-            <Phone :size="16" />
-            Teléfono
-          </label>
-          <input
-            id="phone"
-            v-model="editForm.telefono"
-            type="tel"
-            placeholder="(123) 456-7890"
-            class="form-input"
-            :disabled="isSavingProfile"
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="city" class="form-label">
-            <MapPin :size="16" />
-            Ciudad
-          </label>
-          <input
-            id="city"
-            v-model="editForm.ciudad"
-            type="text"
-            placeholder="Tu ciudad"
-            class="form-input"
-            :disabled="isSavingProfile"
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="workZone" class="form-label">
-            <MapPin :size="16" />
-            Zona de Trabajo
-          </label>
-          <input
-            id="workZone"
-            v-model="editForm.zona_trabajo"
-            type="text"
-            placeholder="Ej: Downtown, North Side"
-            class="form-input"
-            :disabled="isSavingProfile"
-          />
-        </div>
-
-        <div class="form-actions">
-          <button 
-            @click="cancelEditing"
-            class="cancel-button"
-            :disabled="isSavingProfile"
-          >
-            <X :size="18" />
-            Cancelar
-          </button>
-          <button 
-            @click="saveProfile"
-            class="save-button"
-            :disabled="isSavingProfile"
-          >
-            <Save :size="18" />
-            {{ isSavingProfile ? 'Guardando...' : 'Guardar Cambios' }}
-          </button>
-        </div>
       </div>
     </div>
 
-    <!-- Session Section -->
+    <!-- ==================== SECCIÓN: MIS VEHÍCULOS ==================== -->
+    <div class="settings-section">
+      <div class="section-header">
+        <h2 class="section-title">🚗 Mis Vehículos</h2>
+        <button @click="openCreateVehicleModal" class="btn-add-vehicle">
+          <Plus :size="18" />
+          Agregar
+        </button>
+      </div>
+
+      <!-- Loading -->
+      <div v-if="isLoadingVehicles" class="loading-state">
+        <p>Cargando vehículos...</p>
+      </div>
+
+      <!-- Lista de vehículos -->
+      <div v-else-if="vehicles.length > 0" class="vehicles-grid">
+        <div 
+          v-for="vehicle in vehicles" 
+          :key="vehicle.id"
+          class="vehicle-card"
+          :class="{ 'is-archived': vehicle.is_archived }"
+        >
+          <!-- Header del card -->
+          <div class="vehicle-header">
+            <div class="vehicle-title-group">
+              <Car :size="20" class="vehicle-icon" />
+              <h3 class="vehicle-nickname">{{ vehicle.nickname }}</h3>
+            </div>
+            
+            <!-- Badges -->
+            <div class="vehicle-badges">
+              <span v-if="vehicle.is_primary && !vehicle.is_archived" class="badge badge-primary">
+                <Star :size="14" />
+                Principal
+              </span>
+              <span v-if="vehicle.is_archived" class="badge badge-archived">
+                <Archive :size="14" />
+                Archivado
+              </span>
+            </div>
+          </div>
+
+          <!-- Info del vehículo -->
+          <div class="vehicle-info">
+            <div v-if="vehicle.make || vehicle.model" class="vehicle-detail">
+              <span class="detail-label">Vehículo:</span>
+              <span class="detail-value">
+                {{ vehicle.make }} {{ vehicle.model }}
+                <span v-if="vehicle.year" class="year-badge">{{ vehicle.year }}</span>
+              </span>
+            </div>
+            
+            <div class="vehicle-detail">
+              <span class="detail-label">Millaje acumulado:</span>
+              <span class="detail-value">{{ formatMileage(vehicle.total_mileage) }} mi</span>
+            </div>
+          </div>
+
+          <!-- Acciones -->
+          <div class="vehicle-actions">
+            <button 
+              v-if="!vehicle.is_archived"
+              @click="openEditVehicleModal(vehicle)"
+              class="btn-action btn-edit"
+              title="Editar"
+            >
+              <Edit2 :size="16" />
+            </button>
+
+            <button 
+              v-if="!vehicle.is_primary && !vehicle.is_archived"
+              @click="handleSetPrimary(vehicle.id)"
+              class="btn-action btn-primary-set"
+              title="Marcar como principal"
+            >
+              <Star :size="16" />
+            </button>
+
+            <button 
+              v-if="!vehicle.is_archived"
+              @click="handleArchiveVehicle(vehicle.id)"
+              class="btn-action btn-archive"
+              title="Archivar"
+            >
+              <Archive :size="16" />
+            </button>
+
+            <button 
+              v-if="vehicle.is_archived"
+              @click="handleUnarchiveVehicle(vehicle.id)"
+              class="btn-action btn-unarchive"
+              title="Restaurar"
+            >
+              <RotateCcw :size="16" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estado vacío -->
+      <div v-else class="empty-state">
+        <Car :size="48" class="empty-icon" />
+        <p class="empty-title">No tienes vehículos registrados</p>
+        <p class="empty-subtitle">Agrega tu primer vehículo para comenzar a trackear tus rutas</p>
+        <button @click="openCreateVehicleModal" class="btn-add-first">
+          <Plus :size="18" />
+          Agregar mi primer vehículo
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== SECCIÓN: SESIÓN ==================== -->
     <div class="settings-section">
       <h2 class="section-title">🚪 Sesión</h2>
       
@@ -279,13 +267,27 @@ async function handleLogout() {
         {{ isLoggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión' }}
       </button>
     </div>
+
+    <div class="settings-section">
+      <p class="coming-soon">
+        🚧 Más opciones de configuración próximamente...
+      </p>
+    </div>
+
+    <!-- ==================== MODAL DE VEHÍCULO ==================== -->
+    <VehicleModal 
+      :show="showVehicleModal"
+      :vehicle="editingVehicle"
+      @close="closeVehicleModal"
+      @save="handleSaveVehicle"
+    />
   </div>
 </template>
 
 <style scoped>
 .view-container {
   padding: var(--space-6) var(--space-4);
-  max-width: 600px;
+  max-width: 900px;
   margin: 0 auto;
 }
 
@@ -306,75 +308,25 @@ async function handleLogout() {
   margin: 0;
 }
 
-/* Message Banners */
-.message-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-base);
-  margin-bottom: var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.success-banner {
-  background-color: #dcfce7;
-  color: #166534;
-  border: 1px solid #86efac;
-}
-
-.error-banner {
-  background-color: var(--error-bg);
-  color: var(--error);
-  border: 1px solid #fca5a5;
-}
-
-/* Settings Section */
 .settings-section {
   margin-bottom: var(--space-8);
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-4);
 }
 
 .section-title {
   font-size: var(--text-xl);
   font-weight: var(--font-semibold);
   color: var(--text-primary);
-  margin: 0;
+  margin: 0 0 var(--space-4) 0;
 }
 
-.edit-button {
+.section-header {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--brand-primary);
-  background-color: transparent;
-  border: 1px solid var(--brand-primary);
-  border-radius: var(--radius-base);
-  cursor: pointer;
-  transition: all 0.2s var(--ease-out);
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
 }
 
-.edit-button:hover:not(:disabled) {
-  background-color: var(--brand-primary);
-  color: white;
-}
-
-.edit-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* View Mode Card */
+/* ==================== USER INFO CARD ==================== */
 .user-info-card {
   background-color: var(--bg-elevated);
   border-radius: var(--radius-lg);
@@ -415,105 +367,247 @@ async function handleLogout() {
   font-weight: var(--font-semibold);
 }
 
-/* Edit Form */
-.edit-form {
-  background-color: var(--bg-elevated);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  border: 1px solid var(--border-primary);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.form-label {
+/* ==================== VEHICLES SECTION ==================== */
+.btn-add-vehicle {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
   font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-primary);
-}
-
-.form-input {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-base);
-  border: 2px solid var(--border-primary);
-  border-radius: var(--radius-base);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  transition: border-color 0.2s;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--brand-primary);
-}
-
-.form-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.form-actions {
-  display: flex;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-}
-
-.cancel-button,
-.save-button {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-base);
   font-weight: var(--font-semibold);
+  color: white;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
   border: none;
   border-radius: var(--radius-base);
   cursor: pointer;
   transition: all 0.2s var(--ease-out);
 }
 
-.cancel-button {
-  color: var(--text-secondary);
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-}
-
-.cancel-button:hover:not(:disabled) {
-  background-color: var(--bg-elevated);
-  border-color: var(--text-secondary);
-}
-
-.save-button {
-  color: white;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
-}
-
-.save-button:hover:not(:disabled) {
+.btn-add-vehicle:hover {
   opacity: 0.9;
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
-.cancel-button:disabled,
-.save-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
+.loading-state {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--text-secondary);
 }
 
-/* Logout Button */
+.vehicles-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.vehicle-card {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  transition: all 0.2s var(--ease-out);
+}
+
+.vehicle-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.vehicle-card.is-archived {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.vehicle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.vehicle-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.vehicle-icon {
+  color: var(--brand-primary);
+}
+
+.vehicle-nickname {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.vehicle-badges {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  border-radius: var(--radius-full);
+}
+
+.badge-primary {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge-archived {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.vehicle-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-base);
+}
+
+.vehicle-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+.detail-label {
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
+}
+
+.detail-value {
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.year-badge {
+  padding: 2px var(--space-2);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.vehicle-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.btn-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-edit {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.btn-edit:hover {
+  background-color: var(--brand-primary);
+  color: white;
+}
+
+.btn-primary-set {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.btn-primary-set:hover {
+  background-color: #fde047;
+}
+
+.btn-archive {
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.btn-archive:hover {
+  background-color: var(--error-bg);
+  color: var(--error);
+}
+
+.btn-unarchive {
+  background-color: var(--success-bg);
+  color: var(--success);
+}
+
+.btn-unarchive:hover {
+  background-color: var(--success);
+  color: white;
+}
+
+/* ==================== EMPTY STATE ==================== */
+.empty-state {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+}
+
+.empty-icon {
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-4);
+}
+
+.empty-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.empty-subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-4) 0;
+}
+
+.btn-add-first {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: white;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  border: none;
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-add-first:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* ==================== LOGOUT ==================== */
 .logout-button {
   width: 100%;
   display: flex;
@@ -531,7 +625,7 @@ async function handleLogout() {
   transition: all 0.2s var(--ease-out);
 }
 
-.logout-button:hover:not(:disabled) {
+.logout-button:hover {
   background-color: #dc2626;
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
@@ -547,7 +641,18 @@ async function handleLogout() {
   transform: none;
 }
 
-/* Responsive */
+.coming-soon {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-style: italic;
+  padding: var(--space-4);
+  background-color: var(--bg-elevated);
+  border-radius: var(--radius-base);
+  border: 1px dashed var(--border-secondary);
+}
+
+/* ==================== RESPONSIVE ==================== */
 @media (max-width: 768px) {
   .view-container {
     padding: var(--space-4) var(--space-3);
@@ -560,16 +665,18 @@ async function handleLogout() {
   .section-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--space-2);
+    gap: var(--space-3);
   }
 
-  .edit-button {
+  .btn-add-vehicle {
     width: 100%;
     justify-content: center;
   }
 
-  .form-actions {
+  .vehicle-detail {
     flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
   }
 }
 </style>
