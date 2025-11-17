@@ -5,6 +5,7 @@
 import { computeScoreV5 } from '@/utils/scoring';
 import { useRoute } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
+import { useVehicles } from '@/composables/useVehicles';
 import { fetchWithAuth } from '@/lib/api';
 import { 
   obtenerMensajeConsciente, 
@@ -35,11 +36,12 @@ const ariaData = ref(null);
 
 // ✅ Usuario autenticado
 const { userId } = useAuth();
+// 🚗 Vehículos dinámicos
+const { vehicles, fetchActiveVehicles } = useVehicles();
 const fileInputLabel = computed(() => {
   return isProcessing.value ? 'Processing...' : 'Choose Screenshots or Drag Here';
 });
 
-const VEHICULO_OPTIONS = ['Pontiac', 'Trax', 'Kia', 'Otro Carro'];
 const DURACION_OPTIONS = [1, 1.5,2, 3, 3.5, 4, 4.5, 5];
 
 const warehouses = ref([
@@ -74,7 +76,7 @@ const getLocalDateString = () => {
 const selectedScenarioForLog = ref('normal');
 const blockData = ref({
   fecha: getLocalDateString(),
-  vehiculo: VEHICULO_OPTIONS[0],
+  vehiculo: '',  // ← Ahora será un UUID (se carga desde route.query)
   hora: '07:00',
   duracion_horas: DURACION_OPTIONS[1],
   pago: 0,
@@ -101,6 +103,11 @@ function getCommuteForWarehouse(warehouseCode) {
   return warehouse ? warehouse.commuteMiles : warehouses.value[0].commuteMiles;
 }
 
+function getVehicleNickname(vehicleId) {
+  if (!vehicleId) return 'No especificado';
+  const vehicle = vehicles.value.find(v => v.id === vehicleId);
+  return vehicle ? vehicle.nickname : 'Vehículo desconocido';
+}
 // ============================================
 // onMounted - PRE-FILL DESDE BLOQUE AGENDADO
 // ============================================
@@ -116,7 +123,7 @@ onMounted(() => {
     try {
       blockData.value = {
         fecha: route.query.fecha || getLocalDateString(),
-        vehiculo: route.query.vehiculo || VEHICULO_OPTIONS[0],
+        vehiculo: route.query.vehicle_id || '',  // ← UUID del vehículo
         hora: route.query.hora?.substring(0, 5) || '07:00',
         duracion_horas: parseFloat(route.query.duracion) || DURACION_OPTIONS[1],
         pago: parseFloat(route.query.pago) || 0,
@@ -895,7 +902,7 @@ const user_id = userId.value;
   
   return {
     fecha: data.fecha,
-    vehiculo: data.vehiculo,
+    vehicle_id: data.vehiculo,  // ← Ahora es UUID
     warehouse: selectedWarehouseCode.value,
     hora: data.hora,
     duracion_horas: duracion_horas,
@@ -1147,7 +1154,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           </div>
           <div class="info-item">
             <span class="info-label">Vehicle</span>
-            <span class="info-value">{{ blockData.vehiculo }}</span>
+            <span class="info-value">{{ getVehicleNickname(blockData.vehiculo) }}</span>
           </div>
         </div>
       </div>

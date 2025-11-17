@@ -206,7 +206,7 @@ async function startBlock(block) {
       duracion: block.duracion_horas,
       pago: block.pago,
       warehouse: block.warehouse,
-      vehiculo: block.vehiculo
+      vehicle_id: block.vehicle_id,  // ← UUID del vehículo
     }
   })
 }
