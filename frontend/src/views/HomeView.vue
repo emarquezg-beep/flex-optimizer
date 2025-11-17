@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useVehicles } from '@/composables/useVehicles'
 import { useUserProfile } from '@/composables/useUserProfile'
 import { fetchWithAuth } from '@/lib/api'
 import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin } from 'lucide-vue-next'
@@ -14,6 +15,7 @@ const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 // ✅ Usuario autenticado
 const { userId, userName: authUserName, needsProfileCompletion, refreshProfile } = useAuth()
 const { userProfile } = useUserProfile()
+const { vehicles, fetchActiveVehicles } = useVehicles()
 
 // ✅ Control del modal de completar perfil
 const showCompleteProfileModal = ref(false)
@@ -32,6 +34,11 @@ const isNextWeekBlock = ref(false) // 🆕 Indica si el bloque es de la semana s
 const activeWeek = ref(0)
 
 onMounted(async () => {
+  // 🚗 Cargar vehículos primero
+  if (userId.value) {
+    await fetchActiveVehicles(userId.value)
+  }
+  
   await loadDashboard()
   
   // ✅ Verificar si necesita completar perfil
@@ -278,6 +285,12 @@ function formatTime(timeString) {
   const ampm = hour >= 12 ? 'PM' : 'AM'
   const hour12 = hour % 12 || 12
   return `${hour12}:${minutes} ${ampm}`
+}
+
+function getVehicleNickname(vehicleId) {
+  if (!vehicleId) return 'No especificado'
+  const vehicle = vehicles.value.find(v => v.id === vehicleId)
+  return vehicle ? vehicle.nickname : 'Vehículo desconocido'
 }
 
 // Computed
@@ -727,7 +740,7 @@ function closeProfileModal() {
             </div>
             <div class="detail-row">
               <span class="detail-label">Vehículo</span>
-              <span class="detail-value">{{ selectedBlock.vehiculo }}</span>
+              <span class="detail-value">{{ getVehicleNickname(selectedBlock.vehicle_id) }}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">Pago</span>
