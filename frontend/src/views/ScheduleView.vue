@@ -284,6 +284,7 @@ function goBack() {
               </option>
             </select>
           </div>
+         </div> 
 
         <!-- Notas Opcionales -->
         <div class="form-section">
