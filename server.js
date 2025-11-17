@@ -659,39 +659,40 @@ app.post('/api/log-route', authenticateUser, async (req, res) => {    const logD
 
     console.log('💾 ¡Ruta v3 guardada con ETAs y stops encriptados!');
     
-    // 🚗 Actualizar millaje del vehículo automáticamente
-    if (logData.vehicle_id && logData.millas_de_trabajo) {
-        const millasNuevas = parseFloat(logData.millas_de_trabajo);
+// 🚗 Actualizar millaje del vehículo automáticamente
+if (logData.vehicle_id && logData.millas_de_trabajo) {
+    const millasNuevas = parseFloat(logData.millas_de_trabajo);
+    
+    // Obtener millaje actual del vehículo
+    const { data: vehicleData, error: fetchError } = await supabase
+        .from('user_vehicles')
+        .select('total_mileage')
+        .eq('id', logData.vehicle_id);
+    
+    if (!fetchError && vehicleData && vehicleData.length > 0) {
+        const vehicle = vehicleData[0];
         
-        // Obtener millaje actual del vehículo
-        const { data: vehicleData, error: fetchError } = await supabase
+        // Calcular nuevo total
+        const millasActuales = vehicle.total_mileage || 0;
+        const nuevoTotal = millasActuales + millasNuevas;
+        
+        // Actualizar millaje
+        const { error: updateError } = await supabase
             .from('user_vehicles')
-            .select('total_mileage')
-            .eq('id', logData.vehicle_id)
-            .single();
+            .update({ total_mileage: nuevoTotal })
+            .eq('id', logData.vehicle_id);
         
-        if (!fetchError && vehicleData) {
-            // Calcular nuevo total
-            const millasActuales = vehicleData.total_mileage || 0;
-            const nuevoTotal = millasActuales + millasNuevas;
-            
-            // Actualizar millaje
-            const { error: updateError } = await supabase
-                .from('user_vehicles')
-                .update({ total_mileage: nuevoTotal })
-                .eq('id', logData.vehicle_id);
-            
-            if (!updateError) {
-                console.log(`✅ Millaje actualizado: ${millasActuales.toFixed(2)} + ${millasNuevas.toFixed(2)} = ${nuevoTotal.toFixed(2)} millas`);
-            } else {
-                console.error('⚠️ Error actualizando millaje del vehículo:', updateError.message);
-                // No lanzar error - la ruta ya se guardó correctamente
-            }
-        } else if (fetchError) {
-            console.error('⚠️ Error obteniendo millaje actual del vehículo:', fetchError.message);
-            // No lanzar error - la ruta ya se guardó correctamente
+        if (!updateError) {
+            console.log(`✅ Millaje actualizado: ${millasActuales.toFixed(2)} + ${millasNuevas.toFixed(2)} = ${nuevoTotal.toFixed(2)} millas`);
+        } else {
+            console.error('⚠️ Error actualizando millaje:', updateError.message);
         }
+    } else if (fetchError) {
+        console.error('⚠️ Error obteniendo millaje actual:', fetchError.message);
+    } else {
+        console.error('⚠️ Vehículo no encontrado con ID:', logData.vehicle_id);
     }
+}
     
     res.status(200).json({ success: true, message: 'Ruta guardada en bitácora.', data: data });
 
