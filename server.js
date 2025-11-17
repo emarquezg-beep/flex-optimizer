@@ -18,11 +18,11 @@ const app = express();
 const PORT = 3000;
 
 // Tu configuración de CORS (sin cambios)
+// forzando commit
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
-  'https://flex-optimizer-git-auth-system-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-main-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-user-profi-b2628b-ernestos-projects-d9e7c95d.vercel.app',
 ];
 const corsOptions = {
   origin: function (origin, callback) {
@@ -599,7 +599,7 @@ app.post('/api/log-route', authenticateUser, async (req, res) => {    const logD
     const dataToInsert = {
         // --- Campos existentes ---
         fecha: logData.fecha,
-        vehiculo: logData.vehiculo,
+        vehicle_id: logData.vehicle_id,  // ← UUID del vehículo
         warehouse: logData.warehouse,
         hora: logData.hora,
         duracion_horas: logData.duracion_horas,
@@ -1017,14 +1017,14 @@ app.get('/api/scheduled-blocks/:userId', authenticateUser, async (req, res) => {
 
 // 2. POST /api/scheduled-blocks - Crear nuevo bloque
 app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
-  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehiculo, notes } = req.body;
+  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehicle_id, notes } = req.body;
  
   if (user_id && user_id !== req.userId) {
     return res.status(403).json({ success: false, error: 'No tienes permiso' });
   }
 
   // Validación
-  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
+  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehicle_id) {
     return res.status(400).json({ 
       success: false, 
       error: 'Faltan campos requeridos' 
@@ -1041,7 +1041,7 @@ app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
         duracion_horas,
         pago,
         warehouse,
-        vehiculo,
+        vehicle_id,  // ← UUID del vehículo
         notes,
         status: 'scheduled'
       }])
@@ -1068,30 +1068,36 @@ app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
 });
 
 // 3. PUT /api/scheduled-blocks/:blockId - Actualizar bloque
-app.put('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) => {
-  const { blockId } = req.params;
-  const updates = req.body;
+app.put('/api/scheduled-blocks/:id', authenticateUser, async (req, res) => {
+  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehicle_id, notes } = req.body;
+  const blockId = req.params.id;
   
-  // Verificar ownership del bloque
-  const { data: block } = await supabase
-    .from('scheduled_blocks')
-    .select('user_id')  // ← user_id de la DB
-    .eq('id', blockId)
-    .single();
-  
-  if (block.user_id !== req.userId) {  // ← Comparar user_id con req.userId
+  if (user_id && user_id !== req.userId) {
     return res.status(403).json({ success: false, error: 'No tienes permiso' });
   }
 
-  // No permitir cambiar user_id ni created_at
-  delete updates.user_id;
-  delete updates.created_at;
+  // Validación
+  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehicle_id) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan campos requeridos' 
+    });
+  }
   
   try {
     const { data, error } = await supabase
       .from('scheduled_blocks')
-      .update(updates)
+      .update({
+        fecha,
+        hora,
+        duracion_horas,
+        pago,
+        warehouse,
+        vehicle_id,  // ← UUID del vehículo
+        notes
+      })
       .eq('id', blockId)
+      .eq('user_id', user_id)
       .select();
     
     if (error) throw error;
@@ -1103,7 +1109,7 @@ app.put('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) => 
       });
     }
     
-    console.log('✅ Bloque actualizado:', blockId);
+    console.log('✅ Bloque actualizado:', data[0].id);
     res.json({ success: true, block: data[0] });
     
   } catch (error) {
@@ -1652,139 +1658,6 @@ app.get('/api/scheduled-blocks/:userId', authenticateUser, async (req, res) => {
     
   } catch (error) {
     console.error('❌ Error obteniendo bloques:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// 3. POST /api/scheduled-blocks
-// Crea un nuevo bloque agendado
-app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
-  const { 
-    user_id, 
-    fecha, 
-    hora, 
-    duracion_horas, 
-    pago, 
-    warehouse, 
-    vehiculo,
-    notes 
-  } = req.body;
-  
-  // Validaciones
-  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
-    return res.status(400).json({
-      success: false,
-      error: 'Faltan campos requeridos'
-    });
-  }
-  
-  try {
-    const { data, error } = await supabase
-      .from('scheduled_blocks')
-      .insert([{
-        user_id,
-        fecha,
-        hora,
-        duracion_horas: parseFloat(duracion_horas),
-        pago: parseFloat(pago),
-        warehouse,
-        vehiculo,
-        status: 'scheduled',
-        notes: notes || null
-      }])
-      .select();
-    
-    if (error) throw error;
-    
-    console.log(`✅ Bloque agendado creado: ID ${data[0].id}`);
-    
-    res.json({
-      success: true,
-      message: 'Bloque agendado correctamente',
-      block: data[0]
-    });
-    
-  } catch (error) {
-    console.error('❌ Error creando bloque:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// 4. PUT /api/scheduled-blocks/:id
-// Actualiza un bloque existente
-app.put('/api/scheduled-blocks/:id', authenticateUser, async (req, res) => {
-  const { userId, id } = req.params;
-  const { 
-    fecha, 
-    hora, 
-    duracion_horas, 
-    pago, 
-    warehouse, 
-    vehiculo,
-    notes 
-  } = req.body;
-    // Verificar ownership
-  const { data: block, error: fetchError } = await supabase
-    .from('scheduled_blocks')
-    .select('user_id')
-    .eq('id', id)
-    .single();
-  
-  if (fetchError || !block) {
-    return res.status(404).json({
-      success: false,
-      error: 'Bloque no encontrado'
-    });
-  }
-  
-  if (block.user_id !== req.userId) {
-    return res.status(403).json({
-      success: false,
-      error: 'No tienes permiso para modificar este bloque'
-    });
-  }
-  try {
-    const updateData = {};
-    
-    if (fecha) updateData.fecha = fecha;
-    if (hora) updateData.hora = hora;
-    if (duracion_horas) updateData.duracion_horas = parseFloat(duracion_horas);
-    if (pago) updateData.pago = parseFloat(pago);
-    if (warehouse) updateData.warehouse = warehouse;
-    if (vehiculo) updateData.vehiculo = vehiculo;
-    if (notes !== undefined) updateData.notes = notes || null;
-    
-    const { data, error } = await supabase
-      .from('scheduled_blocks')
-      .update(updateData)
-      .eq('id', id)
-      .select();
-    
-    if (error) throw error;
-    
-    if (!data || data.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Bloque no encontrado'
-      });
-    }
-    
-    console.log(`✅ Bloque ${id} actualizado`);
-    
-    res.json({
-      success: true,
-      message: 'Bloque actualizado correctamente',
-      block: data[0]
-    });
-    
-  } catch (error) {
-    console.error('❌ Error actualizando bloque:', error);
     res.status(500).json({
       success: false,
       error: error.message

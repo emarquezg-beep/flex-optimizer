@@ -2,15 +2,23 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useVehicles } from '@/composables/useVehicles'
+import { useUserProfile } from '@/composables/useUserProfile'
 import { fetchWithAuth } from '@/lib/api'
 import { Calendar, TrendingUp, DollarSign, Clock, Plus, MapPin } from 'lucide-vue-next'
 import { BaseButton, BaseCard } from '@/components/base'
+import CompleteProfileModal from '@/components/CompleteProfileModal.vue'
 
 const router = useRouter()
 const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 // ✅ Usuario autenticado
-const { userId, userName: authUserName } = useAuth()
+const { userId, userName: authUserName, needsProfileCompletion, refreshProfile } = useAuth()
+const { userProfile } = useUserProfile()
+const { vehicles, fetchActiveVehicles } = useVehicles()
+
+// ✅ Control del modal de completar perfil
+const showCompleteProfileModal = ref(false)
 
 // Estados
 const isLoading = ref(true)
@@ -26,7 +34,17 @@ const isNextWeekBlock = ref(false) // 🆕 Indica si el bloque es de la semana s
 const activeWeek = ref(0)
 
 onMounted(async () => {
+  // 🚗 Cargar vehículos primero
+  if (userId.value) {
+    await fetchActiveVehicles(userId.value)
+  }
+  
   await loadDashboard()
+  
+  // ✅ Verificar si necesita completar perfil
+  if (needsProfileCompletion.value) {
+    showCompleteProfileModal.value = true
+  }
 })
 
 async function loadDashboard() {
@@ -195,7 +213,7 @@ async function startBlock(block) {
       duracion: block.duracion_horas,
       pago: block.pago,
       warehouse: block.warehouse,
-      vehiculo: block.vehiculo
+      vehicle_id: block.vehicle_id,  // ← UUID del vehículo
     }
   })
 }
@@ -269,6 +287,12 @@ function formatTime(timeString) {
   return `${hour12}:${minutes} ${ampm}`
 }
 
+function getVehicleNickname(vehicleId) {
+  if (!vehicleId) return 'No especificado'
+  const vehicle = vehicles.value.find(v => v.id === vehicleId)
+  return vehicle ? vehicle.nickname : 'Vehículo desconocido'
+}
+
 // Computed
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -332,6 +356,18 @@ const nextWeekRemainingHours = computed(() => {
   if (!nextWeekSummary.value) return 40
   return Math.max(0, 40 - parseFloat(nextWeekSummary.value.hours || 0))
 })
+
+// ✅ Funciones para manejar el modal de completar perfil
+function handleProfileCompleted(profile) {
+  console.log('✅ Perfil completado:', profile)
+  showCompleteProfileModal.value = false
+  // Refrescar el perfil en useAuth
+  refreshProfile()
+}
+
+function closeProfileModal() {
+  showCompleteProfileModal.value = false
+}
 </script>
 
 <template>
@@ -704,7 +740,7 @@ const nextWeekRemainingHours = computed(() => {
             </div>
             <div class="detail-row">
               <span class="detail-label">Vehículo</span>
-              <span class="detail-value">{{ selectedBlock.vehiculo }}</span>
+              <span class="detail-value">{{ getVehicleNickname(selectedBlock.vehicle_id) }}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">Pago</span>
@@ -743,6 +779,13 @@ const nextWeekRemainingHours = computed(() => {
         </div>
       </div>
     </Teleport>
+
+    <!-- ✅ Modal de Completar Perfil -->
+    <CompleteProfileModal 
+      :show="showCompleteProfileModal"
+      @completed="handleProfileCompleted"
+      @close="closeProfileModal"
+    />
 
   </div>
 </template>

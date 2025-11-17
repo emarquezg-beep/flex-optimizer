@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useVehicles } from '@/composables/useVehicles'
 import { fetchWithAuth } from '@/lib/api'
 import { Calendar, ArrowLeft } from 'lucide-vue-next'
 import { BaseButton, BaseCard, BaseInput } from '@/components/base'
@@ -13,8 +14,10 @@ const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 // ✅ Usuario autenticado
 const { userId } = useAuth()
 
+// 🚗 Vehículos dinámicos
+const { vehicles, fetchActiveVehicles, getPrimaryVehicle } = useVehicles()
+
 // Opciones
-const VEHICULO_OPTIONS = ['Pontiac', 'Trax', 'Kia', 'Otro Carro']
 const DURACION_OPTIONS = [3, 3.5, 4, 4.5, 5]
 const warehouses = [
   { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL' },
@@ -39,11 +42,24 @@ const formData = ref({
   duracion_horas: 4,
   pago: '',
   warehouse: warehouses[0].code,
-  vehiculo: VEHICULO_OPTIONS[0],
+  vehiculo: '',  // ← Ahora será un UUID (se carga dinámicamente)
   notes: ''
 })
 
 onMounted(async () => {
+  // 🚗 Cargar vehículos activos
+  if (userId.value) {
+    await fetchActiveVehicles(userId.value)
+    
+    // Establecer vehículo principal por defecto (solo en modo crear)
+    if (!route.query.blockId) {
+      const primaryResult = await getPrimaryVehicle(userId.value)
+      if (primaryResult.success && primaryResult.vehicle) {
+        formData.value.vehiculo = primaryResult.vehicle.id
+      }
+    }
+  }
+  
   // Verificar si es modo edición
   if (route.query.blockId) {
     isEditMode.value = true
@@ -119,10 +135,9 @@ async function saveBlock() {
       duracion_horas: parseFloat(formData.value.duracion_horas),
       pago: parseFloat(formData.value.pago),
       warehouse: formData.value.warehouse,
-      vehiculo: formData.value.vehiculo,
+      vehicle_id: formData.value.vehiculo,  // ← UUID del vehículo
       notes: formData.value.notes || null
     }
-
     let response
     
     if (isEditMode.value) {
@@ -259,12 +274,17 @@ function goBack() {
           <div class="form-group">
             <label for="vehiculo">Vehículo</label>
             <select id="vehiculo" v-model="formData.vehiculo">
-              <option v-for="v in VEHICULO_OPTIONS" :key="v" :value="v">
-                {{ v }}
+              <option value="" disabled>Selecciona un vehículo</option>
+              <option 
+                v-for="vehicle in vehicles" 
+                :key="vehicle.id" 
+                :value="vehicle.id"
+              >
+                {{ vehicle.nickname }}{{ vehicle.is_primary ? ' ⭐' : '' }}
               </option>
             </select>
           </div>
-        </div>
+         </div> 
 
         <!-- Notas Opcionales -->
         <div class="form-section">

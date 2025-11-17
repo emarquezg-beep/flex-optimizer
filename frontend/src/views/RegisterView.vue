@@ -11,6 +11,7 @@ const { register } = useAuth()
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const fullName = ref('')
 const isLoading = ref(false)
 const error = ref(null)
 const success = ref(false)
@@ -19,7 +20,7 @@ const showConfirmPassword = ref(false)
 
 async function handleRegister() {
   // Validaciones
-  if (!email.value || !password.value || !confirmPassword.value) {
+  if (!email.value || !password.value || !confirmPassword.value || !fullName.value) {
     error.value = 'Por favor completa todos los campos'
     return
   }
@@ -37,7 +38,7 @@ async function handleRegister() {
   error.value = null
   isLoading.value = true
   
-  const result = await register(email.value, password.value)
+  const result = await register(email.value, password.value, fullName.value)
   isLoading.value = false
   
   if (result.success) {
@@ -79,6 +80,22 @@ async function handleRegister() {
             required
           />
         </div>
+                <div class="input-group">
+          <label for="fullName" class="input-label">
+            <UserPlus :size="16" />
+            Nombre Completo
+          </label>
+          <input
+            id="fullName"
+            v-model="fullName"
+            type="text"
+            placeholder="Tu nombre completo"
+            class="register-input"
+            :disabled="isLoading"
+            required
+          />
+        </div>
+
 
         <div class="input-group">
         <label for="password" class="input-label">
