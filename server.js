@@ -599,7 +599,7 @@ app.post('/api/log-route', authenticateUser, async (req, res) => {    const logD
     const dataToInsert = {
         // --- Campos existentes ---
         fecha: logData.fecha,
-        vehiculo: logData.vehiculo,
+        vehicle_id: logData.vehicle_id,  // ← UUID del vehículo
         warehouse: logData.warehouse,
         hora: logData.hora,
         duracion_horas: logData.duracion_horas,

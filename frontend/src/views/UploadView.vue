@@ -1618,7 +1618,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
           </div>
           <div class="breakdown-item">
             <span class="breakdown-label">Vehículo:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.vehiculo }}</span>
+            <span class="breakdown-value">{{ getVehicleNickname(blockData.vehiculo) }}</span>
           </div>
           <div class="breakdown-item">
             <span class="breakdown-label">Número de Paradas:</span>
