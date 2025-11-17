@@ -1017,14 +1017,14 @@ app.get('/api/scheduled-blocks/:userId', authenticateUser, async (req, res) => {
 
 // 2. POST /api/scheduled-blocks - Crear nuevo bloque
 app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
-  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehiculo, notes } = req.body;
+  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehicle_id, notes } = req.body;
  
   if (user_id && user_id !== req.userId) {
     return res.status(403).json({ success: false, error: 'No tienes permiso' });
   }
 
   // Validación
-  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehiculo) {
+  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehicle_id) {
     return res.status(400).json({ 
       success: false, 
       error: 'Faltan campos requeridos' 
@@ -1041,7 +1041,7 @@ app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
         duracion_horas,
         pago,
         warehouse,
-        vehiculo,
+        vehicle_id,  // ← UUID del vehículo
         notes,
         status: 'scheduled'
       }])
@@ -1068,30 +1068,36 @@ app.post('/api/scheduled-blocks', authenticateUser, async (req, res) => {
 });
 
 // 3. PUT /api/scheduled-blocks/:blockId - Actualizar bloque
-app.put('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) => {
-  const { blockId } = req.params;
-  const updates = req.body;
+app.put('/api/scheduled-blocks/:id', authenticateUser, async (req, res) => {
+  const { user_id, fecha, hora, duracion_horas, pago, warehouse, vehicle_id, notes } = req.body;
+  const blockId = req.params.id;
   
-  // Verificar ownership del bloque
-  const { data: block } = await supabase
-    .from('scheduled_blocks')
-    .select('user_id')  // ← user_id de la DB
-    .eq('id', blockId)
-    .single();
-  
-  if (block.user_id !== req.userId) {  // ← Comparar user_id con req.userId
+  if (user_id && user_id !== req.userId) {
     return res.status(403).json({ success: false, error: 'No tienes permiso' });
   }
 
-  // No permitir cambiar user_id ni created_at
-  delete updates.user_id;
-  delete updates.created_at;
+  // Validación
+  if (!user_id || !fecha || !hora || !duracion_horas || !pago || !warehouse || !vehicle_id) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan campos requeridos' 
+    });
+  }
   
   try {
     const { data, error } = await supabase
       .from('scheduled_blocks')
-      .update(updates)
+      .update({
+        fecha,
+        hora,
+        duracion_horas,
+        pago,
+        warehouse,
+        vehicle_id,  // ← UUID del vehículo
+        notes
+      })
       .eq('id', blockId)
+      .eq('user_id', user_id)
       .select();
     
     if (error) throw error;
@@ -1103,7 +1109,7 @@ app.put('/api/scheduled-blocks/:blockId', authenticateUser, async (req, res) => 
       });
     }
     
-    console.log('✅ Bloque actualizado:', blockId);
+    console.log('✅ Bloque actualizado:', data[0].id);
     res.json({ success: true, block: data[0] });
     
   } catch (error) {
