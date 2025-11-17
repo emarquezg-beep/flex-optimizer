@@ -902,6 +902,7 @@ const user_id = userId.value;
   
   return {
     fecha: data.fecha,
+    block_id: route.query.blockId || null,  // ← AGREGAR ESTA LÍNEA
     vehicle_id: data.vehiculo,  // ← Ahora es UUID
     warehouse: selectedWarehouseCode.value,
     hora: data.hora,

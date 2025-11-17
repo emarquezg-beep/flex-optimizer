@@ -712,7 +712,21 @@ if (logData.vehicle_id && logData.millas_de_trabajo) {
         });
     }
 }
-    
+        // 🗑️ Eliminar el bloque agendado (ya completado)
+    if (logData.block_id) {
+        const { error: deleteError } = await supabase
+            .from('scheduled_blocks')
+            .delete()
+            .eq('id', logData.block_id)
+            .eq('user_id', logData.user_id);
+        
+        if (!deleteError) {
+            console.log(`🗑️ Bloque agendado ${logData.block_id} eliminado (ruta completada)`);
+        } else {
+            console.error('⚠️ Error eliminando bloque:', deleteError.message);
+        }
+    }
+
     res.status(200).json({ success: true, message: 'Ruta guardada en bitácora.', data: data });
 
 } catch (error) {
