@@ -663,11 +663,24 @@ app.post('/api/log-route', authenticateUser, async (req, res) => {    const logD
 if (logData.vehicle_id && logData.millas_de_trabajo) {
     const millasNuevas = parseFloat(logData.millas_de_trabajo);
     
+    console.log('🔍 Intentando actualizar millaje:', {
+        vehicle_id: logData.vehicle_id,
+        millas_nuevas: millasNuevas,
+        user_id: logData.user_id
+    });
+    
     // Obtener millaje actual del vehículo
     const { data: vehicleData, error: fetchError } = await supabase
         .from('user_vehicles')
-        .select('total_mileage')
-        .eq('id', logData.vehicle_id);
+        .select('id, total_mileage, user_id, nickname')
+        .eq('id', logData.vehicle_id)
+        .eq('user_id', logData.user_id);
+    
+    console.log('🔍 Resultado de búsqueda:', {
+        encontrados: vehicleData?.length || 0,
+        vehiculo: vehicleData?.[0],
+        error: fetchError?.message
+    });
     
     if (!fetchError && vehicleData && vehicleData.length > 0) {
         const vehicle = vehicleData[0];
@@ -676,21 +689,27 @@ if (logData.vehicle_id && logData.millas_de_trabajo) {
         const millasActuales = vehicle.total_mileage || 0;
         const nuevoTotal = millasActuales + millasNuevas;
         
+        console.log(`📊 Cálculo: ${millasActuales} + ${millasNuevas} = ${nuevoTotal}`);
+        
         // Actualizar millaje
         const { error: updateError } = await supabase
             .from('user_vehicles')
             .update({ total_mileage: nuevoTotal })
-            .eq('id', logData.vehicle_id);
+            .eq('id', logData.vehicle_id)
+            .eq('user_id', logData.user_id);
         
         if (!updateError) {
-            console.log(`✅ Millaje actualizado: ${millasActuales.toFixed(2)} + ${millasNuevas.toFixed(2)} = ${nuevoTotal.toFixed(2)} millas`);
+            console.log(`✅ Millaje actualizado para ${vehicle.nickname}: ${millasActuales.toFixed(2)} + ${millasNuevas.toFixed(2)} = ${nuevoTotal.toFixed(2)} millas`);
         } else {
             console.error('⚠️ Error actualizando millaje:', updateError.message);
         }
     } else if (fetchError) {
         console.error('⚠️ Error obteniendo millaje actual:', fetchError.message);
     } else {
-        console.error('⚠️ Vehículo no encontrado con ID:', logData.vehicle_id);
+        console.error('⚠️ Vehículo no encontrado:', {
+            vehicle_id: logData.vehicle_id,
+            user_id: logData.user_id
+        });
     }
 }
     
