@@ -1113,7 +1113,8 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 </script>
 
 <template>
-<div class="uploader-container">
+  <div class="view-container">
+    <div class="uploader-container">
 
       <transition name="fade-slide">
         <div v-show="showInputForm" class="input-section-wrapper">
@@ -1262,7 +1263,6 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 
         </div>
       </transition>
-
       <div v-if="!showInputForm && reportData" class="edit-bar">
         <div class="edit-bar-left">
           <button @click="showInputForm = true" class="btn-edit-inputs">
@@ -1278,381 +1278,58 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         </div>
       </div>
 
-<!-- 🏢 MODAL DE DETECCIÓN DE DOWNTOWN -->
-<transition name="modal-fade">
-  <div v-if="showDowntownModal" class="modal-overlay" @click.self="skipDowntownSelection">
-    <div class="modal-container downtown-modal">
-      <div class="modal-header">
-        <h3>🏢 Downtown Apartments Detected</h3>
-        <p class="modal-subtitle">
-          Found {{ orlandoApartments.length }} apartment(s) in Orlando. 
-          Select which ones are downtown (adds +3 min per stop).
-        </p>
-      </div>
-      
-      <div class="modal-body">
-        <div class="apartment-list">
-          <label 
-            v-for="apt in orlandoApartments" 
-            :key="apt.number"
-            class="apartment-item"
-          >
-            <input 
-              type="checkbox" 
-              v-model="downtownSelection[apt.number]"
-              class="downtown-checkbox-modal"
-            >
-            <div class="apartment-info">
-              <span class="apt-number">Stop #{{ apt.number }}</span>
-              <span class="apt-address">{{ apt.address }}</span>
-            </div>
-          </label>
-        </div>
-      </div>
-      
-      <div class="modal-footer">
-        <button @click="skipDowntownSelection" class="button-secondary">
-          ⏭️ No Downtown Apartments
-        </button>
-        <button @click="confirmDowntownSelection" class="button-primary">
-          ✅ Confirm Selection
-        </button>
-      </div>
-    </div>
-  </div>
-</transition>
-        <!-- Botón de evaluación (siempre visible para mejor UX) -->
-        <button 
-          @click="evaluateRoute" 
-          class="button-primary button-evaluate"
-          :disabled="isProcessing || (!jsonInput.trim() && extractedAddresses.length === 0)"
-        >
-          {{ isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios' }}
-        </button>
-      </div>
 
       <div v-if="isProcessing" class="status"><h3>Evaluating route scenarios...</h3></div>
-      
-      <!-- RESULTADOS (solo aparecen después de evaluar) -->
-      <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing">
-      
-      <!-- RESULTADOS (solo aparecen después de evaluar) -->
-      <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing">
+      <div v-if="backendResponse && backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
 
- 
-        <!-- Ajustes adicionales del bloque (si es necesario) -->
-        <div class="additional-settings">
-          <details>
-            <summary>⚙️ Advanced Settings (optional)</summary>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Time Before Block (min)</label>
-                <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
+      <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing && reportData && normalPayload.pago">
+        
+        <div class="results-container-slides">
+          <div class="results-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
+            <h3>📊 Route Analysis</h3>
+            <button 
+              @click="mostrarDetalles = !mostrarDetalles" 
+              class="text-xs text-gray-500 underline"
+            >
+              {{ mostrarDetalles ? 'Hide Debug' : 'Show Debug' }}
+            </button>
+          </div>
+
+          <SlideContainer 
+            :normalPayload="normalPayload"
+            :inversePayload="inversePayload"
+            @save-route="saveToLogbook"
+            @reset="startManualEntry"
+          />
+
+          <div v-if="mostrarDetalles" class="mt-4 p-4 bg-black text-xs font-mono text-green-400 overflow-auto h-40" style="margin-top: 20px; padding:15px; background:#000; color:#0f0;">
+            <p>DEBUG DATA:</p>
+            <pre>{{ normalPayload }}</pre>
+          </div>
+        </div>
+
+        <div v-if="backendResponse?.hasErrors && backendResponse?.failedAddresses" class="address-errors">
+          <h3>⚠️ Advertencia: Direcciones No Encontradas</h3>
+          <div class="error-list">
+            <div v-for="(failed, index) in backendResponse.failedAddresses" :key="index" class="error-item">
+              <div class="error-header">
+                <strong>{{ failed.type }}</strong>
               </div>
-              <div class="form-group">
-                <label>Commute 1 (Miles)</label>
-                <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
-              </div>
-              <div class="form-group">
-                <label class="label-with-button">
-                  <span>Warehouse Delay (min)</span>
-                  <button @click.prevent="calculateActualDelay" class="button-tertiary">Now</button>
-                </label>
-                <input type="number" v-model.number="blockData.retraso_almacen" step="5">
+              <div class="error-details">
+                <p>{{ failed.from }} ➝ {{ failed.to }}</p>
+                <p class="error-type"><span class="error-badge">{{ failed.errorType }}</span></p>
               </div>
             </div>
-          </details>
+          </div>
+          <div class="error-actions">
+            <p>✏️ Por favor, corrige las direcciones y evalúa de nuevo.</p>
+          </div>
         </div>
 
-        <div v-if="backendResponse">
-          <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
-          
-<div v-else-if="reportData && normalPayload.pago" class="results-container-slides">
-  
-  <div class="results-header">
-    <h3>📊 Route Analysis</h3>
-    
-    <button 
-      @click="mostrarDetalles = !mostrarDetalles" 
-      class="text-xs text-gray-500 underline mb-2"
-    >
-      {{ mostrarDetalles ? 'Hide Debug Data' : 'Show Debug Data' }}
-    </button>
+      </div>
+      </div>
   </div>
-
-  <SlideContainer 
-    :normalPayload="normalPayload"
-    :inversePayload="inversePayload"
-    @save-route="saveToLogbook"
-    @reset="startManualEntry"
-  />
-
-  <div v-if="mostrarDetalles" class="mt-4 p-4 bg-black text-xs font-mono text-green-400 overflow-auto h-40">
-    <p>NORMAL SCORE: {{ normalPayload.route_score }}</p>
-    <p>INVERSE SCORE: {{ inversePayload.route_score }}</p>
-    <pre>{{ normalPayload }}</pre>
-  </div>
-
-</div>
-
-<!-- 🆕 SECCIÓN DE ERRORES DE DIRECCIONES -->
-<div v-if="backendResponse?.hasErrors && backendResponse?.failedAddresses" class="address-errors">
-  <h3>⚠️ Advertencia: Direcciones No Encontradas</h3>
-  <p class="error-intro">
-    Google Maps no pudo encontrar rutas para las siguientes direcciones. 
-    Por favor, verifica que estén escritas correctamente antes de continuar.
-  </p>
-  
-  <div class="error-list">
-    <div 
-      v-for="(failed, index) in backendResponse.failedAddresses" 
-      :key="index"
-      class="error-item"
-    >
-      <div class="error-header">
-        <span class="error-icon">🚫</span>
-        <strong>{{ failed.type }}</strong>
-      </div>
-      <div class="error-details">
-        <p><strong>Desde:</strong> {{ failed.from }}</p>
-        <p><strong>Hasta:</strong> {{ failed.to }}</p>
-        <p v-if="failed.waypoints && failed.waypoints.length > 0">
-          <strong>Waypoints:</strong> {{ failed.waypoints.join(', ') }}
-        </p>
-        <p class="error-type">
-          <strong>Tipo de Error:</strong> 
-          <span class="error-badge">{{ failed.errorType }}</span>
-        </p>
-      </div>
-    </div>
-  </div>
-  
-  <div class="error-actions">
-    <p>✏️ <strong>Acción requerida:</strong> Corrige las direcciones arriba y vuelve a hacer clic en "Evaluate Scenarios".</p>
-  </div>
-</div>
-            <!-- LOGBOOK FORM CON NUEVO DISEÑO -->
-<div v-if="reportData && calculatedLogEntry && routeScore" class="logbook-form-container">
-  
-  <!-- RESUMEN CONSCIENTE (SIEMPRE VISIBLE) -->
-  <div class="resumen-consciente">
-    
-    <!-- Header con Score -->
-    <div class="score-header">
-      <div class="score-badge" :style="{ backgroundColor: routeScore.color }">
-        <span class="score-icon">{{ routeScore.icon }}</span>
-        <div class="score-info">
-          <span class="score-value">{{ routeScore.total }}/100</span>
-          <span class="score-label">{{ routeScore.categoria }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Métricas Clave -->
-    <div class="metricas-clave">
-      <div class="metrica">
-        <div class="metrica-icon">⏱️</div>
-        <div class="metrica-content">
-          <span class="metrica-label">Hora Estimada de Llegada</span>
-          <span class="metrica-value">{{ chosenETA?.eta || 'N/A' }}</span>
-        </div>
-      </div>
-      
-      <div class="metrica">
-        <div class="metrica-icon">🛣️</div>
-        <div class="metrica-content">
-          <span class="metrica-label">Millas Totales a Conducir</span>
-          <span class="metrica-value">{{ calculatedLogEntry.millas_totales }} mi</span>
-        </div>
-      </div>
-      
-      <div class="metrica">
-        <div class="metrica-icon">💰</div>
-        <div class="metrica-content">
-          <span class="metrica-label">Pago Real por Hora</span>
-          <span class="metrica-value">${{ calculatedLogEntry.pago_real_por_hora }}/h</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Mensaje Consciente -->
-    <div class="mensaje-consciente">
-      <blockquote class="frase">
-        "{{ routeScore.mensaje.frase }}"
-        <cite>— {{ routeScore.mensaje.autor }}</cite>
-      </blockquote>
-      
-      <div class="accion">
-        <strong>💡 Reflexión:</strong>
-        <p>{{ routeScore.mensaje.accion }}</p>
-      </div>
-    </div>
-
-    <!-- Botón Expandir Detalles -->
-    <button 
-      @click="mostrarDetalles = !mostrarDetalles" 
-      class="button-toggle-details"
-    >
-      {{ mostrarDetalles ? '▲ Ocultar Detalles Técnicos' : '▼ Mostrar Detalles Técnicos' }}
-    </button>
-  </div>
-
-  <!-- DETALLES EXPANDIBLES -->
-  <transition name="expand">
-    <div v-if="mostrarDetalles" class="detalles-tecnicos">
-      
-      <!-- User & Scenario Selection -->
-      <h3>📋 Datos del Bloque</h3>
-      <div class="form-row">
-
-        <div class="form-group">
-          <label>Escenario Usado</label>
-          <div class="scenario-pills">
-            <label class="pill-option">
-              <input type="radio" v-model="selectedScenarioForLog" value="normal">
-              <span>Normal</span>
-            </label>
-            <label class="pill-option">
-              <input type="radio" v-model="selectedScenarioForLog" value="inverse">
-              <span>Inversa</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Breakdown Detallado -->
-      <div class="breakdown-section">
-        <h4>📊 Desglose Financiero</h4>
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Pago Base del Bloque:</span>
-            <span class="breakdown-value">${{ calculatedLogEntry.pago }}</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Pago/Hora (Bloque):</span>
-            <span class="breakdown-value">${{ calculatedLogEntry.pago_por_hora }}</span>
-          </div>
-          <div class="breakdown-item negative">
-            <span class="breakdown-label">Gasto de Gasolina:</span>
-            <span class="breakdown-value">-${{ calculatedLogEntry.gasto_de_gasolina }}</span>
-          </div>
-          <div class="breakdown-item negative">
-            <span class="breakdown-label">Desgaste de Vehículo:</span>
-            <span class="breakdown-value">-${{ calculatedLogEntry.desgaste_vehiculo }}</span>
-          </div>
-          <div class="breakdown-item negative">
-            <span class="breakdown-label">Impuestos (15.3%):</span>
-            <span class="breakdown-value">-${{ calculatedLogEntry.tax }}</span>
-          </div>
-          <div class="breakdown-item positive">
-            <span class="breakdown-label">Deducción por Milla:</span>
-            <span class="breakdown-value">+${{ calculatedLogEntry.claim_por_milla }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="breakdown-section">
-        <h4>🛣️ Desglose de Distancias</h4>
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Commute 1 (Casa → Warehouse):</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.commute_1 }} mi</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Primera Parada:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.first_stop }} mi</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Millas de Trabajo:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.millas_de_trabajo }} mi</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Millas/Hora (Trabajo):</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.millas_por_hora }} mi/h</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Commute 2 (Última → Destino):</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.commute_2 }} mi</span>
-          </div>
-          <div class="breakdown-item highlight">
-            <span class="breakdown-label">Total de Millas:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.millas_totales }} mi</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="breakdown-section">
-        <h4>⏱️ Desglose de Tiempos</h4>
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Antes del Bloque:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.antes_del_bloque }} h</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Duración del Bloque:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.duracion_horas }} h</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Después del Bloque:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.despues_del_bloque }} h</span>
-          </div>
-          <div class="breakdown-item highlight">
-            <span class="breakdown-label">Tiempo Total Invertido:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.tiempo_total }} h</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="breakdown-section">
-        <h4>📍 Información Adicional</h4>
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Ciudad Principal:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.primary_city || 'N/A' }}</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Warehouse:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.warehouse }}</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Vehículo:</span>
-            <span class="breakdown-value">{{ getVehicleNickname(blockData.vehiculo) }}</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Número de Paradas:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.numero_paradas }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Red Flags Section -->
-      <div v-if="routeScore.redFlags && routeScore.redFlags.length > 0" class="breakdown-section red-flags">
-        <h4>⚠️ Alertas Detectadas</h4>
-        <div class="flags-list">
-          <div 
-            v-for="(flag, index) in routeScore.redFlags" 
-            :key="index"
-            :class="['flag-item', flag.nivel.toLowerCase()]"
-          >
-            <span class="flag-badge">{{ flag.nivel }}</span>
-            <span class="flag-mensaje">{{ flag.mensaje }}</span>
-            <span class="flag-penalty">{{ flag.penalizacion }} pts</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </transition>
-
-  <!-- Botón de Guardar -->
-  <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
-    {{ isSaving ? 'Guardando...' : '💾 Guardar en Bitácora' }}
-  </button>
-  
-  <div v-if="saveStatus" :class="['save-status', saveStatus.success ? 'success' : 'error']">
-    {{ saveStatus.message }}
-  </div>
-</div>
-        </div> </div> </div>  </template>
+</template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
