@@ -96,6 +96,21 @@ watch(selectedWarehouseCode, (newCode) => {
   }
 });
 
+// 👇 AGREGA ESTO EN TU SCRIPT (UploadView.vue) 👇
+
+// 👁️ VIGILANTE: Si llega una respuesta válida del backend, oculta el formulario
+watch(backendResponse, (newVal) => {
+  if (newVal && !newVal.hasErrors && newVal.status !== 'loading') {
+    console.log("✅ Resultados recibidos. Activando Modo Foco.");
+    showInputForm.value = false;
+    
+    // Scroll suave hacia arriba para ver los slides
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 300);
+  }
+});
+
 // ============================================
 // FUNCIONES HELPER (ANTES DE onMounted)
 // ============================================

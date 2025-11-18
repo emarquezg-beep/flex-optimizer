@@ -77,12 +77,14 @@ const handleSave = () => {
 
 <style scoped>
 .swiper-wrapper-custom {
-  height: 500px; /* Ajusta según necesites */
+  height: auto; 
+  min-height: 600px; /* Le damos más aire */
   width: 100%;
   background: var(--bg-surface);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  padding-bottom: 20px; /* Espacio extra abajo para que no se pegue al borde */
 }
 
 .my-swiper {
