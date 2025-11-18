@@ -32,7 +32,6 @@ const selectedFileNames = ref([]);
 const showDowntownModal = ref(false);
 const orlandoApartments = ref([]);
 const downtownSelection = ref({});
-const showInputForm = ref(true); // ✅ Nuevo control de visibilidad
 
 // 🤖 ARIA: Datos del sistema inteligente
 const ariaData = ref(null);
