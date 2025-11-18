@@ -4,6 +4,7 @@
 // ============================================
 import { computeScoreV5 } from '@/utils/scoring';
 import { useRoute } from 'vue-router';
+import SlideContainer from '@/components/RouteResults/SlideContainer.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useVehicles } from '@/composables/useVehicles';
 import { fetchWithAuth } from '@/lib/api';
@@ -1290,91 +1291,33 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         <div v-if="backendResponse">
           <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
           
-          <div v-else-if="reportData && calculatedLogEntry" class="results-container">
-<div class="scenario-table">
-              <h4>📊 Final Comparison</h4>
-              <table>
-                <tbody>
-                  <tr><td>Normal Route (1 → End)</td><td>{{ reportData.normal.totalMiles }} mi</td><td>-</td></tr>
-                  <tr class="highlight">
-                    <td><strong>Inverse Route (End → 1)</strong></td>
-                    <td><strong>{{ reportData.inverse.totalMiles }} mi</strong></td>
-                    <td><strong class="savings">{{ reportData.savings >= 0 ? `-${reportData.savings}` : `+${Math.abs(reportData.savings)}` }} mi</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <hr>
-            <div class="result-block">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h4 style="margin: 0;">➡️ Normal Route Breakdown</h4>
-                <!-- 🤖 ARIA Badge -->
-                <div v-if="ariaData" class="aria-badge">
-                  <span class="aria-icon">🤖</span>
-                  <div class="aria-content">
-                    <span class="aria-label">ARIA</span>
-                    <span class="aria-value">{{ ariaData.multiplier.toFixed(2) }} min/stop</span>
-                  </div>
-                  <div class="aria-tooltip">
-                    Adaptive Route Intelligence Algorithm<br>
-                    Based on {{ ariaData.rutasAnalizadas }} recent routes
-                  </div>
-                </div>
-              </div>
-                            <!-- 📊 ARIA Breakdown Detail -->
-              <div v-if="ariaData && reportData" class="aria-breakdown">
-                <small>
-                  <strong>Calculation:</strong> 
-                  {{ reportData.stopCount }} stops × {{ ariaData.multiplier.toFixed(2) }} 
-                  <span v-if="reportData.apartmentCount > 0">
-                    + {{ reportData.apartmentCount - reportData.downtownCount }} apts × 0.75
-                  </span>
-                  <span v-if="reportData.downtownCount > 0">
-                    + {{ reportData.downtownCount }} DT × 3
-                  </span>
-                  = {{ (reportData.stopCount * ariaData.multiplier + (reportData.apartmentCount - reportData.downtownCount) * 0.75 + reportData.downtownCount * 3).toFixed(1) }} min added
-                </small>
-              </div>
-              <p>To 1st Stop: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
-              <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
-                <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
-                  <span class="calc-details">({{ segment.stopsCount }} stops | {{ segment.aptCount }} apts | {{ segment.downtownCount }} DT)</span>
-                </p>
-              </div>
-              <hr class="dotted-hr">
-              <p class="total-time"><strong>Total Work: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
-              <p>To Final Destination: <strong>{{ reportData.normal.toEnd.duration }} min - {{ reportData.normal.toEnd.distance }} mi</strong></p>
-              <hr class="dotted-hr">
-              <p class="total-time grand-total"><strong>Total Route: {{ scenarioETAs.normal.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
-            </div>
-            <div v-if="scenarioETAs?.normal" class="result-block eta-block">
-              <h4>⏱️ Arrival Estimates (Normal Route)</h4>
-              <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.normal.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.optimistic.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.normal.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.normal.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label pessimistic">Pessimista:</span><strong class="eta-time">{{ scenarioETAs.normal.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.pessimistic.totalDuration }} min)</span></div>
-            </div>
-            <hr>
-            <div class="result-block inverse-block">
-              <h4>⬅️ Inverse Route Breakdown</h4>
-              <p>To Last Stop: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
-              <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
-                <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
-                  <span class="calc-details">({{ segment.stopsCount }} stops | {{ segment.aptCount }} apts | {{ segment.downtownCount }} DT)</span>
-                </p>
-              </div>
-              <hr class="dotted-hr">
-              <p class="total-time"><strong>Total Work: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
-              <p>From 1st Stop to Destination: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
-              <hr class="dotted-hr">
-              <p class="total-time grand-total"><strong>Total Route: {{ scenarioETAs.inverse.normal.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
-            </div>
-            <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
-              <h4>⏱️ Arrival Estimates (Inverse Route)</h4>
-              <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.optimistic.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.inverse.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.normal.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label pessimistic">Pessimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
-            </div>
+<div v-else-if="reportData && normalPayload.pago" class="results-container-slides">
+  
+  <div class="results-header">
+    <h3>📊 Route Analysis</h3>
+    
+    <button 
+      @click="mostrarDetalles = !mostrarDetalles" 
+      class="text-xs text-gray-500 underline mb-2"
+    >
+      {{ mostrarDetalles ? 'Hide Debug Data' : 'Show Debug Data' }}
+    </button>
+  </div>
 
+  <SlideContainer 
+    :normalPayload="normalPayload"
+    :inversePayload="inversePayload"
+    @save-route="saveToLogbook"
+    @reset="startManualEntry"
+  />
+
+  <div v-if="mostrarDetalles" class="mt-4 p-4 bg-black text-xs font-mono text-green-400 overflow-auto h-40">
+    <p>NORMAL SCORE: {{ normalPayload.route_score }}</p>
+    <p>INVERSE SCORE: {{ inversePayload.route_score }}</p>
+    <pre>{{ normalPayload }}</pre>
+  </div>
+
+</div>
 
 <!-- 🆕 SECCIÓN DE ERRORES DE DIRECCIONES -->
 <div v-if="backendResponse?.hasErrors && backendResponse?.failedAddresses" class="address-errors">
@@ -1633,7 +1576,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
     {{ saveStatus.message }}
   </div>
 </div>
-        </div> </div> </div> </div> </div></div></div> </template>
+        </div> </div> </div> </div> </div></div> </template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
