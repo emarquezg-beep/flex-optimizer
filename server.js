@@ -22,7 +22,7 @@ const PORT = 3000;
 const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
-  'https://flex-optimizer-git-user-profi-b2628b-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-feature-sl-7cb1e8-ernestos-projects-d9e7c95d.vercel.app',
 ];
 const corsOptions = {
   origin: function (origin, callback) {
