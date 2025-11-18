@@ -31,6 +31,7 @@ const selectedFileNames = ref([]);
 const showDowntownModal = ref(false);
 const orlandoApartments = ref([]);
 const downtownSelection = ref({});
+const showInputForm = ref(true); // ✅ Nuevo control de visibilidad
 
 // 🤖 ARIA: Datos del sistema inteligente
 const ariaData = ref(null);
@@ -278,6 +279,13 @@ async function evaluateRoute() {
   
   // Si no necesita check o ya se confirmó, evaluar
   await proceedWithEvaluation();
+  // Al final, si todo salió bien y tenemos resultados:
+  if (!backendResponse.value?.hasErrors) {
+     showInputForm.value = false; // 🙈 Ocultamos el formulario automáticamente
+     
+     // Opcional: Scroll suave hacia arriba para ver los slides completos
+     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
 // ============================================
@@ -1105,103 +1113,171 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 </script>
 
 <template>
-  <div class="view-container">
-    <div class="uploader-container">
+<div class="uploader-container">
 
-<!-- 📦 DATOS DEL BLOQUE -->
-      <div class="block-info-card">
-        <h2>📦 Block Details</h2>
-        <div class="block-info-grid">
-          <div class="info-item">
-            <span class="info-label">Warehouse</span>
-            <span class="info-value">{{ selectedWarehouseCode }}</span>
+      <transition name="fade-slide">
+        <div v-show="showInputForm" class="input-section-wrapper">
+
+          <div class="block-info-card">
+            <h2>📦 Block Details</h2>
+            <div class="block-info-grid">
+              <div class="info-item">
+                <span class="info-label">Warehouse</span>
+                <span class="info-value">{{ selectedWarehouseCode }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Date</span>
+                <span class="info-value">{{ blockData.fecha }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Start Time</span>
+                <span class="info-value">{{ blockData.hora }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Duration</span>
+                <span class="info-value">{{ blockData.duracion_horas }}h</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Payment</span>
+                <span class="info-value">${{ blockData.pago }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Vehicle</span>
+                <span class="info-value">{{ getVehicleNickname(blockData.vehiculo) }}</span>
+              </div>
+            </div>
           </div>
-          <div class="info-item">
-            <span class="info-label">Date</span>
-            <span class="info-value">{{ blockData.fecha }}</span>
+
+          <div class="route-config-card">
+            <h3>🎯 Route Configuration</h3>
+            <div class="controls-container">
+              <div class="control-group">
+                <label for="warehouse-select">Departure Point</label>
+                <select id="warehouse-select" v-model="selectedWarehouseCode">
+                  <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
+                    {{ wh.code }} ({{ wh.commuteMiles }} mi)
+                  </option>
+                </select>
+              </div>
+              <div class="control-group">
+                <label for="destination-select">Final Destination</label>
+                <select id="destination-select" v-model="selectedDestination">
+                  <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
+                </select>
+              </div>
+            </div>
+            <div v-if="selectedDestination === 'custom'" class="custom-input-container">
+              <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
+            </div>
           </div>
-          <div class="info-item">
-            <span class="info-label">Start Time</span>
-            <span class="info-value">{{ blockData.hora }}</span>
+
+          <div class="gem-link-container">
+            <a 
+              href="https://gemini.google.com/gem/11PCFo5tGT1kWc0fd9PvoPz6uQryQUzTu?usp=sharing" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              class="gem-link"
+            >
+              🤖 Open Gem to Process Screenshots
+            </a>
+            <p class="gem-hint">Upload your route screenshots to the Gem, then paste the JSON below</p>
           </div>
-          <div class="info-item">
-            <span class="info-label">Duration</span>
-            <span class="info-value">{{ blockData.duracion_horas }}h</span>
+
+          <div class="json-input-card">
+            <h3>📋 Paste Route JSON</h3>
+            <textarea 
+              v-model="jsonInput" 
+              placeholder='Paste the JSON from the Gem here.'
+              rows="10"
+              class="json-textarea"
+              :disabled="isProcessing || extractedAddresses.length > 0"
+            ></textarea>
+
+            <div v-if="extractedAddresses.length > 0" class="stops-detected">
+              ✅ {{ extractedAddresses.length }} stops detected
+            </div>
+
+            <transition name="modal-fade">
+              <div v-if="showDowntownModal" class="modal-overlay" @click.self="skipDowntownSelection">
+                <div class="modal-container downtown-modal">
+                  <div class="modal-header">
+                    <h3>🏢 Downtown Apartments Detected</h3>
+                    <p class="modal-subtitle">
+                      Found {{ orlandoApartments.length }} apartment(s) in Orlando. 
+                      Select which ones are downtown (adds +3 min per stop).
+                    </p>
+                  </div>
+                  
+                  <div class="modal-body">
+                    <div class="apartment-list">
+                      <label v-for="apt in orlandoApartments" :key="apt.number" class="apartment-item">
+                        <input type="checkbox" v-model="downtownSelection[apt.number]" class="downtown-checkbox-modal">
+                        <div class="apartment-info">
+                          <span class="apt-number">Stop #{{ apt.number }}</span>
+                          <span class="apt-address">{{ apt.address }}</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <div class="modal-footer">
+                    <button @click="skipDowntownSelection" class="button-secondary">⏭️ No Downtown Apartments</button>
+                    <button @click="confirmDowntownSelection" class="button-primary">✅ Confirm Selection</button>
+                  </div>
+                </div>
+              </div>
+            </transition>
+
+            <button 
+              @click="evaluateRoute" 
+              class="button-primary button-evaluate"
+              :disabled="isProcessing || (!jsonInput.trim() && extractedAddresses.length === 0)"
+            >
+              {{ isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios' }}
+            </button>
           </div>
-          <div class="info-item">
-            <span class="info-label">Payment</span>
-            <span class="info-value">${{ blockData.pago }}</span>
+
+          <div class="additional-settings">
+            <details>
+              <summary>⚙️ Advanced Settings (optional)</summary>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Time Before Block (min)</label>
+                  <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
+                </div>
+                <div class="form-group">
+                  <label>Commute 1 (Miles)</label>
+                  <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
+                </div>
+                <div class="form-group">
+                  <label class="label-with-button">
+                    <span>Warehouse Delay (min)</span>
+                    <button @click.prevent="calculateActualDelay" class="button-tertiary">Now</button>
+                  </label>
+                  <input type="number" v-model.number="blockData.retraso_almacen" step="5">
+                </div>
+              </div>
+            </details>
           </div>
-          <div class="info-item">
-            <span class="info-label">Vehicle</span>
-            <span class="info-value">{{ getVehicleNickname(blockData.vehiculo) }}</span>
-          </div>
+
+        </div>
+      </transition>
+
+      <div v-if="!showInputForm && reportData" class="edit-bar">
+        <div class="edit-bar-left">
+          <button @click="showInputForm = true" class="btn-edit-inputs">
+            ✏️ Edit Parameters
+          </button>
+        </div>
+        <div class="mini-summary">
+          <span>📦 {{ extractedAddresses.length }} stops</span>
+          <span class="separator">•</span>
+          <span>📅 {{ blockData.hora }} Start</span>
+          <span class="separator">•</span>
+          <span>💰 ${{ blockData.pago }}</span>
         </div>
       </div>
 
-      <!-- 🎯 ROUTE CONFIGURATION -->
-      <div class="route-config-card">
-        <h3>🎯 Route Configuration</h3>
-        <div class="controls-container">
-          <div class="control-group">
-            <label for="warehouse-select">Departure Point</label>
-            <select id="warehouse-select" v-model="selectedWarehouseCode">
-              <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
-                {{ wh.code }} ({{ wh.commuteMiles }} mi)
-              </option>
-            </select>
-          </div>
-          <div class="control-group">
-            <label for="destination-select">Final Destination</label>
-            <select id="destination-select" v-model="selectedDestination">
-              <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
-            </select>
-          </div>
-        </div>
-        <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-          <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
-        </div>
-      </div>
-    
-      <!-- 🤖 LINK AL GEM -->
-      <div class="gem-link-container">
-      <!-- 🤖 LINK AL GEM -->
-      <div class="gem-link-container">
-        <a 
-          href="https://gemini.google.com/gem/11PCFo5tGT1kWc0fd9PvoPz6uQryQUzTu?usp=sharing" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          class="gem-link"
-        >
-          🤖 Open Gem to Process Screenshots
-        </a>
-        <p class="gem-hint">Upload your route screenshots to the Gem, then paste the JSON below</p>
-      </div>
-
-      <!-- 📋 JSON INPUT -->
-      <div class="json-input-card">
-        <h3>📋 Paste Route JSON</h3>
-        <textarea 
-          v-model="jsonInput" 
-          placeholder='Paste the JSON from the Gem here. Example:
-[
-  {
-    "stop_number": 1,
-    "street_address": "123 Main St",
-    "apartment": "",
-    "city": "Orlando, FL"
-  },
-  ...
-]'
-          rows="10"
-          class="json-textarea"
-          :disabled="isProcessing || extractedAddresses.length > 0"
-        ></textarea>
-        
-        <!-- Mostrar contador de stops si ya se procesó -->
-        <div v-if="extractedAddresses.length > 0" class="stops-detected">
-          ✅ {{ extractedAddresses.length }} stops detected
-        </div>
 <!-- 🏢 MODAL DE DETECCIÓN DE DOWNTOWN -->
 <transition name="modal-fade">
   <div v-if="showDowntownModal" class="modal-overlay" @click.self="skipDowntownSelection">
@@ -1576,7 +1652,7 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
     {{ saveStatus.message }}
   </div>
 </div>
-        </div> </div> </div> </div> </div></div> </template>
+        </div> </div> </div>  </template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -3013,5 +3089,64 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 
 .gem-link-container {
   margin-top: 0; /* ← Asegurar que no tenga margin top extra */
+}
+
+/* Animación de entrada/salida */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.5s ease;
+  max-height: 2000px; /* Altura máxima suficiente */
+  opacity: 1;
+  overflow: hidden;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Barra de edición compacta */
+.edit-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: var(--bg-secondary);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  border: 1px solid var(--border-primary);
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.btn-edit-inputs {
+  background: transparent;
+  border: 1px solid var(--brand-primary);
+  color: var(--brand-primary);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-edit-inputs:hover {
+  background: var(--brand-primary);
+  color: white;
+}
+
+.mini-summary {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 </style>
