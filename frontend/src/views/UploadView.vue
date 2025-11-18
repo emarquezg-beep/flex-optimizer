@@ -22,6 +22,7 @@ import Tesseract from 'tesseract.js';
 const route = useRoute();
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
+const showInputForm = ref(true);
 const backendResponse = ref(null);
 const isSaving = ref(false);
 const saveStatus = ref(null);
@@ -281,12 +282,15 @@ async function evaluateRoute() {
   await proceedWithEvaluation();
   // Al final, si todo salió bien y tenemos resultados:
   if (!backendResponse.value?.hasErrors) {
-     showInputForm.value = false; // 🙈 Ocultamos el formulario automáticamente
-     
-     // Opcional: Scroll suave hacia arriba para ver los slides completos
-     window.scrollTo({ top: 0, behavior: 'smooth' });
+  console.log("✅ Evaluación exitosa, activando Modo Foco");
+      showInputForm.value = false; // 🙈 Oculta el formulario
+      
+      // Opcional: Scroll suave hacia arriba
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+    }
   }
-}
 
 // ============================================
 // FUNCIONES OCR (COMENTADAS - No se usan)
@@ -963,6 +967,7 @@ function sanitizeAddress(address) {
 function startManualEntry() {
   console.log('Starting manual entry...');
   resetAllInputs(); // Limpia todo (archivos, JSON, etc.)
+  showInputForm.value = true;
   
   // Inicia con una parada vacía
   extractedAddresses.value = [{ number: 2, address: '', isDowntown: false }];
