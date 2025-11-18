@@ -77,25 +77,28 @@ const handleSave = () => {
 
 <style scoped>
 .swiper-wrapper-custom {
-  height: auto; 
-  min-height: 600px; /* Le damos más aire */
+  height: auto;
+  min-height: 650px; /* ✅ Un poco más alto para dar aire */
   width: 100%;
   background: var(--bg-surface);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  padding-bottom: 20px; /* Espacio extra abajo para que no se pegue al borde */
+  padding-bottom: 40px; /* ✅ Espacio para los dots del swiper */
+  position: relative;
 }
 
 .my-swiper {
   height: 100%;
   width: 100%;
+  padding-bottom: 20px;
 }
 
 .slide-flex-col {
   display: flex;
   flex-direction: column;
   height: 100%;
+  justify-content: space-between; /* Empuja el footer abajo */
 }
 
 .action-footer {
@@ -103,25 +106,45 @@ const handleSave = () => {
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  background: rgba(0,0,0,0.2);
+  gap: 15px;
+  background: transparent; /* ✅ ADIÓS FONDO GRIS */
+  
+  /* ✅ ARREGLO DE CLICK: */
+  position: relative; 
+  z-index: 50; /* Pone los botones ENCIMA de la paginación */
+  margin-bottom: 20px; /* Sube los botones para alejarlos de los dots */
 }
 
 .btn-save {
-  padding: 15px;
+  padding: 16px;
   background: var(--brand-primary);
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   color: white;
-  font-weight: bold;
+  font-weight: 700;
   font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4); /* Sombra bonita */
+  transition: transform 0.2s;
+}
+
+.btn-save:active {
+  transform: scale(0.98);
 }
 
 .btn-reset {
-  padding: 10px;
-  background: transparent;
-  border: 1px solid var(--text-secondary);
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-primary);
   color: var(--text-secondary);
-  border-radius: 8px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-reset:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
 }
 </style>
