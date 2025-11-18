@@ -1126,1971 +1126,599 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
 </script>
 
 <template>
-  <div class="view-container">
-    <div class="uploader-container">
+  <div class="upload-view">
+    <!-- Header -->
+    <header class="view-header">
+      <h1 class="view-title">📤 Upload Route</h1>
+    </header>
 
-<!-- 📦 DATOS DEL BLOQUE -->
-      <div class="block-info-card">
-        <h2>📦 Block Details</h2>
-        <div class="block-info-grid">
-          <div class="info-item">
-            <span class="info-label">Warehouse</span>
-            <span class="info-value">{{ selectedWarehouseCode }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Date</span>
-            <span class="info-value">{{ blockData.fecha }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Start Time</span>
-            <span class="info-value">{{ blockData.hora }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Duration</span>
-            <span class="info-value">{{ blockData.duracion_horas }}h</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Payment</span>
-            <span class="info-value">${{ blockData.pago }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Vehicle</span>
-            <span class="info-value">{{ getVehicleNickname(blockData.vehiculo) }}</span>
+    <!-- Main Content -->
+    <div class="content-wrapper">
+      <!-- Block Details Card (Always visible) -->
+      <div class="card block-details-card">
+        <div class="card-header">
+          <h2 class="card-title">📋 Block Details</h2>
+        </div>
+        <div class="card-body">
+          <div class="details-grid">
+            <div class="detail-group">
+              <label class="detail-label">WAREHOUSE</label>
+              <p class="detail-value">{{ activeBlock?.warehouse || 'N/A' }}</p>
+            </div>
+            <div class="detail-group">
+              <label class="detail-label">DATE</label>
+              <p class="detail-value">{{ formatDate(activeBlock?.date) || 'N/A' }}</p>
+            </div>
+            <div class="detail-group">
+              <label class="detail-label">START TIME</label>
+              <p class="detail-value">{{ activeBlock?.start_time || 'N/A' }}</p>
+            </div>
+            <div class="detail-group">
+              <label class="detail-label">DURATION</label>
+              <p class="detail-value">{{ activeBlock?.duration || 'N/A' }}h</p>
+            </div>
+            <div class="detail-group">
+              <label class="detail-label">PAYMENT</label>
+              <p class="detail-value">${{ activeBlock?.payment || 'N/A' }}</p>
+            </div>
+            <div class="detail-group">
+              <label class="detail-label">VEHICLE</label>
+              <p class="detail-value">{{ activeBlock?.vehicleName || 'N/A' }}</p>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- 🎯 ROUTE CONFIGURATION -->
-      <div class="route-config-card">
-        <h3>🎯 Route Configuration</h3>
-        <div class="controls-container">
-          <div class="control-group">
-            <label for="warehouse-select">Departure Point</label>
-            <select id="warehouse-select" v-model="selectedWarehouseCode">
-              <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
-                {{ wh.code }} ({{ wh.commuteMiles }} mi)
-              </option>
-            </select>
-          </div>
-          <div class="control-group">
-            <label for="destination-select">Final Destination</label>
-            <select id="destination-select" v-model="selectedDestination">
-              <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
-            </select>
+      <!-- Route Configuration Card -->
+      <div class="card route-config-card">
+        <div class="card-header">
+          <h2 class="card-title">🎯 Route Configuration</h2>
+        </div>
+        <div class="card-body">
+          <div class="config-grid">
+            <div class="config-group">
+              <label class="config-label">Departure Point</label>
+              <select v-model="selectedDeparturePoint" class="config-select">
+                <option
+                  v-for="point in departurePoints"
+                  :key="point.value"
+                  :value="point.value"
+                >
+                  {{ point.label }}
+                </option>
+              </select>
+            </div>
+            <div class="config-group">
+              <label class="config-label">Final Destination</label>
+              <select v-model="selectedFinalDestination" class="config-select">
+                <option
+                  v-for="destination in finalDestinations"
+                  :key="destination.value"
+                  :value="destination.value"
+                >
+                  {{ destination.label }}
+                </option>
+              </select>
+            </div>
           </div>
         </div>
-        <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-          <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
-        </div>
-      </div>
-    
-      <!-- 🤖 LINK AL GEM -->
-      <div class="gem-link-container">
-      <!-- 🤖 LINK AL GEM -->
-      <div class="gem-link-container">
-        <a 
-          href="https://gemini.google.com/gem/11PCFo5tGT1kWc0fd9PvoPz6uQryQUzTu?usp=sharing" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          class="gem-link"
-        >
-          🤖 Open Gem to Process Screenshots
-        </a>
-        <p class="gem-hint">Upload your route screenshots to the Gem, then paste the JSON below</p>
       </div>
 
-      <!-- 📋 JSON INPUT -->
-      <div class="json-input-card">
-        <h3>📋 Paste Route JSON</h3>
-        <textarea 
-          v-model="jsonInput" 
-          placeholder='Paste the JSON from the Gem here. Example:
-[
-  {
-    "stop_number": 1,
-    "street_address": "123 Main St",
-    "apartment": "",
-    "city": "Orlando, FL"
-  },
-  ...
-]'
-          rows="10"
-          class="json-textarea"
-          :disabled="isProcessing || extractedAddresses.length > 0"
-        ></textarea>
+      <!-- Upload/Paste Section (Only show if no results yet) -->
+      <div v-if="!showResults" class="card upload-card">
+        <div class="card-body">
+          <!-- Gemini Button -->
+          <button @click="openGeminiLink" class="gemini-button">
+            <span class="gemini-icon">✨</span>
+            Open Gem to Process Screenshots
+          </button>
+          <p class="upload-instruction">
+            Upload your route screenshots to the Gem, then paste the JSON below
+          </p>
+
+          <!-- JSON Paste Area -->
+          <div class="paste-section">
+            <div class="paste-header">
+              <span class="paste-icon">📋</span>
+              <span class="paste-title">Paste Route JSON</span>
+            </div>
+            <textarea
+              v-model="routeJson"
+              placeholder='{"city": "ORLANDO", ...}'
+              class="json-textarea"
+              rows="10"
+            ></textarea>
+            <div v-if="jsonError" class="json-error">
+              <span class="error-icon">⚠️</span>
+              <span>{{ jsonError }}</span>
+            </div>
+          </div>
+
+          <!-- Evaluate Button -->
+          <button
+            @click="evaluateScenarios"
+            :disabled="!routeJson || isEvaluating"
+            class="evaluate-button"
+            :class="{ 'button-loading': isEvaluating }"
+          >
+            <span v-if="!isEvaluating" class="button-icon">🚀</span>
+            <span v-else class="button-spinner">⏳</span>
+            {{ isEvaluating ? 'Evaluating...' : 'Evaluate Scenarios' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- NUEVO: Results Section with Slides -->
+      <div v-if="showResults" class="results-section">
+        <SlideContainer :routeData="routeData" />
         
-        <!-- Mostrar contador de stops si ya se procesó -->
-        <div v-if="extractedAddresses.length > 0" class="stops-detected">
-          ✅ {{ extractedAddresses.length }} stops detected
-        </div>
-<!-- 🏢 MODAL DE DETECCIÓN DE DOWNTOWN -->
-<transition name="modal-fade">
-  <div v-if="showDowntownModal" class="modal-overlay" @click.self="skipDowntownSelection">
-    <div class="modal-container downtown-modal">
-      <div class="modal-header">
-        <h3>🏢 Downtown Apartments Detected</h3>
-        <p class="modal-subtitle">
-          Found {{ orlandoApartments.length }} apartment(s) in Orlando. 
-          Select which ones are downtown (adds +3 min per stop).
-        </p>
-      </div>
-      
-      <div class="modal-body">
-        <div class="apartment-list">
-          <label 
-            v-for="apt in orlandoApartments" 
-            :key="apt.number"
-            class="apartment-item"
-          >
-            <input 
-              type="checkbox" 
-              v-model="downtownSelection[apt.number]"
-              class="downtown-checkbox-modal"
-            >
-            <div class="apartment-info">
-              <span class="apt-number">Stop #{{ apt.number }}</span>
-              <span class="apt-address">{{ apt.address }}</span>
-            </div>
-          </label>
-        </div>
-      </div>
-      
-      <div class="modal-footer">
-        <button @click="skipDowntownSelection" class="button-secondary">
-          ⏭️ No Downtown Apartments
-        </button>
-        <button @click="confirmDowntownSelection" class="button-primary">
-          ✅ Confirm Selection
+        <!-- Back Button to Edit -->
+        <button @click="resetToEdit" class="back-button">
+          ← Edit Route
         </button>
       </div>
     </div>
-  </div>
-</transition>
-        <!-- Botón de evaluación (siempre visible para mejor UX) -->
-        <button 
-          @click="evaluateRoute" 
-          class="button-primary button-evaluate"
-          :disabled="isProcessing || (!jsonInput.trim() && extractedAddresses.length === 0)"
-        >
-          {{ isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios' }}
-        </button>
-      </div>
 
-      <div v-if="isProcessing" class="status"><h3>Evaluating route scenarios...</h3></div>
-      
-      <!-- RESULTADOS (solo aparecen después de evaluar) -->
-      <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing">
-      
-      <!-- RESULTADOS (solo aparecen después de evaluar) -->
-      <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing">
-
- 
-        <!-- Ajustes adicionales del bloque (si es necesario) -->
-        <div class="additional-settings">
-          <details>
-            <summary>⚙️ Advanced Settings (optional)</summary>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Time Before Block (min)</label>
-                <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
-              </div>
-              <div class="form-group">
-                <label>Commute 1 (Miles)</label>
-                <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
-              </div>
-              <div class="form-group">
-                <label class="label-with-button">
-                  <span>Warehouse Delay (min)</span>
-                  <button @click.prevent="calculateActualDelay" class="button-tertiary">Now</button>
-                </label>
-                <input type="number" v-model.number="blockData.retraso_almacen" step="5">
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div v-if="backendResponse">
-          <div v-if="backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
-          
-          <div v-else-if="reportData && calculatedLogEntry" class="results-container">
-<div class="scenario-table">
-              <h4>📊 Final Comparison</h4>
-              <table>
-                <tbody>
-                  <tr><td>Normal Route (1 → End)</td><td>{{ reportData.normal.totalMiles }} mi</td><td>-</td></tr>
-                  <tr class="highlight">
-                    <td><strong>Inverse Route (End → 1)</strong></td>
-                    <td><strong>{{ reportData.inverse.totalMiles }} mi</strong></td>
-                    <td><strong class="savings">{{ reportData.savings >= 0 ? `-${reportData.savings}` : `+${Math.abs(reportData.savings)}` }} mi</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <hr>
-            <div class="result-block">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h4 style="margin: 0;">➡️ Normal Route Breakdown</h4>
-                <!-- 🤖 ARIA Badge -->
-                <div v-if="ariaData" class="aria-badge">
-                  <span class="aria-icon">🤖</span>
-                  <div class="aria-content">
-                    <span class="aria-label">ARIA</span>
-                    <span class="aria-value">{{ ariaData.multiplier.toFixed(2) }} min/stop</span>
-                  </div>
-                  <div class="aria-tooltip">
-                    Adaptive Route Intelligence Algorithm<br>
-                    Based on {{ ariaData.rutasAnalizadas }} recent routes
-                  </div>
-                </div>
-              </div>
-                            <!-- 📊 ARIA Breakdown Detail -->
-              <div v-if="ariaData && reportData" class="aria-breakdown">
-                <small>
-                  <strong>Calculation:</strong> 
-                  {{ reportData.stopCount }} stops × {{ ariaData.multiplier.toFixed(2) }} 
-                  <span v-if="reportData.apartmentCount > 0">
-                    + {{ reportData.apartmentCount - reportData.downtownCount }} apts × 0.75
-                  </span>
-                  <span v-if="reportData.downtownCount > 0">
-                    + {{ reportData.downtownCount }} DT × 3
-                  </span>
-                  = {{ (reportData.stopCount * ariaData.multiplier + (reportData.apartmentCount - reportData.downtownCount) * 0.75 + reportData.downtownCount * 3).toFixed(1) }} min added
-                </small>
-              </div>
-              <p>To 1st Stop: <strong>{{ reportData.normal.toStart.duration }} min - {{ reportData.normal.toStart.distance }} mi</strong></p>
-              <div v-for="(segment, index) in reportData.normal.segments" :key="`norm-seg-${index}`" class="segment-breakdown">
-                <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
-                  <span class="calc-details">({{ segment.stopsCount }} stops | {{ segment.aptCount }} apts | {{ segment.downtownCount }} DT)</span>
-                </p>
-              </div>
-              <hr class="dotted-hr">
-              <p class="total-time"><strong>Total Work: {{ reportData.normal.totalWorkDuration }} min - {{ reportData.normal.totalWorkMiles }} mi</strong></p>
-              <p>To Final Destination: <strong>{{ reportData.normal.toEnd.duration }} min - {{ reportData.normal.toEnd.distance }} mi</strong></p>
-              <hr class="dotted-hr">
-              <p class="total-time grand-total"><strong>Total Route: {{ scenarioETAs.normal.normal.totalDuration }} min - {{ reportData.normal.totalMiles }} mi</strong></p>
-            </div>
-            <div v-if="scenarioETAs?.normal" class="result-block eta-block">
-              <h4>⏱️ Arrival Estimates (Normal Route)</h4>
-              <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.normal.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.optimistic.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.normal.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.normal.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label pessimistic">Pessimista:</span><strong class="eta-time">{{ scenarioETAs.normal.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.normal.pessimistic.totalDuration }} min)</span></div>
-            </div>
-            <hr>
-            <div class="result-block inverse-block">
-              <h4>⬅️ Inverse Route Breakdown</h4>
-              <p>To Last Stop: <strong>{{ reportData.inverse.toStart.duration }} min - {{ reportData.inverse.toStart.distance }} mi</strong></p>
-              <div v-for="(segment, index) in reportData.inverse.segments" :key="`inv-seg-${index}`" class="segment-breakdown">
-                <p>Segment {{ index + 1 }} (Drive): <strong>{{ segment.duration }} min - {{ segment.distance }} mi</strong>
-                  <span class="calc-details">({{ segment.stopsCount }} stops | {{ segment.aptCount }} apts | {{ segment.downtownCount }} DT)</span>
-                </p>
-              </div>
-              <hr class="dotted-hr">
-              <p class="total-time"><strong>Total Work: {{ reportData.inverse.totalWorkDuration }} min - {{ reportData.inverse.totalWorkMiles }} mi</strong></p>
-              <p>From 1st Stop to Destination: <strong>{{ reportData.inverse.toEnd.duration }} min - {{ reportData.inverse.toEnd.distance }} mi</strong></p>
-              <hr class="dotted-hr">
-              <p class="total-time grand-total"><strong>Total Route: {{ scenarioETAs.inverse.normal.totalDuration }} min - {{ reportData.inverse.totalMiles }} mi</strong></p>
-            </div>
-            <div v-if="scenarioETAs?.inverse" class="result-block eta-block inverse-eta">
-              <h4>⏱️ Arrival Estimates (Inverse Route)</h4>
-              <div class="eta-scenario"><span class="eta-label optimistic">Optimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.optimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.optimistic.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label normal">Normal:</span><strong class="eta-time">{{ scenarioETAs.inverse.normal.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.normal.totalDuration }} min)</span></div>
-              <div class="eta-scenario"><span class="eta-label pessimistic">Pessimista:</span><strong class="eta-time">{{ scenarioETAs.inverse.pessimistic.eta }}</strong><span class="eta-duration">({{ scenarioETAs.inverse.pessimistic.totalDuration }} min)</span></div>
-            </div>
-
-
-<!-- 🆕 SECCIÓN DE ERRORES DE DIRECCIONES -->
-<div v-if="backendResponse?.hasErrors && backendResponse?.failedAddresses" class="address-errors">
-  <h3>⚠️ Advertencia: Direcciones No Encontradas</h3>
-  <p class="error-intro">
-    Google Maps no pudo encontrar rutas para las siguientes direcciones. 
-    Por favor, verifica que estén escritas correctamente antes de continuar.
-  </p>
-  
-  <div class="error-list">
-    <div 
-      v-for="(failed, index) in backendResponse.failedAddresses" 
-      :key="index"
-      class="error-item"
-    >
-      <div class="error-header">
-        <span class="error-icon">🚫</span>
-        <strong>{{ failed.type }}</strong>
-      </div>
-      <div class="error-details">
-        <p><strong>Desde:</strong> {{ failed.from }}</p>
-        <p><strong>Hasta:</strong> {{ failed.to }}</p>
-        <p v-if="failed.waypoints && failed.waypoints.length > 0">
-          <strong>Waypoints:</strong> {{ failed.waypoints.join(', ') }}
-        </p>
-        <p class="error-type">
-          <strong>Tipo de Error:</strong> 
-          <span class="error-badge">{{ failed.errorType }}</span>
-        </p>
-      </div>
+    <!-- Loading Overlay -->
+    <div v-if="isEvaluating" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">Analyzing route scenarios...</p>
     </div>
   </div>
-  
-  <div class="error-actions">
-    <p>✏️ <strong>Acción requerida:</strong> Corrige las direcciones arriba y vuelve a hacer clic en "Evaluate Scenarios".</p>
-  </div>
-</div>
-            <!-- LOGBOOK FORM CON NUEVO DISEÑO -->
-<div v-if="reportData && calculatedLogEntry && routeScore" class="logbook-form-container">
-  
-  <!-- RESUMEN CONSCIENTE (SIEMPRE VISIBLE) -->
-  <div class="resumen-consciente">
-    
-    <!-- Header con Score -->
-    <div class="score-header">
-      <div class="score-badge" :style="{ backgroundColor: routeScore.color }">
-        <span class="score-icon">{{ routeScore.icon }}</span>
-        <div class="score-info">
-          <span class="score-value">{{ routeScore.total }}/100</span>
-          <span class="score-label">{{ routeScore.categoria }}</span>
-        </div>
-      </div>
-    </div>
+</template>
 
-    <!-- Métricas Clave -->
-    <div class="metricas-clave">
-      <div class="metrica">
-        <div class="metrica-icon">⏱️</div>
-        <div class="metrica-content">
-          <span class="metrica-label">Hora Estimada de Llegada</span>
-          <span class="metrica-value">{{ chosenETA?.eta || 'N/A' }}</span>
-        </div>
-      </div>
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useBlocksStore } from '@/stores/blocks'
+import SlideContainer from '@/components/RouteResults/SlideContainer.vue'
+
+const router = useRouter()
+const blocksStore = useBlocksStore()
+
+// State
+const routeJson = ref('')
+const jsonError = ref('')
+const isEvaluating = ref(false)
+const showResults = ref(false)
+const routeData = ref(null)
+
+const selectedDeparturePoint = ref('warehouse')
+const selectedFinalDestination = ref('home')
+
+// Computed
+const activeBlock = computed(() => blocksStore.activeBlock)
+
+const departurePoints = computed(() => {
+  if (!activeBlock.value?.warehouse) return []
+  return [
+    {
+      label: `${activeBlock.value.warehouse} (${activeBlock.value.warehouseDistance?.toFixed(0) || 0} mi)`,
+      value: 'warehouse'
+    }
+  ]
+})
+
+const finalDestinations = computed(() => [
+  { label: 'Casa', value: 'home' }
+])
+
+// Methods
+const openGeminiLink = () => {
+  window.open(
+    'https://aistudio.google.com/app/prompts/new_chat?model=gemini-2.0-flash-exp',
+    '_blank'
+  )
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A'
+  const date = new Date(dateString)
+  return date.toISOString().split('T')[0]
+}
+
+const evaluateScenarios = async () => {
+  jsonError.value = ''
+  isEvaluating.value = true
+
+  try {
+    // Parse JSON
+    const parsedData = JSON.parse(routeJson.value)
+
+    // Validate basic structure
+    if (!parsedData.stops || !Array.isArray(parsedData.stops)) {
+      throw new Error('Invalid JSON: missing "stops" array')
+    }
+
+    // Simulate API call (replace with real API)
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
+    // Mock route data (REPLACE THIS with real API response)
+    routeData.value = {
+      // From activeBlock
+      warehouse: activeBlock.value?.warehouse,
+      fecha: activeBlock.value?.date,
+      hora: activeBlock.value?.start_time,
+      duracion_horas: parseFloat(activeBlock.value?.duration) || 0,
+      pago: parseFloat(activeBlock.value?.payment) || 0,
+      vehiculo: activeBlock.value?.vehicleName,
+
+      // Calculated values (these should come from your API)
+      pago_por_hora: (parseFloat(activeBlock.value?.payment) || 0) / (parseFloat(activeBlock.value?.duration) || 1),
+      antes_del_bloque: 0.38, // Example: 23 min
+      despues_del_bloque: 0.42, // Example: 25 min
+      tiempo_total: (parseFloat(activeBlock.value?.duration) || 0) + 0.8,
+      pago_real_por_hora: 18.5, // Example
+
+      // Mileage
+      commute_1: parseFloat(activeBlock.value?.warehouseDistance) || 0,
+      commute_2: 25.2, // Example
+      millas_de_trabajo: 32.5, // Example
+      millas_totales: 80.7, // Example
+      millas_por_hora: 20.2, // Example
+
+      // Financial
+      gasto_de_gasolina: 8.50, // Example
+      desgaste_vehiculo: 12.10, // Example
+      tax: 9.68, // Example
+
+      // FRI & ETA
+      route_score: 6.8, // Example: 0-10 scale
+      eta_normal: '17:45:00',
+      eta_real: '17:52:00',
       
-      <div class="metrica">
-        <div class="metrica-icon">🛣️</div>
-        <div class="metrica-content">
-          <span class="metrica-label">Millas Totales a Conducir</span>
-          <span class="metrica-value">{{ calculatedLogEntry.millas_totales }} mi</span>
-        </div>
-      </div>
-      
-      <div class="metrica">
-        <div class="metrica-icon">💰</div>
-        <div class="metrica-content">
-          <span class="metrica-label">Pago Real por Hora</span>
-          <span class="metrica-value">${{ calculatedLogEntry.pago_real_por_hora }}/h</span>
-        </div>
-      </div>
-    </div>
+      // Additional
+      primary_city: parsedData.city || 'Orlando',
+      numero_paradas: parsedData.stops?.length || 0
+    }
 
-    <!-- Mensaje Consciente -->
-    <div class="mensaje-consciente">
-      <blockquote class="frase">
-        "{{ routeScore.mensaje.frase }}"
-        <cite>— {{ routeScore.mensaje.autor }}</cite>
-      </blockquote>
-      
-      <div class="accion">
-        <strong>💡 Reflexión:</strong>
-        <p>{{ routeScore.mensaje.accion }}</p>
-      </div>
-    </div>
+    showResults.value = true
 
-    <!-- Botón Expandir Detalles -->
-    <button 
-      @click="mostrarDetalles = !mostrarDetalles" 
-      class="button-toggle-details"
-    >
-      {{ mostrarDetalles ? '▲ Ocultar Detalles Técnicos' : '▼ Mostrar Detalles Técnicos' }}
-    </button>
-  </div>
+  } catch (error) {
+    console.error('Evaluation error:', error)
+    jsonError.value = error.message || 'Invalid JSON format'
+  } finally {
+    isEvaluating.value = false
+  }
+}
 
-  <!-- DETALLES EXPANDIBLES -->
-  <transition name="expand">
-    <div v-if="mostrarDetalles" class="detalles-tecnicos">
-      
-      <!-- User & Scenario Selection -->
-      <h3>📋 Datos del Bloque</h3>
-      <div class="form-row">
+const resetToEdit = () => {
+  showResults.value = false
+  routeData.value = null
+  // Keep the JSON in case user wants to re-evaluate
+}
 
-        <div class="form-group">
-          <label>Escenario Usado</label>
-          <div class="scenario-pills">
-            <label class="pill-option">
-              <input type="radio" v-model="selectedScenarioForLog" value="normal">
-              <span>Normal</span>
-            </label>
-            <label class="pill-option">
-              <input type="radio" v-model="selectedScenarioForLog" value="inverse">
-              <span>Inversa</span>
-            </label>
-          </div>
-        </div>
-      </div>
+onMounted(() => {
+  if (!activeBlock.value) {
+    router.push('/blocks')
+  }
+})
+</script>
 
-      <!-- Breakdown Detallado -->
-      <div class="breakdown-section">
-        <h4>📊 Desglose Financiero</h4>
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Pago Base del Bloque:</span>
-            <span class="breakdown-value">${{ calculatedLogEntry.pago }}</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Pago/Hora (Bloque):</span>
-            <span class="breakdown-value">${{ calculatedLogEntry.pago_por_hora }}</span>
-          </div>
-          <div class="breakdown-item negative">
-            <span class="breakdown-label">Gasto de Gasolina:</span>
-            <span class="breakdown-value">-${{ calculatedLogEntry.gasto_de_gasolina }}</span>
-          </div>
-          <div class="breakdown-item negative">
-            <span class="breakdown-label">Desgaste de Vehículo:</span>
-            <span class="breakdown-value">-${{ calculatedLogEntry.desgaste_vehiculo }}</span>
-          </div>
-          <div class="breakdown-item negative">
-            <span class="breakdown-label">Impuestos (15.3%):</span>
-            <span class="breakdown-value">-${{ calculatedLogEntry.tax }}</span>
-          </div>
-          <div class="breakdown-item positive">
-            <span class="breakdown-label">Deducción por Milla:</span>
-            <span class="breakdown-value">+${{ calculatedLogEntry.claim_por_milla }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="breakdown-section">
-        <h4>🛣️ Desglose de Distancias</h4>
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Commute 1 (Casa → Warehouse):</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.commute_1 }} mi</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Primera Parada:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.first_stop }} mi</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Millas de Trabajo:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.millas_de_trabajo }} mi</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Millas/Hora (Trabajo):</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.millas_por_hora }} mi/h</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Commute 2 (Última → Destino):</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.commute_2 }} mi</span>
-          </div>
-          <div class="breakdown-item highlight">
-            <span class="breakdown-label">Total de Millas:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.millas_totales }} mi</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="breakdown-section">
-        <h4>⏱️ Desglose de Tiempos</h4>
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Antes del Bloque:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.antes_del_bloque }} h</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Duración del Bloque:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.duracion_horas }} h</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Después del Bloque:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.despues_del_bloque }} h</span>
-          </div>
-          <div class="breakdown-item highlight">
-            <span class="breakdown-label">Tiempo Total Invertido:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.tiempo_total }} h</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="breakdown-section">
-        <h4>📍 Información Adicional</h4>
-        <div class="breakdown-grid">
-          <div class="breakdown-item">
-            <span class="breakdown-label">Ciudad Principal:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.primary_city || 'N/A' }}</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Warehouse:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.warehouse }}</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Vehículo:</span>
-            <span class="breakdown-value">{{ getVehicleNickname(blockData.vehiculo) }}</span>
-          </div>
-          <div class="breakdown-item">
-            <span class="breakdown-label">Número de Paradas:</span>
-            <span class="breakdown-value">{{ calculatedLogEntry.numero_paradas }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Red Flags Section -->
-      <div v-if="routeScore.redFlags && routeScore.redFlags.length > 0" class="breakdown-section red-flags">
-        <h4>⚠️ Alertas Detectadas</h4>
-        <div class="flags-list">
-          <div 
-            v-for="(flag, index) in routeScore.redFlags" 
-            :key="index"
-            :class="['flag-item', flag.nivel.toLowerCase()]"
-          >
-            <span class="flag-badge">{{ flag.nivel }}</span>
-            <span class="flag-mensaje">{{ flag.mensaje }}</span>
-            <span class="flag-penalty">{{ flag.penalizacion }} pts</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </transition>
-
-  <!-- Botón de Guardar -->
-  <button @click="saveToLogbook" class="button-save-log" :disabled="isSaving">
-    {{ isSaving ? 'Guardando...' : '💾 Guardar en Bitácora' }}
-  </button>
-  
-  <div v-if="saveStatus" :class="['save-status', saveStatus.success ? 'success' : 'error']">
-    {{ saveStatus.message }}
-  </div>
-</div>
-        </div> </div> </div> </div> </div></div></div> </template>
 <style scoped>
-    /* --- Base Styles (Keep as is) --- */
-    .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-
-    /* --- New File Input Styles (Keep as is) --- */
-    .file-input-area { margin-bottom: 30px; text-align: center; }
-    .file-input-area input[type="file"] { display: none; }
-    .file-input-label { display: block; padding: 40px 20px; border: 2px dashed var(--color-border); border-radius: 8px; background-color: var(--color-surface); color: var(--color-text-secondary); cursor: pointer; transition: background-color 0.2s ease, border-color 0.2s ease; }
-    .file-input-label:hover { background-color: var(--color-border); border-color: var(--color-primary); color: var(--color-text-primary); }
-    .file-input-icon { font-size: 2em; display: block; margin-bottom: 10px; }
-    .file-input-text { font-weight: 500; }
-    .selected-files { margin-top: 10px; font-size: 0.9em; color: var(--color-text-secondary); text-align: center; }
-
-    /* --- Status Bar --- */
-    .status {
-        margin: 20px 0; padding: 15px;
-        background-color: var(--color-surface);
-        border-left: 5px solid var(--color-primary);
-        color: var(--color-text-primary); /* Light text on dark surface */
-    }
-
-    /* --- Controls & Address List --- */
-    .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }
-    .control-group { flex: 1; display: flex; flex-direction: column; }
-    .control-group label { margin-bottom: 8px; font-weight: bold; color: var(--color-text-secondary); } /* Lighter label text */
-    /* Select inherits global dark style */
-
-    .custom-input-container { margin: 10px 20px; }
-    /* Input inherits global dark style */
-
-    .address-list { margin-top: 20px; padding: 20px; border: 1px solid var(--color-border); border-radius: 8px; text-align: left; background-color: var(--color-surface); color: var(--color-text-primary); }
-    .address-list h2 { margin-top: 0; color: var(--color-primary); }
-    .ordered-list { list-style-type: none; padding-left: 0; }
-    li.editable-item { margin-bottom: 12px; font-size: 1.1em; line-height: 1.5; color: var(--color-text-primary); display: flex; align-items: center; gap: 5px; }
-    .stop-number-input { width: 50px; text-align: center; font-weight: bold; } /* Inherits global */
-    .address-input { flex-grow: 1; } /* Inherits global */
-    .downtown-label { display: flex; align-items: center; cursor: pointer; font-size: 0.9em; color: var(--color-text-secondary); padding: 0 5px; }
-    .downtown-checkbox { /* Styles for custom checkbox */
-      appearance: none; width: 18px; height: 18px; border: 1px solid var(--color-border);
-      border-radius: 3px; cursor: pointer; position: relative; background-color: var(--color-background);
-    }
-    .downtown-checkbox:checked { background-color: var(--color-primary); border-color: var(--color-primary); }
-    .downtown-checkbox:checked::after {
-     content: '✓'; color: white; position: absolute; left: 50%; top: 50%;
-     transform: translate(-50%, -50%); font-size: 14px; font-weight: bold;
-    }
-    .button-delete { padding: 8px 10px; font-size: 0.9em; border-radius: 4px; background-color: #6c2a32; color: var(--color-text-primary); border: none; cursor: pointer; }
-    .button-delete:hover { background-color: #8b3640; }
-    .action-buttons { display: flex; gap: 10px; margin-bottom: 20px; }
-    .button-add, .button-reorder { padding: 10px; flex-grow: 1; cursor: pointer; border-radius: 5px; } /* Use global button styles or specific ones */
-    .button-add { background-color: var(--color-accent); color: var(--color-black); border: 1px solid var(--color-accent); }
-    .button-add:hover { background-color: #bad0b1; }
-    .button-reorder { background-color: var(--color-surface); color: var(--color-text-primary); border: 1px solid var(--color-border); }
-    .button-reorder:hover { background-color: var(--color-border); }
-    .button-map { display: block; width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold; margin-top: 20px; /* Uses .button-primary from global */ }
-
-    /* --- Results Container --- */
-    .backend-status { margin-top: 15px; padding: 10px; background-color: var(--color-surface); border-radius: 4px; text-align: center; color: var(--color-text-primary); }
-    .backend-status.error { background-color: #6c2a32; color: var(--color-text-primary); } /* Dark red background */
-
-    .results-container { margin-top: 20px; padding: 15px; background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text-primary); } /* Base light text */
-    .result-block { padding: 20px 0 10px 0; }
-    /* Remove inverse block specific background for now */
-    /* .result-block.inverse-block { background-color: #fffaf0; ... } */
-    .result-block h4 { margin: 0 0 15px 0; color: var(--color-primary); } /* Primary color headings */
-    .result-block p { margin: 5px 0; font-size: 1.1em; color: var(--color-text-primary); } /* Light text */
-    .segment-breakdown { padding-left: 15px; border-left: 2px solid var(--color-border); margin-left: 5px; margin-top: 10px; }
-    .calc-details { font-size: 0.85em; color: var(--color-text-secondary); display: inline; } /* Dimmer secondary text */
-    .total-time { font-size: 1.1em !important; border-top: 1px solid var(--color-border); padding-top: 8px; margin-top: 8px; color: var(--color-text-primary); }
-    .grand-total { font-size: 1.25em !important; color: var(--color-primary); font-weight: bold; } /* Primary color total */
-    .dotted-hr { border: none; border-top: 2px dotted var(--color-border); margin: 15px 0; }
-    hr { border: none; border-top: 1px solid var(--color-border); margin: 10px 0; }
-
-    /* --- Scenario Table --- */
-    .scenario-table { padding: 10px 0; }
-    .scenario-table h4 { margin: 0 0 10px 0; color: var(--color-primary); }
-    .scenario-table table { width: 100%; border-collapse: collapse; }
-    .scenario-table td { padding: 12px; text-align: left; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); } /* Light text in table */
-    .scenario-table .highlight { background-color: rgba(42, 62, 80, 0.5); } /* Darker highlight */
-    .savings { color: var(--color-accent); font-weight: bold; } /* Accent color savings */
-
-    /* --- ETA Block (FIXED CONTRAST) --- */
-    .eta-block {
-      /* background-color: #e6f7ff; REMOVED light background */
-      background-color: var(--color-background); /* Darker background than surface */
-      margin: 0 -15px -15px -15px; /* Keep negative margin */
-      padding: 20px 15px 15px 15px;
-      border-radius: 0 0 8px 8px;
-      border-top: 1px solid var(--color-border);
-    }
-    /* Remove inverse eta specific background */
-    /* .eta-block.inverse-eta { background-color: #fffaf0; } */
-    .eta-block h4 { color: var(--color-primary); }
-    .eta-scenario { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed var(--color-border); color: var(--color-text-primary); } /* Light text */
-    .eta-scenario:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    .eta-label { display: inline-block; width: 100px; font-weight: bold; } /* Keep colors */
-    .eta-label.optimistic { color: #28a745; }
-    .eta-label.normal { color: #ffc107; }
-    .eta-label.pessimistic { color: #dc3545; }
-    .eta-time { font-size: 1.3em; font-weight: bold; color: var(--color-text-primary); margin-right: 10px; } /* Light time */
-    .eta-duration { font-size: 0.9em; color: var(--color-text-secondary); } /* Dimmer duration */
-
-    /* --- Logbook Form --- */
-    .logbook-form-container { margin-top: 30px; padding: 20px; background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }
-    .logbook-form-container h3 { margin-top: 0; color: var(--color-primary); border-bottom: 2px solid var(--color-border); padding-bottom: 10px; }
-    .logbook-scenario-selector { background-color: var(--color-background); border: 1px solid var(--color-border); padding: 10px; border-radius: 5px; margin-bottom: 15px; color: var(--color-text-primary); } /* Dark background */
-    .logbook-scenario-selector label { margin-left: 15px; font-weight: normal; cursor: pointer; color: var(--color-text-primary); }
-    .form-row { display: flex; gap: 15px; margin-bottom: 15px; }
-    .form-group { flex: 1; display: flex; flex-direction: column; }
-    .form-group label { margin-bottom: 5px; font-weight: normal; color: var(--color-text-secondary); font-size: 0.9em; } /* Visible label */
-    /* Inputs/Selects inherit global dark style */
-
-    /* --- Logbook Summary (FIXED CONTRAST) --- */
-    .logbook-summary {
-      background-color: var(--color-background); /* Darker background */
-      border: 1px solid var(--color-border);
-      border-radius: 5px;
-      padding: 15px;
-      margin-top: 20px;
-    }
-    .logbook-summary h4 { margin: 0 0 10px 0; color: var(--color-primary); }
-    .logbook-summary p { margin: 5px 0; font-size: 1.1em; display: flex; justify-content: space-between; color: var(--color-text-primary); } /* Light text */
-    .logbook-summary p strong { color: var(--color-white); } /* Brighter bold text */
-
-    .button-save-log { display: block; width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold; color: var(--color-black); background-color: var(--color-accent); border: none; border-radius: 5px; cursor: pointer; margin-top: 20px; }
-    .button-save-log:hover { background-color: #bad0b1; }
-    .button-save-log:disabled { background-color: #555; cursor: not-allowed; color: #999; }
-
-    /* --- Save Status --- */
-    .save-status { margin-top: 15px; padding: 10px; border-radius: 5px; font-weight: bold; text-align: center; }
-    .save-status.success { background-color: #1e4620; color: #a3d9a5; border: 1px solid #2a642d; } /* Dark green */
-    .save-status.error { background-color: #6c2a32; color: #f8d7da; border: 1px solid #8b3640; } /* Dark red */
-
-    /* --- Needs Review Highlight --- */
-    .editable-item.needs-review {
-      background-color: rgba(255, 193, 7, 0.1); /* Subtle yellow background */
-      border-left: 4px solid #ffc107; /* Yellow border */
-      padding-left: 10px;
-      margin-left: -14px; /* Adjust based on padding */
-    }
-    .editable-item.needs-review .address-input {
-      background-color: rgba(40, 38, 30, 0.5); /* Slightly yellow dark background */
-      border-color: #ffc107;
-    }
-    .manual-entry-container {
-  text-align: center;
-  margin-bottom: 20px;
-    }
-
-    .block-details-container {
-      margin-top: 20px;
-      margin-bottom: 20px;
-      padding: 20px;
-      background-color: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
-    }
-
-    .block-details-container h3 {
-      margin-top: 0;
-      color: var(--color-primary);
-      border-bottom: 1px solid var(--color-border);
-      padding-bottom: 10px;
-      margin-bottom: 15px;
-    }
-
-    /* Ensure address list only appears after details are shown */
-    .address-list {
-      /* margin-top is already there, looks fine */
-    }
-
-    /* --- JSON Paste Area --- */
-.json-paste-container {
-  margin-bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.json-textarea {
-  width: 100%;
-  padding: 10px;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 0.9em;
-  background-color: var(--color-background); /* Fondo oscuro */
-  color: var(--color-text-primary); /* Texto claro */
-  border: 1px solid var(--color-border);
-  border-radius: 5px;
-  resize: vertical;
+.upload-view {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding-bottom: 80px;
 }
 
-.json-textarea:disabled {
-  background-color: var(--color-border);
-  cursor: not-allowed;
-}
-
-/* Asumimos que .button-secondary es un estilo global o similar */
-.json-paste-container .button-secondary {
-  width: 100%;
-  text-align: center;
-  padding: 12px;
-  font-weight: 500;
-  font-size: 1em;
-  background-color: var(--color-surface);
-  color: var(--color-text-primary);
-  border: 1px solid var(--color-border);
-  border-radius: 5px;
-  cursor: pointer;
-}
-.json-paste-container .button-secondary:hover {
-  background-color: var(--color-border);
-}
-.json-paste-container .button-secondary:disabled {
-  background-color: var(--color-surface);
-  color: var(--color-text-secondary);
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-/* ============================================ */
-/* =            ESTILOS PARA MÓVIL            = */
-/* ============================================ */
-@media (max-width: 768px) {
-
-  /* --- 1. Arregla el formulario "Block Details" --- */
-  /* Forzamos a que los grupos de campos se apilen verticalmente */
-  .form-row {
-    flex-direction: column; /* Apila los campos */
-    gap: 15px; /* Mantiene el espacio entre ellos */
-  }
-  
-  /* El .form-group ya tiene 'flex: 1', 
-     así que tomará 100% de ancho automáticamente.
-     ¡Esto arregla el campo "Vehicle"! */
-
-
-  /* --- 2. Arregla la lista de direcciones --- */
-  
-  /* Reducimos el tamaño de todo en la fila de la dirección */
-  .editable-item {
-    gap: 8px; /* Un poco menos de espacio entre elementos */
-  }
-
-  /* Hacemos la fuente de la dirección más pequeña para que quepa más texto */
-  .address-input {
-    font-size: 0.5em;  /* <-- ESTA ES LA CLAVE! */
-    padding: 10px 8px; /* Ajustamos un poco el padding */
-  }
-
-  /* Achicamos un poco los elementos de los lados */
-  .stop-number-input {
-    width: 40px;
-    font-size: 0.5em;
-  }
-
-  .downtown-label {
-    font-size: 0.8em;
-  }
-
-  .button-delete {
-    padding: 8px;
-  }
-}
-/* --- Link al Gem --- */
-.gem-link-container {
-  margin-bottom: 20px;
-  text-align: center;
-}
-.gem-link {
-  display: inline-block;
-  padding: 10px 15px;
-  background-color: var(--color-surface);
-  color: var(--color-accent); /* Usamos el color 'accent' para que resalte */
-  border: 1px solid var(--color-border);
-  border-radius: 5px;
-  text-decoration: none;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-.gem-link:hover {
-  background-color: var(--color-border);
-  color: var(--color-text-primary);
-  border-color: var(--color-accent);
-}
-/* ========================================
-   RESUMEN CONSCIENTE
-   ======================================== */
-
-.resumen-consciente {
-  background: linear-gradient(135deg, var(--color-surface) 0%, rgba(42, 62, 80, 0.5) 100%);
-  border-radius: 12px;
-  padding: 25px;
-  margin-bottom: 20px;
-}
-
-.score-header {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 30px;
-}
-
-.score-badge {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 20px 30px;
-  border-radius: 50px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-}
-
-.score-icon {
-  font-size: 3em;
-}
-
-.score-info {
-  display: flex;
-  flex-direction: column;
-  color: white;
-}
-
-.score-value {
-  font-size: 2em;
-  font-weight: bold;
-  line-height: 1;
-}
-
-.score-label {
-  font-size: 0.9em;
-  opacity: 0.9;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-/* Métricas Clave */
-.metricas-clave {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 15px;
-  margin-bottom: 25px;
-}
-
-.metrica {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  background-color: rgba(255, 255, 255, 0.05);
-  padding: 15px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  transition: transform 0.2s ease;
-}
-
-.metrica:hover {
-  transform: translateY(-2px);
-  border-color: var(--color-primary);
-}
-
-.metrica-icon {
-  font-size: 2.5em;
-  opacity: 0.8;
-}
-
-.metrica-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
-.metrica-label {
-  font-size: 0.85em;
-  color: var(--color-text-secondary);
-  margin-bottom: 5px;
-}
-
-.metrica-value {
-  font-size: 1.4em;
-  font-weight: bold;
-  color: var(--color-text-primary);
-}
-
-/* Mensaje Consciente */
-.mensaje-consciente {
-  background: linear-gradient(135deg, rgba(165, 201, 151, 0.1) 0%, rgba(165, 201, 151, 0.05) 100%);
-  border-left: 4px solid var(--color-accent);
-  border-radius: 8px;
+.view-header {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
   padding: 20px;
-  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
-.frase {
-  font-style: italic;
-  color: var(--color-text-primary);
-  font-size: 1.15em;
-  line-height: 1.7;
-  margin: 0 0 15px 0;
-  padding: 0;
-  border: none;
-}
-
-.frase cite {
-  display: block;
-  margin-top: 12px;
-  font-size: 0.9em;
-  color: var(--color-accent);
-  font-style: normal;
-  font-weight: 600;
-}
-
-.accion {
-  background-color: rgba(165, 201, 151, 0.15);
-  padding: 15px;
-  border-radius: 6px;
-  margin-top: 15px;
-}
-
-.accion strong {
-  color: var(--color-accent);
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.95em;
-}
-
-.accion p {
+.view-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
   margin: 0;
-  color: var(--color-text-primary);
-  line-height: 1.6;
-  font-size: 1.05em;
+  text-align: center;
 }
 
-/* Botón Toggle */
-.button-toggle-details {
-  width: 100%;
-  padding: 12px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.95em;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
-
-.button-toggle-details:hover {
-  background-color: var(--color-border);
-  border-color: var(--color-primary);
-}
-
-/* ========================================
-   DETALLES TÉCNICOS
-   ======================================== */
-
-.detalles-tecnicos {
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 25px;
-  margin-top: 20px;
-  margin-bottom: 20px;
-}
-
-.detalles-tecnicos h3 {
-  color: var(--color-primary);
-  margin-top: 0;
-  margin-bottom: 20px;
-  padding-bottom: 10px;
-  border-bottom: 2px solid var(--color-border);
-}
-
-.detalles-tecnicos h4 {
-  color: var(--color-accent);
-  margin-top: 25px;
-  margin-bottom: 15px;
-  font-size: 1.1em;
-}
-
-/* Scenario Pills */
-.scenario-pills {
-  display: flex;
-  gap: 10px;
-}
-
-.pill-option {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 15px;
-  background-color: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: 20px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.pill-option input[type="radio"] {
-  display: none;
-}
-
-.pill-option:has(input:checked) {
-  background-color: var(--color-primary);
-  border-color: var(--color-primary);
-  color: white;
-}
-
-.pill-option:hover {
-  border-color: var(--color-primary);
-}
-
-/* Breakdown Sections */
-.breakdown-section {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--color-border);
-}
-
-.breakdown-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-  margin-top: 15px;
-}
-
-.breakdown-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 15px;
-  background-color: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
-  border: 1px solid transparent;
-  transition: all 0.2s ease;
-}
-
-.breakdown-item:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: var(--color-border);
-}
-
-.breakdown-label {
-  font-size: 0.95em;
-  color: var(--color-text-secondary);
-}
-
-.breakdown-value {
-  font-weight: bold;
-  font-size: 1.1em;
-  color: var(--color-text-primary);
-}
-
-.breakdown-item.negative .breakdown-value {
-  color: #ff5722;
-}
-
-.breakdown-item.positive .breakdown-value {
-  color: var(--color-accent);
-}
-
-.breakdown-item.highlight {
-  background-color: rgba(165, 201, 151, 0.1);
-  border-color: var(--color-accent);
-}
-
-.breakdown-item.highlight .breakdown-value {
-  color: var(--color-accent);
-  font-size: 1.2em;
-}
-
-/* Red Flags */
-.red-flags {
-  background-color: rgba(255, 87, 34, 0.05);
-  border: 1px solid rgba(255, 87, 34, 0.3);
-  border-radius: 8px;
+.content-wrapper {
+  max-width: 800px;
+  margin: 0 auto;
   padding: 20px;
-}
-
-.flags-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 20px;
 }
 
-.flag-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background-color: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
-  border-left: 4px solid;
-}
-
-.flag-item.critico {
-  border-left-color: #dc3545;
-}
-
-.flag-item.severo {
-  border-left-color: #ff9800;
-}
-
-.flag-item.advertencia {
-  border-left-color: #ffc107;
-}
-
-.flag-badge {
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.75em;
-  font-weight: bold;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.flag-item.critico .flag-badge {
-  background-color: #dc3545;
-  color: white;
-}
-
-.flag-item.severo .flag-badge {
-  background-color: #ff9800;
-  color: white;
-}
-
-.flag-item.advertencia .flag-badge {
-  background-color: #ffc107;
-  color: #333;
-}
-
-.flag-mensaje {
-  flex: 1;
-  color: var(--color-text-primary);
-  font-size: 0.95em;
-}
-
-.flag-penalty {
-  font-weight: bold;
-  color: #ff5722;
-  font-size: 0.9em;
-}
-
-/* Expand Transition */
-.expand-enter-active,
-.expand-leave-active {
-  transition: all 0.3s ease;
-  max-height: 3000px;
+/* Card Styles */
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
-.expand-enter-from,
-.expand-leave-to {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  margin-top: 0;
-  margin-bottom: 0;
-}
-/* --- Estilos para el botón 'Ahora' en el label --- */
-.label-with-button {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 2px solid #f1f5f9;
 }
 
-.button-tertiary {
-  padding: 3px 8px;
-  font-size: 0.8em;
-  font-weight: 500;
-  background-color: var(--color-surface);
-  color: var(--color-accent);
-  border: 1px solid var(--color-accent);
-  border-radius: 4px;
-  cursor: pointer;
-  line-height: 1.2;
-}
-.button-tertiary:hover {
-  background-color: rgba(165, 201, 151, 0.1);
-  color: var(--color-text-primary);
-}
-/* ========================================
-   ERRORES DE DIRECCIONES
-   ======================================== */
-
-.address-errors {
-  background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%);
-  border: 2px solid #dc3545;
-  border-radius: 12px;
-  padding: 25px;
-  margin: 20px 0;
-  animation: pulseError 2s ease-in-out infinite;
-}
-
-@keyframes pulseError {
-  0%, 100% { border-color: #dc3545; }
-  50% { border-color: #ff5722; }
-}
-
-.address-errors h3 {
-  color: #dc3545;
-  margin: 0 0 15px 0;
-  font-size: 1.3em;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.error-intro {
-  color: var(--color-text-primary);
-  margin-bottom: 20px;
-  font-size: 1.05em;
-  line-height: 1.6;
-}
-
-.error-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  margin-bottom: 20px;
-}
-
-.error-item {
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(220, 53, 69, 0.3);
-  border-radius: 8px;
-  padding: 15px;
-}
-
-.error-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.error-icon {
-  font-size: 1.5em;
-}
-
-.error-header strong {
-  color: #dc3545;
-  font-size: 1.1em;
-}
-
-.error-details {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.error-details p {
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
   margin: 0;
-  color: var(--color-text-primary);
-  font-size: 0.95em;
 }
 
-.error-details strong {
-  color: var(--color-text-secondary);
-  margin-right: 8px;
+.card-body {
+  padding: 20px;
 }
 
-.error-type {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--color-border);
+/* Block Details */
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
 }
 
-.error-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  background-color: rgba(220, 53, 69, 0.2);
-  border: 1px solid #dc3545;
-  border-radius: 12px;
-  font-size: 0.85em;
-  font-weight: bold;
-  color: #ff5722;
+.detail-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.error-actions {
-  background-color: rgba(255, 193, 7, 0.1);
-  border: 1px solid #ffc107;
-  border-radius: 8px;
-  padding: 15px;
-  margin-top: 20px;
-}
-
-.error-actions p {
+.detail-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
   margin: 0;
-  color: var(--color-text-primary);
-  font-size: 1.05em;
-  line-height: 1.6;
 }
 
-/* Modificar el botón de guardar cuando hay errores */
-.button-save-log:disabled {
-  background-color: #6c2a32 !important;
-  cursor: not-allowed !important;
-  opacity: 0.6 !important;
-}
-
-/* ========================================
-   NUEVOS ESTILOS - DISEÑO SIMPLIFICADO v4.2
-   ======================================== */
-
-/* Block Info Card */
-.block-info-card {
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--space-6);
-  margin-bottom: var(--space-6);
-  box-shadow: var(--shadow-card);
-}
-
-.block-info-card h2 {
-  margin: 0 0 var(--space-4) 0;
-  color: var(--brand-primary);
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-}
-
-.block-info-grid {
+/* Route Config */
+.config-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
 }
 
-.info-item {
+.config-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 8px;
 }
 
-.info-label {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: var(--font-semibold);
+.config-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
 }
 
-.info-value {
-  font-size: var(--text-lg);
-  color: var(--text-primary);
-  font-weight: var(--font-semibold);
+.config-select {
+  padding: 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-/* Gem Link Container */
-.gem-link-container {
-  background-color: var(--info-bg);
-  border: 2px solid var(--info);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
-  margin-bottom: var(--space-6);
-  text-align: center;
+.config-select:focus {
+  outline: none;
+  border-color: #3b82f6;
 }
 
-.gem-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-6);
-  background-color: var(--brand-primary);
+/* Gemini Button */
+.gemini-button {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  text-decoration: none;
-  border-radius: var(--radius-base);
-  font-weight: var(--font-semibold);
-  font-size: var(--text-base);
-  transition: all var(--transition-base);
-  box-shadow: var(--shadow-md);
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  margin-bottom: 12px;
 }
 
-.gem-link:hover {
-  background-color: var(--brand-primary-hover);
+.gemini-button:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
 }
 
-.gem-hint {
-  margin-top: var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+.gemini-icon {
+  font-size: 20px;
 }
 
-/* JSON Input Card */
-.json-input-card {
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--space-6);
-  margin-bottom: var(--space-6);
-  box-shadow: var(--shadow-card);
+.upload-instruction {
+  text-align: center;
+  font-size: 14px;
+  color: #64748b;
+  margin: 0 0 20px 0;
 }
 
-.json-input-card h3 {
-  margin: 0 0 var(--space-4) 0;
-  color: var(--text-primary);
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
+/* Paste Section */
+.paste-section {
+  margin-bottom: 20px;
+}
+
+.paste-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.paste-icon {
+  font-size: 20px;
+}
+
+.paste-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
 }
 
 .json-textarea {
   width: 100%;
-  min-height: 200px;
-  padding: var(--space-4);
+  padding: 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
   font-family: 'Courier New', monospace;
-  font-size: var(--text-sm);
-  border: 2px solid var(--border-primary);
-  border-radius: var(--radius-base);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  font-size: 13px;
   resize: vertical;
-  transition: all var(--transition-base);
-  box-shadow: var(--shadow-xs);
+  transition: border-color 0.2s;
 }
 
 .json-textarea:focus {
-  border-color: var(--brand-primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), var(--shadow-sm);
   outline: none;
+  border-color: #3b82f6;
 }
 
-.json-textarea:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background-color: var(--bg-tertiary);
-}
-
-.stops-detected {
-  margin-top: var(--space-3);
-  padding: var(--space-3);
-  background-color: var(--success-bg);
-  border: 1px solid var(--success);
-  border-radius: var(--radius-base);
-  color: var(--success);
-  font-weight: var(--font-semibold);
-  text-align: center;
-}
-
-.button-evaluate {
-  width: 100%;
-  margin-top: var(--space-4);
-  padding: var(--space-4);
-  font-size: var(--text-lg);
-  font-weight: var(--font-bold);
-  box-shadow: var(--shadow-lg);
-}
-
-.button-evaluate:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-xl);
-}
-
-/* Route Config Card */
-.route-config-card {
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--space-6);
-  margin-bottom: var(--space-4);
-  box-shadow: var(--shadow-card);
-}
-
-.route-config-card h3 {
-  margin: 0 0 var(--space-4) 0;
-  color: var(--text-primary);
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-}
-
-/* Additional Settings (collapsible) */
-.additional-settings {
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  margin-bottom: var(--space-6);
-  box-shadow: var(--shadow-card);
-}
-
-.additional-settings details {
-  cursor: pointer;
-}
-
-.additional-settings summary {
-  padding: var(--space-3);
-  font-weight: var(--font-semibold);
-  color: var(--text-secondary);
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  user-select: none;
-}
-
-.additional-settings summary:hover {
-  color: var(--brand-primary);
-}
-
-.additional-settings summary::-webkit-details-marker {
-  display: none;
-}
-
-.additional-settings summary::before {
-  content: '▶';
-  font-size: var(--text-xs);
-  transition: transform var(--transition-fast);
-}
-
-.additional-settings details[open] summary::before {
-  transform: rotate(90deg);
-}
-
-.additional-settings .form-row {
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border-secondary);
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .block-info-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .button-evaluate {
-    font-size: var(--text-base);
-    padding: var(--space-3);
-  }
-}
-
-/* ========================================
-   MODAL DE DOWNTOWN - FIXED
-   ======================================== */
-
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.85); /* Más oscuro */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999; /* Más alto */
-  padding: 20px;
-  backdrop-filter: blur(4px); /* Efecto blur */
-}
-
-.modal-container {
-  background-color: var(--color-surface);
-  border: 2px solid var(--color-border); /* Borde más visible */
-  border-radius: 12px;
-  max-width: 600px;
-  width: 100%;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
-  animation: slideUp 0.3s ease;
-  position: relative;
-  z-index: 10000; /* Asegurar que esté encima */
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(30px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.modal-header {
-  padding: 25px;
-  border-bottom: 2px solid var(--color-border);
-  background-color: var(--color-background); /* Fondo más oscuro */
-}
-
-.modal-header h3 {
-  margin: 0 0 10px 0;
-  color: var(--color-primary);
-  font-size: 1.4em;
-  font-weight: 700;
-}
-
-.modal-subtitle {
-  margin: 0;
-  color: var(--color-text-primary); /* Más visible */
-  font-size: 0.95em;
-  line-height: 1.5;
-}
-
-.modal-body {
-  padding: 20px 25px;
-  overflow-y: auto;
-  flex: 1;
-  background-color: var(--color-surface); /* Asegurar fondo */
-}
-
-.apartment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.apartment-item {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 15px;
-  background-color: var(--color-background); /* Más oscuro */
-  border: 2px solid var(--color-border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.apartment-item:hover {
-  background-color: rgba(59, 130, 246, 0.1);
-  border-color: var(--color-primary);
-  transform: translateX(5px);
-}
-
-.downtown-checkbox-modal {
-  appearance: none;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  border: 2px solid var(--color-text-secondary);
-  border-radius: 6px;
-  cursor: pointer;
-  position: relative;
-  background-color: var(--color-surface);
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.downtown-checkbox-modal:hover {
-  border-color: var(--color-primary);
-}
-
-.downtown-checkbox-modal:checked {
-  background-color: var(--color-primary);
-  border-color: var(--color-primary);
-}
-
-.downtown-checkbox-modal:checked::after {
-  content: '✓';
-  color: white;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 18px;
-  font-weight: bold;
-}
-
-.apartment-info {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  flex: 1;
-  min-width: 0; /* Permite que el texto se corte */
-}
-
-.apt-number {
-  font-weight: bold;
-  color: var(--color-accent);
-  font-size: 1em;
-}
-
-.apt-address {
-  color: var(--color-text-primary);
-  font-size: 0.95em;
-  word-break: break-word; /* Permite que direcciones largas se partan */
-}
-
-.modal-footer {
-  padding: 20px 25px;
-  border-top: 2px solid var(--color-border);
-  display: flex;
-  gap: 12px;
-  background-color: var(--color-background);
-}
-
-.modal-footer button {
-  flex: 1;
-  padding: 14px;
-  font-size: 1em;
-  font-weight: 600;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: none;
-}
-
-.modal-footer .button-secondary {
-  background-color: var(--color-surface);
-  color: var(--color-text-primary);
-  border: 2px solid var(--color-border);
-}
-
-.modal-footer .button-secondary:hover {
-  background-color: var(--color-border);
-  border-color: var(--color-text-secondary);
-}
-
-.modal-footer .button-primary {
-  background-color: var(--color-primary);
-  color: white;
-  border: none;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.modal-footer .button-primary:hover {
-  background-color: #4f94f7;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .modal-overlay {
-    padding: 10px;
-  }
-  
-  .modal-container {
-    max-height: 90vh;
-  }
-  
-  .modal-header {
-    padding: 20px;
-  }
-  
-  .modal-body {
-    padding: 15px 20px;
-  }
-  
-  .apartment-item {
-    padding: 12px;
-  }
-  
-  .modal-footer {
-    flex-direction: column;
-    padding: 15px 20px;
-  }
-  
-  .modal-footer button {
-    width: 100%;
-  }
-}
-/* Fix de contraste para texto visible */
-.modal-header h3 {
-  color: #60a5fa !important; /* Azul claro */
-}
-
-.modal-subtitle {
-  color: #d1d5db !important; /* Gris claro */
-}
-
-.apt-number {
-  color: #86efac !important; /* Verde brillante */
-}
-
-.apt-address {
-  color: #f9fafb !important; /* Casi blanco */
-}
-
-.apartment-item {
-  background-color: #1f2937 !important; /* Gris oscuro */
-  border-color: #4b5563 !important;
-}
-
-/* ========================================
-   🤖 ARIA BADGE STYLES
-   ======================================== */
-.aria-badge {
+.json-error {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 8px 14px;
-  border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-  position: relative;
-  cursor: help;
-  transition: all 0.3s ease;
+  padding: 12px;
+  background: #fef2f2;
+  border: 2px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 14px;
+  margin-top: 12px;
 }
 
-.aria-badge:hover {
+.error-icon {
+  font-size: 18px;
+}
+
+/* Evaluate Button */
+.evaluate-button {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.evaluate-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 6px 12px rgba(59, 130, 246, 0.3);
 }
 
-.aria-icon {
-  font-size: 1.2em;
-  animation: pulse 2s infinite;
+.evaluate-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
+.button-icon {
+  font-size: 20px;
 }
 
-.aria-content {
+.button-spinner {
+  font-size: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Results Section */
+.results-section {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.back-button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 20px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-button:hover {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  z-index: 1000;
 }
 
-.aria-label {
-  font-size: 0.65em;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-.aria-value {
-  font-size: 0.9em;
-  font-weight: 600;
+.loading-text {
   color: white;
-}
-
-.aria-tooltip {
-  position: absolute;
-  bottom: 100%;
-  right: 0;
-  background: rgba(0, 0, 0, 0.95);
-  color: white;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 0.8em;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease;
-  margin-bottom: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.aria-badge:hover .aria-tooltip {
-  opacity: 1;
-}
-
-.aria-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 20px;
-  border: 6px solid transparent;
-  border-top-color: rgba(0, 0, 0, 0.95);
-}
-
-@media (max-width: 768px) {
-  .aria-badge {
-    padding: 6px 10px;
-  }
-  
-  .aria-value {
-    font-size: 0.75em;
-  }
-  
-  .aria-tooltip {
-    right: -10px;
-    white-space: normal;
-    max-width: 200px;
-  }
-}
-
-@media (max-width: 768px) {
-  .aria-badge {
-    padding: 6px 10px;
-  }
-  
-  .aria-value {
-    font-size: 0.75em;
-  }
-  
-  .aria-tooltip {
-    right: -10px;
-    white-space: normal;
-    max-width: 200px;
-  }
-}
-
-/* 📊 ARIA Breakdown Detail */
-.aria-breakdown {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-  border-left: 3px solid #667eea;
-  padding: 8px 12px;
-  margin: 8px 0 12px 0;
-  border-radius: 4px;
-}
-
-.aria-breakdown small {
-  color: var(--text-secondary);
-  font-size: 0.85em;
-  line-height: 1.4;
-}
-
-.aria-breakdown strong {
-  color: var(--text-primary);
+  font-size: 18px;
   font-weight: 600;
 }
 
-.aria-breakdown span {
-  color: #667eea;
-  font-weight: 500;
-}
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .details-grid,
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
 
-.route-config-card {
-  margin-top: 1.5rem; /* En lugar de espacio gigante */
-}
-.route-config-card {
-  background: var(--color-surface);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem; /* ← Cambiar esto */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.gem-link-container {
-  margin-top: 0; /* ← Asegurar que no tenga margin top extra */
+  .content-wrapper {
+    padding: 16px;
+  }
 }
 </style>
