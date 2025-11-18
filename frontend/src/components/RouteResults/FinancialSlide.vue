@@ -1,383 +1,126 @@
+<script setup>
+import { defineProps } from 'vue';
+
+const props = defineProps({
+  data: {
+    type: Object,
+    required: true,
+    default: () => ({}) // Evita errores si llega vacío
+  }
+});
+</script>
+
 <template>
-  <div class="financial-slide">
-    <h2 class="slide-title">💰 Breakdown Financiero</h2>
-
-    <!-- Net Earnings Hero -->
-    <div class="net-earnings-hero">
-      <div class="net-label">Ganancia Neta</div>
-      <div class="net-amount" :class="netEarningsClass">
-        ${{ netEarnings.toFixed(2) }}
-      </div>
-      <div class="net-subtitle">
-        Después de todos los gastos
-      </div>
+  <div class="slide-content">
+    <div class="slide-header">
+      <h3>💰 Financial Breakdown</h3>
+      <p class="subtitle">Based on ${{ data.pago }} block payment</p>
     </div>
 
-    <!-- Income vs Expenses -->
-    <div class="income-expenses">
-      <div class="section income-section">
-        <div class="section-header">
-          <span class="section-icon">📈</span>
-          <span class="section-title">Ingresos</span>
-        </div>
-        <div class="amount-row">
-          <span class="label">Pago del Bloque</span>
-          <span class="value positive">${{ routeData.pago?.toFixed(2) || '0.00' }}</span>
-        </div>
-        <div class="amount-row">
-          <span class="label">Pago por Hora</span>
-          <span class="value">${{ routeData.pago_por_hora?.toFixed(2) || '0.00' }}/hr</span>
-        </div>
+    <div class="metrics-grid">
+      <div class="metric-card highlight">
+        <span class="label">Real Hourly Rate</span>
+        <span class="value text-green">${{ data.pago_real_por_hora }}/h</span>
+        <span class="subtext">After expenses & taxes</span>
       </div>
 
-      <div class="section expenses-section">
-        <div class="section-header">
-          <span class="section-icon">📉</span>
-          <span class="section-title">Gastos</span>
-        </div>
-        <div class="amount-row">
-          <span class="label">Gasolina</span>
-          <span class="value negative">-${{ routeData.gasto_de_gasolina?.toFixed(2) || '0.00' }}</span>
-        </div>
-        <div class="amount-row">
-          <span class="label">Desgaste Vehículo</span>
-          <span class="value negative">-${{ routeData.desgaste_vehiculo?.toFixed(2) || '0.00' }}</span>
-        </div>
-        <div class="amount-row">
-          <span class="label">Tax (Estimado)</span>
-          <span class="value negative">-${{ routeData.tax?.toFixed(2) || '0.00' }}</span>
-        </div>
-        <div class="amount-row total-expenses">
-          <span class="label">Total Gastos</span>
-          <span class="value">-${{ totalExpenses.toFixed(2) }}</span>
-        </div>
+      <div class="metric-card">
+        <span class="label">⛽ Gas Cost</span>
+        <span class="value text-red">-${{ data.gasto_de_gasolina }}</span>
       </div>
-    </div>
 
-    <!-- Real Hourly Rate -->
-    <div class="real-hourly">
-      <div class="hourly-comparison">
-        <div class="hourly-item">
-          <div class="hourly-label">Pagado</div>
-          <div class="hourly-value paid">
-            ${{ routeData.pago_por_hora?.toFixed(2) || '0.00' }}
-          </div>
-        </div>
-        <div class="hourly-arrow">→</div>
-        <div class="hourly-item">
-          <div class="hourly-label">Real</div>
-          <div class="hourly-value real" :class="hourlyRateClass">
-            ${{ routeData.pago_real_por_hora?.toFixed(2) || '0.00' }}
-          </div>
-        </div>
+      <div class="metric-card">
+        <span class="label">🔧 Vehicle Wear</span>
+        <span class="value text-red">-${{ data.desgaste_vehiculo }}</span>
       </div>
-      <div class="hourly-subtitle">
-        Por cada hora invertida (incluyendo commutes)
-      </div>
-    </div>
 
-    <!-- Efficiency Bar -->
-    <div class="efficiency-bar">
-      <div class="bar-label">Eficiencia del Bloque</div>
-      <div class="bar-container">
-        <div class="bar-fill" :style="{ width: efficiencyPercentage + '%' }" :class="efficiencyClass"></div>
+      <div class="metric-card">
+        <span class="label">🏛️ Est. Tax (15.3%)</span>
+        <span class="value text-red">-${{ data.tax }}</span>
       </div>
-      <div class="bar-percentage">{{ efficiencyPercentage.toFixed(0) }}%</div>
+      
+      <div class="metric-card">
+        <span class="label">📄 Tax Deduction</span>
+        <span class="value text-blue">+{{ data.claim_por_milla }}</span>
+        <span class="subtext">Not cash, but write-off</span>
+      </div>
     </div>
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
-
-const props = defineProps({
-  routeData: {
-    type: Object,
-    required: true
-  }
-})
-
-// Calculations
-const totalExpenses = computed(() => {
-  return (props.routeData.gasto_de_gasolina || 0) +
-         (props.routeData.desgaste_vehiculo || 0) +
-         (props.routeData.tax || 0)
-})
-
-const netEarnings = computed(() => {
-  return (props.routeData.pago || 0) - totalExpenses.value
-})
-
-const netEarningsClass = computed(() => {
-  const net = netEarnings.value
-  const pago = props.routeData.pago || 1
-  const percentage = (net / pago) * 100
-  
-  if (percentage >= 70) return 'net-good'
-  if (percentage >= 50) return 'net-medium'
-  return 'net-bad'
-})
-
-const hourlyRateClass = computed(() => {
-  const realRate = props.routeData.pago_real_por_hora || 0
-  if (realRate >= 20) return 'rate-good'
-  if (realRate >= 15) return 'rate-medium'
-  return 'rate-bad'
-})
-
-const efficiencyPercentage = computed(() => {
-  const pago = props.routeData.pago || 1
-  const net = netEarnings.value
-  return Math.max(0, Math.min(100, (net / pago) * 100))
-})
-
-const efficiencyClass = computed(() => {
-  const eff = efficiencyPercentage.value
-  if (eff >= 70) return 'efficiency-good'
-  if (eff >= 50) return 'efficiency-medium'
-  return 'efficiency-bad'
-})
-</script>
-
 <style scoped>
-.financial-slide {
-  width: 100%;
+.slide-content {
+  padding: 20px;
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  overflow-y: auto;
+  background-color: var(--bg-surface); /* Asegúrate que contraste */
 }
 
-.slide-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
+.slide-header {
   text-align: center;
-  margin: 0 0 8px 0;
+  margin-bottom: 20px;
 }
 
-/* Net Earnings Hero */
-.net-earnings-hero {
-  text-align: center;
-  padding: 24px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  border-radius: 16px;
-  color: white;
+.slide-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.5rem;
 }
 
-.net-label {
-  font-size: 14px;
-  opacity: 0.9;
-  margin-bottom: 8px;
+.subtitle {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
-.net-amount {
-  font-size: 48px;
-  font-weight: 800;
-  line-height: 1;
-  margin: 8px 0;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  flex: 1;
 }
 
-.net-amount.net-bad {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.net-subtitle {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-/* Income & Expenses */
-.income-expenses {
+.metric-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 15px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-
-.section {
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 16px;
-  border: 2px solid #e2e8f0;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #e2e8f0;
-}
-
-.section-icon {
-  font-size: 20px;
-}
-
-.section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #475569;
-}
-
-.amount-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-}
-
-.amount-row .label {
-  font-size: 14px;
-  color: #64748b;
-}
-
-.amount-row .value {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.amount-row .value.positive {
-  color: #22c55e;
-}
-
-.amount-row .value.negative {
-  color: #ef4444;
-}
-
-.amount-row.total-expenses {
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 2px solid #cbd5e1;
-}
-
-.total-expenses .label {
-  font-weight: 600;
-  color: #1e293b;
-}
-
-/* Real Hourly Rate */
-.real-hourly {
-  background: white;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.hourly-comparison {
-  display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 20px;
-  margin-bottom: 8px;
+  border: 1px solid transparent;
 }
 
-.hourly-item {
-  text-align: center;
+.metric-card.highlight {
+  grid-column: span 2;
+  background: rgba(79, 172, 254, 0.1);
+  border-color: rgba(79, 172, 254, 0.3);
+  align-items: center;
 }
 
-.hourly-label {
-  font-size: 12px;
-  color: #64748b;
-  margin-bottom: 4px;
+.metric-card.highlight .value {
+  font-size: 2rem;
 }
 
-.hourly-value {
-  font-size: 28px;
-  font-weight: 700;
+.label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
 }
 
-.hourly-value.paid {
-  color: #94a3b8;
+.value {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: var(--text-primary);
 }
 
-.hourly-value.real.rate-good {
-  color: #22c55e;
-}
+.text-green { color: #4ade80; }
+.text-red { color: #f87171; }
+.text-blue { color: #60a5fa; }
 
-.hourly-value.real.rate-medium {
-  color: #f59e0b;
-}
-
-.hourly-value.real.rate-bad {
-  color: #ef4444;
-}
-
-.hourly-arrow {
-  font-size: 24px;
-  color: #cbd5e1;
-}
-
-.hourly-subtitle {
-  text-align: center;
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-/* Efficiency Bar */
-.efficiency-bar {
-  background: white;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.bar-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #475569;
-  margin-bottom: 12px;
-  text-align: center;
-}
-
-.bar-container {
-  width: 100%;
-  height: 24px;
-  background: #e2e8f0;
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-
-.bar-fill {
-  height: 100%;
-  transition: width 0.6s ease-out;
-  border-radius: 12px;
-}
-
-.bar-fill.efficiency-good {
-  background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
-}
-
-.bar-fill.efficiency-medium {
-  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
-}
-
-.bar-fill.efficiency-bad {
-  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
-}
-
-.bar-percentage {
-  text-align: center;
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-/* Mobile */
-@media (max-width: 640px) {
-  .net-amount {
-    font-size: 36px;
-  }
-
-  .hourly-value {
-    font-size: 24px;
-  }
+.subtext {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-top: 4px;
 }
 </style>

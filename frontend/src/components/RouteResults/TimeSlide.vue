@@ -1,374 +1,140 @@
+<script setup>
+import { defineProps } from 'vue';
+
+// No necesitamos emitir eventos aquí porque SlideContainer
+// ya maneja los botones con slots o envolviéndolos, 
+// pero como los pusimos dentro del slide en el código anterior,
+// los datos solo son para mostrar info.
+const props = defineProps({
+  data: {
+    type: Object,
+    required: true,
+    default: () => ({})
+  }
+});
+</script>
+
 <template>
-  <div class="time-slide">
-    <h2 class="slide-title">🚗 Tiempo & Millaje</h2>
-
-    <!-- Time Breakdown -->
-    <div class="time-section">
-      <div class="section-header">
-        <span class="icon">⏱️</span>
-        <span class="title">Desglose de Tiempo</span>
-      </div>
-      
-      <div class="time-bars">
-        <div class="time-bar">
-          <div class="bar-info">
-            <span class="bar-label">Commute 1 (Casa → Warehouse)</span>
-            <span class="bar-value">{{ formatHours(routeData.antes_del_bloque) }}</span>
-          </div>
-          <div class="bar-visual">
-            <div class="bar-fill commute" :style="{ width: commute1Percentage + '%' }"></div>
-          </div>
-        </div>
-
-        <div class="time-bar">
-          <div class="bar-info">
-            <span class="bar-label">Trabajo (Warehouse → Última Parada)</span>
-            <span class="bar-value">{{ formatHours(routeData.duracion_horas) }}</span>
-          </div>
-          <div class="bar-visual">
-            <div class="bar-fill work" :style="{ width: workPercentage + '%' }"></div>
-          </div>
-        </div>
-
-        <div class="time-bar">
-          <div class="bar-info">
-            <span class="bar-label">Commute 2 (Última Parada → Destino)</span>
-            <span class="bar-value">{{ formatHours(routeData.despues_del_bloque) }}</span>
-          </div>
-          <div class="bar-visual">
-            <div class="bar-fill commute" :style="{ width: commute2Percentage + '%' }"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="time-total">
-        <span class="total-label">Tiempo Total Invertido</span>
-        <span class="total-value">{{ formatHours(routeData.tiempo_total) }}</span>
-      </div>
+  <div class="slide-content">
+    <div class="slide-header">
+      <h3>⏱️ Time & Distance</h3>
+      <p class="subtitle">Total Time: {{ data.tiempo_total }}h</p>
     </div>
 
-    <!-- Mileage Breakdown -->
-    <div class="mileage-section">
-      <div class="section-header">
-        <span class="icon">📍</span>
-        <span class="title">Desglose de Millas</span>
-      </div>
-
-      <div class="mileage-grid">
-        <div class="mileage-card">
-          <div class="card-icon">🏠</div>
-          <div class="card-value">{{ routeData.commute_1?.toFixed(1) || '0.0' }}</div>
-          <div class="card-label">Commute 1</div>
-        </div>
-
-        <div class="mileage-card work-card">
-          <div class="card-icon">📦</div>
-          <div class="card-value">{{ routeData.millas_de_trabajo?.toFixed(1) || '0.0' }}</div>
-          <div class="card-label">Trabajo</div>
-        </div>
-
-        <div class="mileage-card">
-          <div class="card-icon">🎯</div>
-          <div class="card-value">{{ routeData.commute_2?.toFixed(1) || '0.0' }}</div>
-          <div class="card-label">Commute 2</div>
+    <div class="timeline-container">
+      <div class="timeline-item">
+        <div class="time-dot start"></div>
+        <div class="time-content">
+          <span class="time-label">Before Block (Prep + Commute 1)</span>
+          <span class="time-val">{{ data.antes_del_bloque }}h ({{ data.commute_1 }} mi)</span>
         </div>
       </div>
 
-      <div class="mileage-total">
-        <div class="total-row">
-          <span class="total-label">Millas Totales</span>
-          <span class="total-value">{{ routeData.millas_totales?.toFixed(1) || '0.0' }} mi</span>
+      <div class="timeline-item">
+        <div class="time-dot block"></div>
+        <div class="time-content">
+          <span class="time-label">Block Duration</span>
+          <span class="time-val">{{ data.duracion_horas }}h ({{ data.millas_de_trabajo }} work mi)</span>
         </div>
-        <div class="total-row">
-          <span class="total-label">Eficiencia</span>
-          <span class="total-value efficiency">{{ routeData.millas_por_hora?.toFixed(1) || '0.0' }} mi/hr</span>
+      </div>
+
+      <div class="timeline-item">
+        <div class="time-dot end"></div>
+        <div class="time-content">
+          <span class="time-label">After Block (Commute 2)</span>
+          <span class="time-val">{{ data.despues_del_bloque }}h ({{ data.commute_2 }} mi)</span>
         </div>
       </div>
     </div>
 
-    <!-- Route Details -->
-    <div class="route-details">
-      <div class="detail-item">
-        <span class="detail-icon">🏢</span>
-        <span class="detail-text">{{ routeData.warehouse }}</span>
+    <div class="summary-box">
+      <div class="sum-row">
+        <span>Total Miles:</span>
+        <strong>{{ data.millas_totales }} mi</strong>
       </div>
-      <div class="detail-item">
-        <span class="detail-icon">🏙️</span>
-        <span class="detail-text">{{ routeData.primary_city || 'N/A' }}</span>
-      </div>
-      <div class="detail-item">
-        <span class="detail-icon">📍</span>
-        <span class="detail-text">{{ routeData.numero_paradas || 0 }} paradas</span>
+      <div class="sum-row">
+        <span>Est. Arrival:</span>
+        <strong>{{ data.eta_normal }}</strong>
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
-
-const props = defineProps({
-  routeData: {
-    type: Object,
-    required: true
-  }
-})
-
-// Time percentages for visual bars
-const totalTime = computed(() => props.routeData.tiempo_total || 1)
-
-const commute1Percentage = computed(() => {
-  return ((props.routeData.antes_del_bloque || 0) / totalTime.value) * 100
-})
-
-const workPercentage = computed(() => {
-  return ((props.routeData.duracion_horas || 0) / totalTime.value) * 100
-})
-
-const commute2Percentage = computed(() => {
-  return ((props.routeData.despues_del_bloque || 0) / totalTime.value) * 100
-})
-
-// Helpers
-const formatHours = (hours) => {
-  if (!hours) return '0h 0m'
-  const h = Math.floor(hours)
-  const m = Math.round((hours - h) * 60)
-  return `${h}h ${m}m`
-}
-</script>
-
 <style scoped>
-.time-slide {
-  width: 100%;
-  height: 100%;
+.slide-content {
+  padding: 20px 20px 0 20px; /* Padding bottom es 0 porque los botones van abajo */
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  overflow-y: auto;
 }
 
-.slide-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
+.slide-header {
   text-align: center;
-  margin: 0 0 8px 0;
+  margin-bottom: 20px;
 }
 
-/* Section Headers */
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #e2e8f0;
-}
+.slide-header h3 { margin: 0; font-size: 1.5rem; color: var(--text-primary); }
+.subtitle { margin: 5px 0 0; color: var(--text-secondary); }
 
-.section-header .icon {
-  font-size: 20px;
-}
-
-.section-header .title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #475569;
-}
-
-/* Time Section */
-.time-section {
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 16px;
-  border: 2px solid #e2e8f0;
-}
-
-.time-bars {
+.timeline-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 0;
+  position: relative;
+  margin-left: 10px;
+  padding-left: 20px;
+  border-left: 2px dashed var(--text-secondary);
+  margin-bottom: 20px;
 }
 
-.time-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.timeline-item {
+  position: relative;
+  padding-bottom: 20px;
 }
 
-.bar-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.bar-label {
-  font-size: 13px;
-  color: #64748b;
-}
-
-.bar-value {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.bar-visual {
-  width: 100%;
+.time-dot {
+  position: absolute;
+  left: -27px;
+  top: 0;
+  width: 12px;
   height: 12px;
-  background: #e2e8f0;
-  border-radius: 6px;
-  overflow: hidden;
+  border-radius: 50%;
+  border: 2px solid var(--bg-surface);
 }
 
-.bar-fill {
-  height: 100%;
-  border-radius: 6px;
-  transition: width 0.6s ease-out;
-}
+.time-dot.start { background-color: #fbbf24; }
+.time-dot.block { background-color: #60a5fa; }
+.time-dot.end { background-color: #34d399; }
 
-.bar-fill.commute {
-  background: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
-}
-
-.bar-fill.work {
-  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
-}
-
-.time-total {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: white;
-  border-radius: 8px;
-  border: 2px solid #cbd5e1;
-  margin-top: 8px;
-}
-
-.time-total .total-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #475569;
-}
-
-.time-total .total-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-/* Mileage Section */
-.mileage-section {
-  background: white;
-  border-radius: 12px;
-  padding: 16px;
-  border: 2px solid #e2e8f0;
-}
-
-.mileage-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.mileage-card {
-  background: #f8fafc;
-  border-radius: 10px;
-  padding: 12px;
-  text-align: center;
-  border: 2px solid #e2e8f0;
-}
-
-.mileage-card.work-card {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-}
-
-.card-icon {
-  font-size: 24px;
-  margin-bottom: 6px;
-}
-
-.card-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 2px;
-}
-
-.card-label {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.mileage-total {
+.time-content {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 2px solid #e2e8f0;
 }
 
-.total-row {
+.time-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.time-val {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: var(--text-primary);
+}
+
+.summary-box {
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 10px;
+}
+
+.sum-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
+  margin-bottom: 5px;
+  font-size: 1rem;
 }
 
-.total-row .total-label {
-  font-size: 14px;
-  color: #64748b;
-}
-
-.total-row .total-value {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.total-row .total-value.efficiency {
-  color: #3b82f6;
-}
-
-/* Route Details */
-.route-details {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.detail-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #f1f5f9;
-  padding: 8px 14px;
-  border-radius: 20px;
-  border: 1px solid #e2e8f0;
-}
-
-.detail-icon {
-  font-size: 16px;
-}
-
-.detail-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: #475569;
-}
-
-/* Mobile */
-@media (max-width: 640px) {
-  .mileage-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .bar-label {
-    font-size: 12px;
-  }
-}
+.sum-row:last-child { margin-bottom: 0; }
 </style>
