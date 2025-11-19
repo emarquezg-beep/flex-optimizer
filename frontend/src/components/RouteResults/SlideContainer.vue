@@ -4,8 +4,9 @@ import { Swiper, SwiperSlide } from 'swiper/vue';
 import 'swiper/css';
 import 'swiper/css/pagination';
 import { Pagination } from 'swiper/modules';
+import { useRouter } from 'vue-router'; // 👈 Importante para redirigir
 
-// Componentes de Slides
+// Componentes
 import SummarySlide from './SummarySlide.vue';
 import FinancialSlide from './FinancialSlide.vue';
 import TimeSlide from './TimeSlide.vue';
@@ -15,14 +16,12 @@ const props = defineProps({
   inversePayload: { type: Object, required: true }
 });
 
-const emit = defineEmits(['save-route', 'reset']);
+const emit = defineEmits(['save-route']); // Quitamos 'reset' porque ahora navegamos
 
-// Estado local de la selección (Por defecto Normal)
+const router = useRouter(); // Hook del router
 const currentSelection = ref('normal');
 const swiperModules = [Pagination];
 
-// 🧠 COMPUTED MAGICA:
-// Determina qué data mostrar en Slide 2 y 3 basándose en la selección del Slide 1
 const selectedData = computed(() => {
   return currentSelection.value === 'normal' 
     ? props.normalPayload 
@@ -30,8 +29,14 @@ const selectedData = computed(() => {
 });
 
 const handleSave = () => {
-  // Emitimos la data seleccionada para guardar
   emit('save-route', selectedData.value);
+};
+
+const goHome = () => {
+  // 🏠 Redirige al inicio para forzar flujo de agenda
+  router.push('/'); 
+  // Si tu ruta home tiene otro nombre o path, ajústalo aquí. 
+  // Ej: router.push({ name: 'Home' });
 };
 </script>
 
@@ -65,8 +70,8 @@ const handleSave = () => {
             <button class="btn-save" @click="handleSave">
               💾 Log {{ currentSelection === 'normal' ? 'Normal' : 'Inverse' }} Route
             </button>
-            <button class="btn-reset" @click="$emit('reset')">
-              🔄 New Analysis
+            <button class="btn-home" @click="goHome">
+              🏠 Back to Home
             </button>
           </div>
         </div>
@@ -78,13 +83,13 @@ const handleSave = () => {
 <style scoped>
 .swiper-wrapper-custom {
   height: auto;
-  min-height: 650px; /* ✅ Un poco más alto para dar aire */
+  min-height: 680px; /* Altura segura */
   width: 100%;
   background: var(--bg-surface);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  padding-bottom: 40px; /* ✅ Espacio para los dots del swiper */
+  padding-bottom: 40px; 
   position: relative;
 }
 
@@ -98,21 +103,22 @@ const handleSave = () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  justify-content: space-between; /* Empuja el footer abajo */
+  justify-content: space-between;
 }
 
+/* FOOTER CON Z-INDEX ALTO PARA QUE FUNCIONEN LOS CLICKS */
 .action-footer {
   margin-top: auto;
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  background: transparent; /* ✅ ADIÓS FONDO GRIS */
+  gap: 12px;
+  background: transparent;
   
-  /* ✅ ARREGLO DE CLICK: */
-  position: relative; 
-  z-index: 50; /* Pone los botones ENCIMA de la paginación */
-  margin-bottom: 20px; /* Sube los botones para alejarlos de los dots */
+  /* 👇 ESTO ES CRÍTICO PARA QUE LOS BOTONES FUNCIONEN */
+  position: relative;
+  z-index: 50; 
+  margin-bottom: 25px; /* Levanta los botones sobre los dots de paginación */
 }
 
 .btn-save {
@@ -124,27 +130,29 @@ const handleSave = () => {
   font-weight: 700;
   font-size: 1.1rem;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4); /* Sombra bonita */
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4);
   transition: transform 0.2s;
 }
+.btn-save:active { transform: scale(0.98); }
 
-.btn-save:active {
-  transform: scale(0.98);
-}
-
-.btn-reset {
-  padding: 12px;
+.btn-home {
+  padding: 14px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-primary);
   color: var(--text-secondary);
   border-radius: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-.btn-reset:hover {
+.btn-home:hover {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
+  border-color: var(--text-primary);
 }
 </style>
