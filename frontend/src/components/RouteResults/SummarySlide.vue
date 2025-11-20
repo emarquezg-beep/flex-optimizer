@@ -9,32 +9,19 @@ const props = defineProps({
 
 const emit = defineEmits(['update:selectedScenario']);
 
-// 🧠 Helper Inteligente para Paradas (AHORA CON DOWNTOWN)
 const getStopSummary = (data) => {
-  // Obtenemos los datos individuales
   const apts = data.apartment_count || 0;
   const downtown = data.downtown_count || 0;
-  // Total de apartamentos (asumiendo que downtown count es un subconjunto o aditivo, 
-  // ajusta según tu lógica de backend. Aquí asumo que apartment_count son regulares y downtown son extra)
-  // Si tu backend manda 'apartment_count' como el total, ajusta la suma.
-  // Basado en tu logica anterior: apartment_count = regulares, downtown_count = downtown.
   const totalApts = apts + downtown;
   const stops = data.numero_paradas || 0;
-
   let summary = `${stops} stops`;
-
   if (totalApts > 0) {
     summary += ` • ${totalApts} Apts`;
-    
-    // 🏙️ Si hay downtown, lo mostramos entre paréntesis
-    if (downtown > 0) {
-      summary += ` (${downtown} DT)`;
-    }
+    if (downtown > 0) summary += ` (${downtown} DT)`;
   }
   return summary;
 };
 
-// 🧠 Helper para Factor ARIA
 const getAriaFactor = (data) => {
   const mult = data.aria_multiplier || 0.9;
   return `x${Number(mult).toFixed(2)}`;
@@ -44,93 +31,73 @@ const getAriaFactor = (data) => {
 <template>
   <div class="slide-content split-layout">
     <div 
-      class="split-side normal-side" 
-      :class="{ 'is-active': selectedScenario === 'normal' }"
-      @click="emit('update:selectedScenario', 'normal')"
+      v-for="scenario in ['normal', 'inverse']" 
+      :key="scenario"
+      class="split-side" 
+      :class="[scenario + '-side', { 'is-active': selectedScenario === scenario }]"
+      @click="emit('update:selectedScenario', scenario)"
     >
-      <div class="aria-badge" title="ARIA Intelligence Active">
-        <span class="aria-icon">🤖</span>
-        <span class="aria-val">{{ getAriaFactor(normalData) }}</span>
-      </div>
-
-      <div class="selection-indicator">
-        <div class="radio-circle">
-          <div v-if="selectedScenario === 'normal'" class="radio-dot"></div>
+      <template v-if="true"> 
+        <div class="aria-badge">
+          <span class="aria-icon">🤖</span>
+          <span class="aria-val">{{ getAriaFactor(scenario === 'normal' ? normalData : inverseData) }}</span>
         </div>
-        <span class="scenario-label">NORMAL</span>
-      </div>
 
-      <div class="hero-score">
-        <span class="score-val">{{ normalData.route_score }}</span>
-        <span class="score-max">/100</span>
+        <div class="selection-indicator">
+          <div class="radio-circle">
+            <div v-if="selectedScenario === scenario" class="radio-dot"></div>
+          </div>
+          <span class="scenario-label">{{ scenario === 'normal' ? 'NORMAL' : 'INVERSA' }}</span>
+        </div>
+
+        <div class="hero-score">
+          <span class="score-val">{{ (scenario === 'normal' ? normalData : inverseData).route_score }}</span>
+          <span class="score-max">/100</span>
+          
+          <div class="stop-summary-pill" :class="{ 'has-apts': ((scenario === 'normal' ? normalData : inverseData).apartment_count + (scenario === 'normal' ? normalData : inverseData).downtown_count) > 0 }">
+            {{ getStopSummary(scenario === 'normal' ? normalData : inverseData) }}
+          </div>
+
+          <div class="calc-text">
+            {{ (scenario === 'normal' ? normalData : inverseData).calculation_text }}
+          </div>
+        </div>
         
-        <div class="stop-summary-pill" :class="{ 'has-apts': (normalData.apartment_count + normalData.downtown_count) > 0 }">
-          {{ getStopSummary(normalData) }}
-        </div>
-      </div>
-      
-      <div class="hero-metrics">
-        <div class="metric">
-          <span class="icon">⏱️</span>
-          <span class="val">{{ normalData.eta_normal }}</span>
-        </div>
-        <div class="metric">
-          <span class="icon">📏</span>
-          <span class="val">{{ normalData.millas_totales }} mi</span>
-        </div>
-        <div class="metric">
-          <span class="icon">💰</span>
-          <span class="val">${{ normalData.pago_real_por_hora }}/h</span>
-        </div>
-      </div>
-    </div>
+        <div class="hero-metrics">
+          
+          <div class="eta-group">
+            <div class="eta-row opt">
+              <span>🟢 Opt:</span>
+              <strong>{{ (scenario === 'normal' ? normalData : inverseData).eta_optimista }}</strong>
+            </div>
+            <div class="eta-row norm">
+              <span>🟡 Nor:</span>
+              <strong>{{ (scenario === 'normal' ? normalData : inverseData).eta_normal }}</strong>
+            </div>
+            <div class="eta-row pes">
+              <span>🔴 Pes:</span>
+              <strong>{{ (scenario === 'normal' ? normalData : inverseData).eta_pesimista }}</strong>
+            </div>
+          </div>
 
-    <div 
-      class="split-side inverse-side" 
-      :class="{ 'is-active': selectedScenario === 'inverse' }"
-      @click="emit('update:selectedScenario', 'inverse')"
-    >
-      <div class="aria-badge" title="ARIA Intelligence Active">
-        <span class="aria-icon">🤖</span>
-        <span class="aria-val">{{ getAriaFactor(inverseData) }}</span>
-      </div>
+          <div class="metric-row">
+            <div class="metric">
+              <span class="icon">📏</span>
+              <span class="val">{{ (scenario === 'normal' ? normalData : inverseData).millas_totales }} mi</span>
+            </div>
+            <div class="metric">
+              <span class="icon">💰</span>
+              <span class="val">${{ (scenario === 'normal' ? normalData : inverseData).pago_real_por_hora }}/h</span>
+            </div>
+          </div>
 
-      <div class="selection-indicator">
-        <div class="radio-circle">
-          <div v-if="selectedScenario === 'inverse'" class="radio-dot"></div>
         </div>
-        <span class="scenario-label">INVERSA</span>
-      </div>
-
-      <div class="hero-score">
-        <span class="score-val">{{ inverseData.route_score }}</span>
-        <span class="score-max">/100</span>
-        
-        <div class="stop-summary-pill" :class="{ 'has-apts': (inverseData.apartment_count + inverseData.downtown_count) > 0 }">
-          {{ getStopSummary(inverseData) }}
-        </div>
-      </div>
-
-      <div class="hero-metrics">
-        <div class="metric">
-          <span class="icon">⏱️</span>
-          <span class="val">{{ inverseData.eta_normal }}</span>
-        </div>
-        <div class="metric">
-          <span class="icon">📏</span>
-          <span class="val">{{ inverseData.millas_totales }} mi</span>
-        </div>
-        <div class="metric">
-          <span class="icon">💰</span>
-          <span class="val">${{ inverseData.pago_real_por_hora }}/h</span>
-        </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* ... (Mantén los estilos de layout anteriores: .slide-content, .split-side, etc.) ... */
 .slide-content {
   height: 100%;
   width: 100%;
@@ -144,7 +111,7 @@ const getAriaFactor = (data) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start; /* Alineación superior para que quepa todo */
   padding: 15px 5px;
   transition: all 0.3s ease;
   border-bottom: 4px solid transparent;
@@ -163,138 +130,81 @@ const getAriaFactor = (data) => {
 .normal-side.is-active { border-bottom-color: #4facfe; }
 .inverse-side.is-active { border-bottom-color: #ff9a9e; }
 
-/* --- ARIA BADGE CORREGIDO (CONTRASTE) --- */
+/* ARIA Badge */
 .aria-badge {
   position: absolute;
-  top: 10px;
-  right: 8px;
+  top: 8px;
+  right: 5px;
   display: flex;
   align-items: center;
   gap: 3px;
-  background: rgba(0,0,0,0.3); /* Fondo oscuro por defecto */
-  padding: 4px 8px;
-  border-radius: 12px;
+  background: rgba(0,0,0,0.3);
+  padding: 3px 6px;
+  border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.1);
-  transition: all 0.3s;
 }
+.is-active .aria-badge { background: var(--brand-primary); border-color: var(--brand-primary); }
+.aria-icon { font-size: 0.9rem; }
+.aria-val { font-size: 0.65rem; font-weight: bold; color: white; }
 
-.aria-icon { font-size: 1.1rem; }
-.aria-val { 
-  font-size: 0.75rem; 
-  font-weight: bold; 
-  color: rgba(255,255,255,0.7); 
-}
-
-/* Cuando está activo: FONDO AZUL SÓLIDO, LETRA BLANCA */
-.is-active .aria-badge {
-  background: var(--brand-primary); /* Azul fuerte */
-  border-color: var(--brand-primary);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
-}
-.is-active .aria-val { 
-  color: white; /* Blanco puro */
-  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
-
-
-/* --- RADIO STYLES --- */
+/* Radio */
 .selection-indicator {
-  margin-bottom: 10px;
+  margin-bottom: 5px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
+.scenario-label { font-size: 0.65rem; font-weight: bold; color: var(--text-secondary); }
+.radio-circle { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--text-secondary); display: flex; align-items: center; justify-content: center; }
+.is-active .radio-circle { border-color: var(--brand-primary); }
+.radio-dot { width: 6px; height: 6px; background-color: var(--brand-primary); border-radius: 50%; }
 
-.scenario-label {
-  font-size: 0.7rem;
-  font-weight: bold;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  letter-spacing: 1px;
-}
-
-.radio-circle {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.is-active .radio-circle {
-  border-color: var(--brand-primary);
-  background-color: rgba(255,255,255,0.1);
-}
-
-.radio-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--brand-primary);
-}
-
-
-/* --- SCORE & PILL CORREGIDOS (CONTRASTE) --- */
-.hero-score {
-  margin-bottom: 15px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.score-val {
-  font-size: 2.8rem;
-  font-weight: 800;
-  line-height: 1;
-  color: var(--text-primary);
-}
-.score-max {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  margin-top: -5px;
-}
+/* Score */
+.hero-score { margin-bottom: 10px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.score-val { font-size: 2.2rem; font-weight: 800; line-height: 1; color: var(--text-primary); }
+.score-max { font-size: 0.7rem; color: var(--text-secondary); }
 
 .stop-summary-pill {
-  font-size: 0.75rem;
+  font-size: 0.65rem; color: var(--text-secondary); background: rgba(0,0,0,0.15);
+  padding: 2px 8px; border-radius: 20px; margin-top: 4px; font-weight: 600;
+}
+.stop-summary-pill.has-apts { background: rgba(217, 119, 6, 0.2); color: #fbbf24; }
+
+/* TEXTO CÁLCULO */
+.calc-text {
+  font-size: 0.55rem; /* Muy pequeño */
   color: var(--text-secondary);
-  background: rgba(0,0,0,0.15);
-  padding: 4px 10px;
-  border-radius: 20px;
-  margin-top: 8px;
-  font-weight: 600;
-  border: 1px solid transparent;
+  opacity: 0.7;
+  margin-top: 5px;
+  max-width: 90%;
+  line-height: 1.1;
+  text-align: center;
 }
 
-/* Pill Activo: Fondo más oscuro, letra más brillante */
-.stop-summary-pill.has-apts {
-  background: rgba(217, 119, 6, 0.2); /* Fondo naranja oscuro pero transparente */
-  color: #fbbf24; /* Amarillo brillante */
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  text-shadow: 0 1px 1px rgba(0,0,0,0.5); /* Sombra de texto para leer mejor */
-}
+/* METRICS */
+.hero-metrics { width: 100%; padding: 0 5px; display: flex; flex-direction: column; gap: 8px; }
 
-
-/* --- METRICS --- */
-.hero-metrics {
+/* 3 ETAS GROUP */
+.eta-group {
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  padding: 0 8px;
+  gap: 2px;
 }
+.eta-row { display: flex; justify-content: space-between; font-size: 0.7rem; }
+.eta-row strong { font-size: 0.8rem; }
+.opt { color: #4ade80; }
+.norm { color: #fbbf24; }
+.pes { color: #f87171; }
 
+.metric-row { display: flex; justify-content: space-between; gap: 5px; }
 .metric {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  background: rgba(0,0,0,0.1);
-  padding: 6px 8px;
-  border-radius: 6px;
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  background: rgba(0,0,0,0.1); padding: 4px; border-radius: 6px;
 }
-.metric .icon { font-size: 1rem; }
-.metric .val { font-weight: bold; margin-left: auto; color: var(--text-primary); }
+.metric .icon { font-size: 0.9rem; }
+.metric .val { font-size: 0.75rem; font-weight: bold; color: var(--text-primary); }
 </style>

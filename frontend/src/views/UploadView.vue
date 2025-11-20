@@ -89,6 +89,8 @@ const blockData = ref({
 
 const jsonInput = ref('');
 
+const showQuickSettingsModal = ref(false); // 👈 Nuevo
+
 watch(selectedWarehouseCode, (newCode) => {
   const warehouse = warehouses.value.find(w => w.code === newCode);
   if (warehouse) {
@@ -931,6 +933,9 @@ function calculateLogData(scenarioKey) {
     downtown_count: reportData.value.downtownCount || 0,
     aria_multiplier: ariaData.value?.multiplier || 0.9,
     segments: chosenReport.segments || [],
+    // 👇 AGREGA ESTO AL FINAL: El texto formateado del cálculo
+    calculation_text: `${stops} stops × ${mult} + ${apts} apts × 0.75 + ${dts} DT × 3 = ${totalAdded.toFixed(1)} min added`,
+    // 👆
   };
 }
 
@@ -1252,6 +1257,48 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               </div>
             </transition>
 
+            <transition name="modal-fade">
+              <div v-if="showQuickSettingsModal" class="modal-overlay" @click.self="showQuickSettingsModal = false">
+                <div class="modal-container quick-settings-modal">
+                  <div class="modal-header">
+                    <h3>⚙️ Quick Adjustments</h3>
+                    <button @click="showQuickSettingsModal = false" class="close-btn">✕</button>
+                  </div>
+                  
+                  <div class="modal-body">
+                    
+                    <div class="form-group">
+                      <label class="label-with-button">
+                        <span>🏢 Warehouse Delay (min)</span>
+                        <button @click.prevent="calculateActualDelay" class="button-tertiary">Now</button>
+                      </label>
+                      <input type="number" v-model.number="blockData.retraso_almacen" step="5" class="input-lg">
+                      <p class="hint">How long you waited at the station.</p>
+                    </div>
+
+                    <hr class="divider">
+
+                    <div class="form-group">
+                      <label>🚗 Time Before Block (min)</label>
+                      <input type="number" v-model.number="blockData.antes_del_bloque" step="5" class="input-lg">
+                    </div>
+
+                    <div class="form-group">
+                      <label>🏠 Commute to Station (miles)</label>
+                      <input type="number" v-model.number="blockData.commute_1_manual" step="0.1" class="input-lg">
+                    </div>
+
+                  </div>
+                  
+                  <div class="modal-footer">
+                    <button @click="showQuickSettingsModal = false" class="button-primary w-full">
+                      ✅ Apply & Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </transition>
+
             <button 
               @click="evaluateRoute" 
               class="button-primary button-evaluate"
@@ -1288,9 +1335,9 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
       </transition>
       <div v-if="!showInputForm && reportData" class="edit-bar">
         <div class="edit-bar-left">
-          <button @click="showInputForm = true" class="btn-edit-inputs">
-            ✏️ Edit Parameters
-          </button>
+      <button @click="showQuickSettingsModal = true" class="btn-edit-inputs">
+        ✏️ Edit Parameters
+      </button>
         </div>
         <div class="mini-summary">
           <span>📦 {{ extractedAddresses.length }} stops</span>
@@ -2849,4 +2896,32 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   font-size: 0.9rem;
   font-weight: 500;
 }
+/* Quick Settings Modal Specifics */
+.quick-settings-modal {
+  max-width: 400px;
+}
+
+.close-btn {
+  background: none; border: none; color: var(--text-secondary);
+  font-size: 1.2rem; cursor: pointer;
+}
+
+.input-lg {
+  font-size: 1.2rem;
+  padding: 12px;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.divider {
+  border: 0; border-top: 1px solid var(--border-primary);
+  margin: 15px 0;
+}
+
+.hint { font-size: 0.8rem; color: var(--text-secondary); margin-top: 5px; }
+.w-full { width: 100%; }
 </style>
