@@ -138,36 +138,164 @@ const getAriaFactor = (data) => {
 </template>
 
 <style scoped>
-.slide-content { height: 100%; width: 100%; display: flex; flex-direction: row; padding: 0; }
-.split-side { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 15px 5px; transition: all 0.3s ease; border-bottom: 4px solid transparent; cursor: pointer; background-color: var(--bg-secondary); opacity: 0.6; position: relative; }
-.split-side.is-active { background-color: var(--bg-primary); opacity: 1; box-shadow: inset 0 0 20px rgba(0,0,0,0.2); }
+.slide-content {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  padding: 0;
+}
+
+.split-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Justify space-between ayuda a distribuir mejor si sobra espacio */
+  justify-content: space-between; 
+  padding: 15px 8px;
+  transition: all 0.3s ease;
+  border-bottom: 4px solid transparent;
+  cursor: pointer;
+  background-color: var(--bg-secondary);
+  opacity: 0.6;
+  position: relative;
+}
+
+.split-side.is-active {
+  background-color: var(--bg-primary);
+  opacity: 1;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+}
+
 .normal-side.is-active { border-bottom-color: #4facfe; }
 .inverse-side.is-active { border-bottom-color: #ff9a9e; }
-.aria-badge { position: absolute; top: 8px; right: 5px; display: flex; align-items: center; gap: 3px; background: rgba(0,0,0,0.3); padding: 3px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
-.is-active .aria-badge { background: var(--brand-primary); border-color: var(--brand-primary); }
-.aria-icon { font-size: 0.9rem; }
-.aria-val { font-size: 0.65rem; font-weight: bold; color: rgba(255,255,255,0.7); }
-.is-active .aria-val { color: white; }
-.selection-indicator { margin-bottom: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.scenario-label { font-size: 0.65rem; font-weight: bold; color: var(--text-secondary); }
-.radio-circle { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--text-secondary); display: flex; align-items: center; justify-content: center; }
+
+/* --- ARIA BADGE --- */
+.aria-badge {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0,0,0,0.4);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.is-active .aria-badge { background: var(--brand-primary); }
+.aria-icon { font-size: 0.8rem; }
+.aria-val { font-size: 0.7rem; font-weight: bold; color: white; }
+
+/* --- SELECTION HEADER --- */
+.selection-indicator {
+  margin-top: 15px; /* Un poco de aire arriba */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.scenario-label { font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; color: var(--text-secondary); }
+.radio-circle { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--text-secondary); display: flex; align-items: center; justify-content: center; }
 .is-active .radio-circle { border-color: var(--brand-primary); }
-.radio-dot { width: 6px; height: 6px; background-color: var(--brand-primary); border-radius: 50%; }
-.hero-score { margin-bottom: 10px; text-align: center; display: flex; flex-direction: column; align-items: center; }
-.score-val { font-size: 2.2rem; font-weight: 800; line-height: 1; color: var(--text-primary); }
-.score-max { font-size: 0.7rem; color: var(--text-secondary); }
-.stop-summary-pill { font-size: 0.65rem; color: var(--text-secondary); background: rgba(0,0,0,0.15); padding: 2px 8px; border-radius: 20px; margin-top: 4px; font-weight: 600; }
-.stop-summary-pill.has-apts { background: rgba(217, 119, 6, 0.2); color: #fbbf24; }
-.calc-text { font-size: 0.55rem; color: var(--text-secondary); opacity: 0.7; margin-top: 5px; max-width: 90%; line-height: 1.1; text-align: center; }
-.hero-metrics { width: 100%; padding: 0 5px; display: flex; flex-direction: column; gap: 8px; }
-.eta-group { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
-.eta-row { display: flex; justify-content: space-between; font-size: 0.7rem; }
-.eta-row strong { font-size: 0.8rem; }
-.opt { color: #4ade80; }
-.norm { color: #fbbf24; }
-.pes { color: #f87171; }
-.metric-row { display: flex; justify-content: space-between; gap: 5px; }
-.metric { flex: 1; display: flex; flex-direction: column; align-items: center; background: rgba(0,0,0,0.1); padding: 4px; border-radius: 6px; }
-.metric .icon { font-size: 0.9rem; }
-.metric .val { font-size: 0.75rem; font-weight: bold; color: var(--text-primary); }
+.radio-dot { width: 8px; height: 8px; background-color: var(--brand-primary); border-radius: 50%; }
+
+/* --- SCORE AREA --- */
+.hero-score {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.score-val { font-size: 3rem; font-weight: 900; line-height: 1; color: var(--text-primary); }
+.score-max { font-size: 0.8rem; color: var(--text-secondary); margin-top: -5px; margin-bottom: 5px; }
+
+.stop-summary-pill {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  background: rgba(0,0,0,0.05);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+.stop-summary-pill.has-apts {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706; /* Naranja más oscuro para leer mejor */
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* --- NUEVO ESTILO PARA EL CÁLCULO --- */
+.calc-text {
+  margin-top: 8px;
+  font-size: 0.6rem;
+  font-family: 'Courier New', monospace; /* Fuente tipo código */
+  color: var(--text-secondary);
+  background: rgba(0,0,0,0.05); /* Fondo sutil */
+  padding: 4px 8px;
+  border-radius: 4px;
+  width: 90%;
+  text-align: center;
+  line-height: 1.2;
+  border: 1px dashed rgba(0,0,0,0.1);
+}
+
+/* --- METRICS AREA --- */
+.hero-metrics {
+  width: 100%;
+  padding: 0 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* --- ETAS LIMPIOS (Sin fondo gris) --- */
+.eta-group {
+  /* Quitamos el background gris */
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.eta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  border-bottom: 1px dashed rgba(0,0,0,0.1); /* Línea separadora sutil */
+}
+.eta-row:last-child { border-bottom: none; }
+
+.eta-row span { font-weight: 500; opacity: 0.9; }
+.eta-row strong { font-size: 0.85rem; font-weight: 700; }
+
+/* Colores de texto más legibles */
+.opt span { color: #16a34a; } /* Verde oscuro */
+.norm span { color: #d97706; } /* Naranja oscuro */
+.pes span { color: #dc2626; } /* Rojo oscuro */
+/* Los tiempos en negro/blanco según el tema */
+.opt strong, .norm strong, .pes strong { color: var(--text-primary); } 
+
+/* Métricas Finales (Distancia/Dinero) */
+.metric-row {
+  display: flex;
+  gap: 8px;
+}
+.metric {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0,0,0,0.05); /* Fondo muy sutil */
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+.metric .icon { font-size: 1rem; margin-bottom: 2px; }
+.metric .val { font-size: 0.85rem; font-weight: 800; color: var(--text-primary); }
 </style>

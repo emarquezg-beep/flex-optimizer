@@ -2900,31 +2900,65 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
   font-weight: 500;
 }
 /* Quick Settings Modal Specifics */
+/* === MODAL ESTILIZADO (DARK MODE) === */
 .quick-settings-modal {
   max-width: 400px;
+  width: 90%;
+  background-color: #1e293b; /* Fondo Gris Oscuro Azulado */
+  color: #f1f5f9; /* Texto Blanco Hueso */
+  border: 1px solid #334155;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header h3 {
+  color: #60a5fa; /* Título Azul Claro */
+  border-bottom: none;
 }
 
 .close-btn {
-  background: none; border: none; color: var(--text-secondary);
-  font-size: 1.2rem; cursor: pointer;
+  background: none; 
+  border: none; 
+  color: #94a3b8;
+  font-size: 1.5rem; 
+  cursor: pointer;
 }
+.close-btn:hover { color: white; }
 
+/* Inputs Oscuros para que no encandilen */
 .input-lg {
   font-size: 1.2rem;
   padding: 12px;
   text-align: center;
   border-radius: 8px;
-  border: 1px solid var(--border-primary);
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  border: 1px solid #475569;
+  background: #0f172a; /* Fondo casi negro */
+  color: #ffffff; /* Texto blanco */
   width: 100%;
+  transition: border-color 0.2s;
+}
+
+.input-lg:focus {
+  outline: none;
+  border-color: #3b82f6; /* Borde azul al escribir */
 }
 
 .divider {
-  border: 0; border-top: 1px solid var(--border-primary);
-  margin: 15px 0;
+  border: 0; 
+  border-top: 1px solid #334155;
+  margin: 20px 0;
 }
 
-.hint { font-size: 0.8rem; color: var(--text-secondary); margin-top: 5px; }
-.w-full { width: 100%; }
+.label-with-button {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.hint { 
+  font-size: 0.8rem; 
+  color: #64748b; 
+  margin-top: 6px; 
+}
 </style>
