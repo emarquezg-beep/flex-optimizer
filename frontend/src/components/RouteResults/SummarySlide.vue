@@ -9,6 +9,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:selectedScenario']);
 
+// Helper para Paradas
 const getStopSummary = (data) => {
   const apts = data.apartment_count || 0;
   const downtown = data.downtown_count || 0;
@@ -22,6 +23,7 @@ const getStopSummary = (data) => {
   return summary;
 };
 
+// Helper para ARIA
 const getAriaFactor = (data) => {
   const mult = data.aria_multiplier || 0.9;
   return `x${Number(mult).toFixed(2)}`;
@@ -30,70 +32,107 @@ const getAriaFactor = (data) => {
 
 <template>
   <div class="slide-content split-layout">
+    
     <div 
-      v-for="scenario in ['normal', 'inverse']" 
-      :key="scenario"
-      class="split-side" 
-      :class="[scenario + '-side', { 'is-active': selectedScenario === scenario }]"
-      @click="emit('update:selectedScenario', scenario)"
+      class="split-side normal-side" 
+      :class="{ 'is-active': selectedScenario === 'normal' }"
+      @click="emit('update:selectedScenario', 'normal')"
     >
-      <template v-if="true"> 
-        <div class="aria-badge">
-          <span class="aria-icon">🤖</span>
-          <span class="aria-val">{{ getAriaFactor(scenario === 'normal' ? normalData : inverseData) }}</span>
-        </div>
+      <div class="aria-badge">
+        <span class="aria-icon">🤖</span>
+        <span class="aria-val">{{ getAriaFactor(normalData) }}</span>
+      </div>
 
-        <div class="selection-indicator">
-          <div class="radio-circle">
-            <div v-if="selectedScenario === scenario" class="radio-dot"></div>
-          </div>
-          <span class="scenario-label">{{ scenario === 'normal' ? 'NORMAL' : 'INVERSA' }}</span>
+      <div class="selection-indicator">
+        <div class="radio-circle">
+          <div v-if="selectedScenario === 'normal'" class="radio-dot"></div>
         </div>
+        <span class="scenario-label">NORMAL</span>
+      </div>
 
-        <div class="hero-score">
-          <span class="score-val">{{ (scenario === 'normal' ? normalData : inverseData).route_score }}</span>
-          <span class="score-max">/100</span>
-          
-          <div class="stop-summary-pill" :class="{ 'has-apts': ((scenario === 'normal' ? normalData : inverseData).apartment_count + (scenario === 'normal' ? normalData : inverseData).downtown_count) > 0 }">
-            {{ getStopSummary(scenario === 'normal' ? normalData : inverseData) }}
-          </div>
-
-          <div class="calc-text">
-            {{ (scenario === 'normal' ? normalData : inverseData).calculation_text }}
-          </div>
-        </div>
+      <div class="hero-score">
+        <span class="score-val">{{ normalData.route_score }}</span>
+        <span class="score-max">/100</span>
         
-        <div class="hero-metrics">
-          
-          <div class="eta-group">
-            <div class="eta-row opt">
-              <span>🟢 Opt:</span>
-              <strong>{{ (scenario === 'normal' ? normalData : inverseData).eta_optimista }}</strong>
-            </div>
-            <div class="eta-row norm">
-              <span>🟡 Nor:</span>
-              <strong>{{ (scenario === 'normal' ? normalData : inverseData).eta_normal }}</strong>
-            </div>
-            <div class="eta-row pes">
-              <span>🔴 Pes:</span>
-              <strong>{{ (scenario === 'normal' ? normalData : inverseData).eta_pesimista }}</strong>
-            </div>
-          </div>
-
-          <div class="metric-row">
-            <div class="metric">
-              <span class="icon">📏</span>
-              <span class="val">{{ (scenario === 'normal' ? normalData : inverseData).millas_totales }} mi</span>
-            </div>
-            <div class="metric">
-              <span class="icon">💰</span>
-              <span class="val">${{ (scenario === 'normal' ? normalData : inverseData).pago_real_por_hora }}/h</span>
-            </div>
-          </div>
-
+        <div class="stop-summary-pill" :class="{ 'has-apts': (normalData.apartment_count + normalData.downtown_count) > 0 }">
+          {{ getStopSummary(normalData) }}
         </div>
-      </template>
+
+        <div class="calc-text" v-if="normalData.calculation_text">
+          {{ normalData.calculation_text }}
+        </div>
+      </div>
+      
+      <div class="hero-metrics">
+        <div class="eta-group">
+          <div class="eta-row opt"><span>🟢 Opt:</span> <strong>{{ normalData.eta_optimista }}</strong></div>
+          <div class="eta-row norm"><span>🟡 Nor:</span> <strong>{{ normalData.eta_normal }}</strong></div>
+          <div class="eta-row pes"><span>🔴 Pes:</span> <strong>{{ normalData.eta_pesimista }}</strong></div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric">
+            <span class="icon">📏</span>
+            <span class="val">{{ normalData.millas_totales }} mi</span>
+          </div>
+          <div class="metric">
+            <span class="icon">💰</span>
+            <span class="val">${{ normalData.pago_real_por_hora }}/h</span>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <div 
+      class="split-side inverse-side" 
+      :class="{ 'is-active': selectedScenario === 'inverse' }"
+      @click="emit('update:selectedScenario', 'inverse')"
+    >
+      <div class="aria-badge">
+        <span class="aria-icon">🤖</span>
+        <span class="aria-val">{{ getAriaFactor(inverseData) }}</span>
+      </div>
+
+      <div class="selection-indicator">
+        <div class="radio-circle">
+          <div v-if="selectedScenario === 'inverse'" class="radio-dot"></div>
+        </div>
+        <span class="scenario-label">INVERSA</span>
+      </div>
+
+      <div class="hero-score">
+        <span class="score-val">{{ inverseData.route_score }}</span>
+        <span class="score-max">/100</span>
+        
+        <div class="stop-summary-pill" :class="{ 'has-apts': (inverseData.apartment_count + inverseData.downtown_count) > 0 }">
+          {{ getStopSummary(inverseData) }}
+        </div>
+
+        <div class="calc-text" v-if="inverseData.calculation_text">
+          {{ inverseData.calculation_text }}
+        </div>
+      </div>
+
+      <div class="hero-metrics">
+        <div class="eta-group">
+          <div class="eta-row opt"><span>🟢 Opt:</span> <strong>{{ inverseData.eta_optimista }}</strong></div>
+          <div class="eta-row norm"><span>🟡 Nor:</span> <strong>{{ inverseData.eta_normal }}</strong></div>
+          <div class="eta-row pes"><span>🔴 Pes:</span> <strong>{{ inverseData.eta_pesimista }}</strong></div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric">
+            <span class="icon">📏</span>
+            <span class="val">{{ inverseData.millas_totales }} mi</span>
+          </div>
+          <div class="metric">
+            <span class="icon">💰</span>
+            <span class="val">${{ inverseData.pago_real_por_hora }}/h</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -111,7 +150,7 @@ const getAriaFactor = (data) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start; /* Alineación superior para que quepa todo */
+  justify-content: flex-start; 
   padding: 15px 5px;
   transition: all 0.3s ease;
   border-bottom: 4px solid transparent;
@@ -130,7 +169,7 @@ const getAriaFactor = (data) => {
 .normal-side.is-active { border-bottom-color: #4facfe; }
 .inverse-side.is-active { border-bottom-color: #ff9a9e; }
 
-/* ARIA Badge */
+/* ARIA Badge (Mejorado) */
 .aria-badge {
   position: absolute;
   top: 8px;
@@ -143,9 +182,11 @@ const getAriaFactor = (data) => {
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.1);
 }
+/* Cuando está activo: Azul sólido y letra blanca */
 .is-active .aria-badge { background: var(--brand-primary); border-color: var(--brand-primary); }
 .aria-icon { font-size: 0.9rem; }
-.aria-val { font-size: 0.65rem; font-weight: bold; color: white; }
+.aria-val { font-size: 0.65rem; font-weight: bold; color: rgba(255,255,255,0.7); }
+.is-active .aria-val { color: white; }
 
 /* Radio */
 .selection-indicator {
@@ -173,7 +214,7 @@ const getAriaFactor = (data) => {
 
 /* TEXTO CÁLCULO */
 .calc-text {
-  font-size: 0.55rem; /* Muy pequeño */
+  font-size: 0.55rem; 
   color: var(--text-secondary);
   opacity: 0.7;
   margin-top: 5px;
