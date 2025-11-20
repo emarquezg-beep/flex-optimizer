@@ -9,17 +9,29 @@ const props = defineProps({
 
 const emit = defineEmits(['update:selectedScenario']);
 
-// 🧠 Helper Inteligente para Paradas
+// 🧠 Helper Inteligente para Paradas (AHORA CON DOWNTOWN)
 const getStopSummary = (data) => {
-  // Sumamos apartamentos normales + downtown
-  const totalApts = (data.apartment_count || 0) + (data.downtown_count || 0);
+  // Obtenemos los datos individuales
+  const apts = data.apartment_count || 0;
+  const downtown = data.downtown_count || 0;
+  // Total de apartamentos (asumiendo que downtown count es un subconjunto o aditivo, 
+  // ajusta según tu lógica de backend. Aquí asumo que apartment_count son regulares y downtown son extra)
+  // Si tu backend manda 'apartment_count' como el total, ajusta la suma.
+  // Basado en tu logica anterior: apartment_count = regulares, downtown_count = downtown.
+  const totalApts = apts + downtown;
   const stops = data.numero_paradas || 0;
 
+  let summary = `${stops} stops`;
+
   if (totalApts > 0) {
-    // Ej: "31 stops • 5 Apts"
-    return `${stops} stops • ${totalApts} Apts`; 
+    summary += ` • ${totalApts} Apts`;
+    
+    // 🏙️ Si hay downtown, lo mostramos entre paréntesis
+    if (downtown > 0) {
+      summary += ` (${downtown} DT)`;
+    }
   }
-  return `${stops} stops`;
+  return summary;
 };
 
 // 🧠 Helper para Factor ARIA
@@ -118,6 +130,7 @@ const getAriaFactor = (data) => {
 </template>
 
 <style scoped>
+/* ... (Mantén los estilos de layout anteriores: .slide-content, .split-side, etc.) ... */
 .slide-content {
   height: 100%;
   width: 100%;
@@ -150,7 +163,7 @@ const getAriaFactor = (data) => {
 .normal-side.is-active { border-bottom-color: #4facfe; }
 .inverse-side.is-active { border-bottom-color: #ff9a9e; }
 
-/* ARIA Badge Mejorado */
+/* --- ARIA BADGE CORREGIDO (CONTRASTE) --- */
 .aria-badge {
   position: absolute;
   top: 10px;
@@ -158,7 +171,7 @@ const getAriaFactor = (data) => {
   display: flex;
   align-items: center;
   gap: 3px;
-  background: rgba(0,0,0,0.3);
+  background: rgba(0,0,0,0.3); /* Fondo oscuro por defecto */
   padding: 4px 8px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.1);
@@ -169,16 +182,22 @@ const getAriaFactor = (data) => {
 .aria-val { 
   font-size: 0.75rem; 
   font-weight: bold; 
-  color: var(--text-secondary); 
+  color: rgba(255,255,255,0.7); 
 }
 
+/* Cuando está activo: FONDO AZUL SÓLIDO, LETRA BLANCA */
 .is-active .aria-badge {
-  background: rgba(59, 130, 246, 0.2); /* Azulito */
-  border-color: rgba(59, 130, 246, 0.5);
+  background: var(--brand-primary); /* Azul fuerte */
+  border-color: var(--brand-primary);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
 }
-.is-active .aria-val { color: white; }
+.is-active .aria-val { 
+  color: white; /* Blanco puro */
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
 
-/* Radio styles */
+
+/* --- RADIO STYLES --- */
 .selection-indicator {
   margin-bottom: 10px;
   display: flex;
@@ -217,7 +236,8 @@ const getAriaFactor = (data) => {
   background-color: var(--brand-primary);
 }
 
-/* Hero Score */
+
+/* --- SCORE & PILL CORREGIDOS (CONTRASTE) --- */
 .hero-score {
   margin-bottom: 15px;
   text-align: center;
@@ -237,7 +257,6 @@ const getAriaFactor = (data) => {
   margin-top: -5px;
 }
 
-/* Pill de Resumen de Paradas */
 .stop-summary-pill {
   font-size: 0.75rem;
   color: var(--text-secondary);
@@ -245,17 +264,20 @@ const getAriaFactor = (data) => {
   padding: 4px 10px;
   border-radius: 20px;
   margin-top: 8px;
-  font-weight: 500;
+  font-weight: 600;
   border: 1px solid transparent;
 }
 
+/* Pill Activo: Fondo más oscuro, letra más brillante */
 .stop-summary-pill.has-apts {
-  background: rgba(245, 158, 11, 0.15); /* Fondo naranja suave */
-  color: #fbbf24; /* Texto naranja */
-  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(217, 119, 6, 0.2); /* Fondo naranja oscuro pero transparente */
+  color: #fbbf24; /* Amarillo brillante */
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  text-shadow: 0 1px 1px rgba(0,0,0,0.5); /* Sombra de texto para leer mejor */
 }
 
-/* Metrics */
+
+/* --- METRICS --- */
 .hero-metrics {
   display: flex;
   flex-direction: column;
