@@ -9,6 +9,7 @@ import { useRouter } from 'vue-router'; // 👈 Importante para redirigir
 // Componentes
 import SummarySlide from './SummarySlide.vue';
 import FinancialSlide from './FinancialSlide.vue';
+import RouteSegmentsSlide from './RouteSegmentsSlide.vue';
 import TimeSlide from './TimeSlide.vue';
 
 const props = defineProps({
@@ -60,6 +61,10 @@ const goHome = () => {
 
       <swiper-slide>
         <FinancialSlide :data="selectedData" />
+      </swiper-slide>
+
+      <swiper-slide>
+        <RouteSegmentsSlide :data="selectedData" />
       </swiper-slide>
 
       <swiper-slide>

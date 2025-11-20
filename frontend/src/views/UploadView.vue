@@ -930,6 +930,7 @@ function calculateLogData(scenarioKey) {
     apartment_count: reportData.value.apartmentCount || 0,
     downtown_count: reportData.value.downtownCount || 0,
     aria_multiplier: ariaData.value?.multiplier || 0.9,
+    segments: chosenReport.segments || [],
   };
 }
 
