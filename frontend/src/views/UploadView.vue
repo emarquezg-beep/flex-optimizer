@@ -1257,48 +1257,6 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
               </div>
             </transition>
 
-            <transition name="modal-fade">
-              <div v-if="showQuickSettingsModal" class="modal-overlay" @click.self="showQuickSettingsModal = false">
-                <div class="modal-container quick-settings-modal">
-                  <div class="modal-header">
-                    <h3>⚙️ Quick Adjustments</h3>
-                    <button @click="showQuickSettingsModal = false" class="close-btn">✕</button>
-                  </div>
-                  
-                  <div class="modal-body">
-                    
-                    <div class="form-group">
-                      <label class="label-with-button">
-                        <span>🏢 Warehouse Delay (min)</span>
-                        <button @click.prevent="calculateActualDelay" class="button-tertiary">Now</button>
-                      </label>
-                      <input type="number" v-model.number="blockData.retraso_almacen" step="5" class="input-lg">
-                      <p class="hint">How long you waited at the station.</p>
-                    </div>
-
-                    <hr class="divider">
-
-                    <div class="form-group">
-                      <label>🚗 Time Before Block (min)</label>
-                      <input type="number" v-model.number="blockData.antes_del_bloque" step="5" class="input-lg">
-                    </div>
-
-                    <div class="form-group">
-                      <label>🏠 Commute to Station (miles)</label>
-                      <input type="number" v-model.number="blockData.commute_1_manual" step="0.1" class="input-lg">
-                    </div>
-
-                  </div>
-                  
-                  <div class="modal-footer">
-                    <button @click="showQuickSettingsModal = false" class="button-primary w-full">
-                      ✅ Apply & Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </transition>
-
             <button 
               @click="evaluateRoute" 
               class="button-primary button-evaluate"
@@ -1335,9 +1293,9 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
       </transition>
       <div v-if="!showInputForm && reportData" class="edit-bar">
         <div class="edit-bar-left">
-      <button @click="showQuickSettingsModal = true" class="btn-edit-inputs">
-        ✏️ Edit Parameters
-      </button>
+          <button @click="showQuickSettingsModal = true" class="btn-edit-inputs">
+            ✏️ Edit Parameters
+          </button>
         </div>
         <div class="mini-summary">
           <span>📦 {{ extractedAddresses.length }} stops</span>
@@ -1348,6 +1306,45 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         </div>
       </div>
 
+      <transition name="modal-fade">
+        <div v-if="showQuickSettingsModal" class="modal-overlay" @click.self="showQuickSettingsModal = false">
+          <div class="modal-container quick-settings-modal">
+            <div class="modal-header">
+              <h3>⚙️ Quick Adjustments</h3>
+              <button @click="showQuickSettingsModal = false" class="close-btn">✕</button>
+            </div>
+            
+            <div class="modal-body">
+              <div class="form-group">
+                <label class="label-with-button">
+                  <span>🏢 Warehouse Delay (min)</span>
+                  <button @click.prevent="calculateActualDelay" class="button-tertiary">Now</button>
+                </label>
+                <input type="number" v-model.number="blockData.retraso_almacen" step="5" class="input-lg">
+                <p class="hint">Time spent waiting at station.</p>
+              </div>
+
+              <hr class="divider">
+
+              <div class="form-group">
+                <label>🚗 Time Before Block (min)</label>
+                <input type="number" v-model.number="blockData.antes_del_bloque" step="5" class="input-lg">
+              </div>
+
+              <div class="form-group">
+                <label>🏠 Commute to Station (miles)</label>
+                <input type="number" v-model.number="blockData.commute_1_manual" step="0.1" class="input-lg">
+              </div>
+            </div>
+            
+            <div class="modal-footer">
+              <button @click="showQuickSettingsModal = false" class="button-primary w-full">
+                ✅ Apply & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
 
       <div v-if="isProcessing" class="status"><h3>Evaluating route scenarios...</h3></div>
       <div v-if="backendResponse && backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
@@ -1369,7 +1366,6 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
             :normalPayload="normalPayload"
             :inversePayload="inversePayload"
             @save-route="saveToLogbook"
-            @reset="startManualEntry"
           />
 
           <div v-if="mostrarDetalles" class="mt-4 p-4 bg-black text-xs font-mono text-green-400 overflow-auto h-40" style="margin-top: 20px; padding:15px; background:#000; color:#0f0;">
@@ -1397,7 +1393,8 @@ function reorderList() { extractedAddresses.value.sort((a, b) => (a.number ?? In
         </div>
 
       </div>
-      </div>
+      
+    </div>
   </div>
 </template>
 <style scoped>
