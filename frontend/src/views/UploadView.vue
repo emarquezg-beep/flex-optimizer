@@ -927,6 +927,9 @@ function calculateLogData(scenarioKey) {
     eta_optimista: scenarioETAs.value[scenarioKey].optimistic.eta,
     eta_normal: chosenETA.eta,
     eta_pesimista: scenarioETAs.value[scenarioKey].pessimistic.eta,
+    apartment_count: reportData.value.apartmentCount || 0,
+    downtown_count: reportData.value.downtownCount || 0,
+    aria_multiplier: ariaData.value?.multiplier || 0.9,
   };
 }
 

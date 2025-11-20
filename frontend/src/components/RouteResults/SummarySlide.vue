@@ -9,19 +9,23 @@ const props = defineProps({
 
 const emit = defineEmits(['update:selectedScenario']);
 
-// Función helper para formatear el resumen de paradas
+// 🧠 Helper Inteligente para Paradas
 const getStopSummary = (data) => {
-  // Asumiendo que data.numero_paradas es el total
-  // Y si tuviéramos info de apts desglosada en el payload, la usaríamos.
-  // Por ahora usamos el total genérico, pero preparado para el futuro.
-  return `${data.numero_paradas} stops`;
+  // Sumamos apartamentos normales + downtown
+  const totalApts = (data.apartment_count || 0) + (data.downtown_count || 0);
+  const stops = data.numero_paradas || 0;
+
+  if (totalApts > 0) {
+    // Ej: "31 stops • 5 Apts"
+    return `${stops} stops • ${totalApts} Apts`; 
+  }
+  return `${stops} stops`;
 };
 
-// Helper para ARIA (si no viene en data, usamos default)
-const getAriaLabel = (data) => {
-  // Aquí podrías pasar el multiplier real si lo guardamos en el payload
-  // Por ahora simulamos el formato visual
-  return 'ARIA Active'; 
+// 🧠 Helper para Factor ARIA
+const getAriaFactor = (data) => {
+  const mult = data.aria_multiplier || 0.9;
+  return `x${Number(mult).toFixed(2)}`;
 };
 </script>
 
@@ -32,7 +36,10 @@ const getAriaLabel = (data) => {
       :class="{ 'is-active': selectedScenario === 'normal' }"
       @click="emit('update:selectedScenario', 'normal')"
     >
-      <div class="aria-badge">🤖</div>
+      <div class="aria-badge" title="ARIA Intelligence Active">
+        <span class="aria-icon">🤖</span>
+        <span class="aria-val">{{ getAriaFactor(normalData) }}</span>
+      </div>
 
       <div class="selection-indicator">
         <div class="radio-circle">
@@ -44,7 +51,8 @@ const getAriaLabel = (data) => {
       <div class="hero-score">
         <span class="score-val">{{ normalData.route_score }}</span>
         <span class="score-max">/100</span>
-        <div class="stop-summary">
+        
+        <div class="stop-summary-pill" :class="{ 'has-apts': (normalData.apartment_count + normalData.downtown_count) > 0 }">
           {{ getStopSummary(normalData) }}
         </div>
       </div>
@@ -70,7 +78,10 @@ const getAriaLabel = (data) => {
       :class="{ 'is-active': selectedScenario === 'inverse' }"
       @click="emit('update:selectedScenario', 'inverse')"
     >
-      <div class="aria-badge">🤖</div>
+      <div class="aria-badge" title="ARIA Intelligence Active">
+        <span class="aria-icon">🤖</span>
+        <span class="aria-val">{{ getAriaFactor(inverseData) }}</span>
+      </div>
 
       <div class="selection-indicator">
         <div class="radio-circle">
@@ -82,7 +93,8 @@ const getAriaLabel = (data) => {
       <div class="hero-score">
         <span class="score-val">{{ inverseData.route_score }}</span>
         <span class="score-max">/100</span>
-        <div class="stop-summary">
+        
+        <div class="stop-summary-pill" :class="{ 'has-apts': (inverseData.apartment_count + inverseData.downtown_count) > 0 }">
           {{ getStopSummary(inverseData) }}
         </div>
       </div>
@@ -126,7 +138,7 @@ const getAriaLabel = (data) => {
   cursor: pointer;
   background-color: var(--bg-secondary);
   opacity: 0.6;
-  position: relative; /* Para posicionar el badge */
+  position: relative;
 }
 
 .split-side.is-active {
@@ -138,29 +150,33 @@ const getAriaLabel = (data) => {
 .normal-side.is-active { border-bottom-color: #4facfe; }
 .inverse-side.is-active { border-bottom-color: #ff9a9e; }
 
-/* ARIA Badge */
+/* ARIA Badge Mejorado */
 .aria-badge {
   position: absolute;
   top: 10px;
-  right: 10px;
-  font-size: 1.2rem;
-  filter: grayscale(100%);
-  opacity: 0.5;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(0,0,0,0.3);
+  padding: 4px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
   transition: all 0.3s;
 }
 
-.is-active .aria-badge {
-  filter: grayscale(0%);
-  opacity: 1;
-  transform: scale(1.1);
-  animation: pulse 2s infinite;
+.aria-icon { font-size: 1.1rem; }
+.aria-val { 
+  font-size: 0.75rem; 
+  font-weight: bold; 
+  color: var(--text-secondary); 
 }
 
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
+.is-active .aria-badge {
+  background: rgba(59, 130, 246, 0.2); /* Azulito */
+  border-color: rgba(59, 130, 246, 0.5);
 }
+.is-active .aria-val { color: white; }
 
 /* Radio styles */
 .selection-indicator {
@@ -205,6 +221,9 @@ const getAriaLabel = (data) => {
 .hero-score {
   margin-bottom: 15px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 .score-val {
   font-size: 2.8rem;
@@ -215,16 +234,25 @@ const getAriaLabel = (data) => {
 .score-max {
   font-size: 0.8rem;
   color: var(--text-secondary);
-  vertical-align: top;
+  margin-top: -5px;
 }
-.stop-summary {
+
+/* Pill de Resumen de Paradas */
+.stop-summary-pill {
   font-size: 0.75rem;
   color: var(--text-secondary);
-  background: rgba(0,0,0,0.2);
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-top: 5px;
-  display: inline-block;
+  background: rgba(0,0,0,0.15);
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-top: 8px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.stop-summary-pill.has-apts {
+  background: rgba(245, 158, 11, 0.15); /* Fondo naranja suave */
+  color: #fbbf24; /* Texto naranja */
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 /* Metrics */
