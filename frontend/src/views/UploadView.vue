@@ -810,24 +810,25 @@ const scenarioETAs = computed(() => {
 // ============================================
 
 // 1. Función Helper que hace los cálculos matemáticos (Reutilizable)
+// EN UploadView.vue
+
 function calculateLogData(scenarioKey) {
+  // 1. Validaciones de seguridad
   if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) {
     return null;
   }
+  const chosenReport = reportData.value[scenarioKey];
+  const chosenETA = scenarioETAs.value[scenarioKey]?.normal;
+  
+  if (!chosenReport || !chosenETA) return null;
 
+  // 2. Datos básicos
   const data = blockData.value;
   const pago = Number(data.pago) || 0;
   const duracion_horas = Number(data.duracion_horas) || 0;
-
-  // Selección de datos según escenario ('normal' o 'inverse')
-  const chosenReport = reportData.value[scenarioKey];
-  const chosenETA = scenarioETAs.value[scenarioKey]?.normal;
-
-  if (!chosenReport || !chosenETA) return null;
-
   const user_id = userId.value;
 
-  // --- Lógica de Ciudad Principal (Mantenida igual) ---
+  // 3. Lógica de Ciudad Principal
   let primary_city = null;
   if (extractedAddresses.value.length > 0) {
     const cityCounts = {};
@@ -850,17 +851,14 @@ function calculateLogData(scenarioKey) {
     });
     let maxCount = 0;
     for (const city in cityCounts) {
-      if (cityCounts[city] > maxCount) {
-        maxCount = cityCounts[city];
-        primary_city = city;
-      }
+      if (cityCounts[city] > maxCount) { maxCount = cityCounts[city]; primary_city = city; }
     }
     if (primary_city) {
       primary_city = primary_city.split(' ').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ');
     }
   }
 
-  // --- Cálculos Financieros y de Tiempo ---
+  // 4. Cálculos Financieros
   const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
   const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
   let despues_del_bloque_hrs = 0;
@@ -871,7 +869,7 @@ function calculateLogData(scenarioKey) {
     blockStart.setHours(startHours, startMinutes, 0, 0);
     const durationMs = duracion_horas * 3600 * 1000;
     const blockEnd = new Date(blockStart.getTime() + durationMs);
-    const etaString = chosenETA.eta; // ETA específico del escenario
+    const etaString = chosenETA.eta;
     const [time, ampm] = etaString.split(' ');
     let [etaHours, etaMinutes] = time.split(':').map(Number);
     if (ampm.toUpperCase() === 'PM' && etaHours !== 12) etaHours += 12;
@@ -880,9 +878,7 @@ function calculateLogData(scenarioKey) {
     etaTime.setHours(etaHours, etaMinutes, 0, 0);
     const diffMs = etaTime.getTime() - blockEnd.getTime();
     despues_del_bloque_hrs = diffMs / (3600 * 1000);
-  } catch (e) {
-    console.error("Error parsing time:", e);
-  }
+  } catch (e) { console.error("Error parsing time:", e); }
 
   const tiempo_total = antes_del_bloque_hrs + duracion_horas + despues_del_bloque_hrs;
   const commute_1 = Number(data.commute_1_manual) || 0;
@@ -898,7 +894,16 @@ function calculateLogData(scenarioKey) {
   const claim_por_milla = millas_de_trabajo * 0.70;
   const numero_paradas = extractedAddresses.value.filter(s => s.address && s.address.trim() !== '').length;
 
-  // Retornamos el objeto base
+  // 5. 🤖 DATOS NUEVOS (ARIA + CÁLCULOS)
+  const mult = ariaData.value?.multiplier || 0.9;
+  // Calcular apartamentos regulares (Total - Downtown)
+  const totalAptsInReport = reportData.value.apartmentCount || 0;
+  const totalDtInReport = reportData.value.downtownCount || 0;
+  const regularApts = Math.max(0, totalAptsInReport - totalDtInReport);
+  
+  // Texto de cálculo matemático
+  const calcText = `${numero_paradas} stops × ${mult.toFixed(2)} + ${regularApts} apts × 0.75 + ${totalDtInReport} DT × 3`;
+
   return {
     fecha: data.fecha,
     block_id: route.query.blockId || null,
@@ -925,17 +930,18 @@ function calculateLogData(scenarioKey) {
     primary_city: primary_city, 
     first_stop: first_stop_distance.toFixed(2), 
     numero_paradas: numero_paradas,
-    // Pasamos los ETAs crudos también
+    
+    // ETAs
     eta_optimista: scenarioETAs.value[scenarioKey].optimistic.eta,
     eta_normal: chosenETA.eta,
     eta_pesimista: scenarioETAs.value[scenarioKey].pessimistic.eta,
-    apartment_count: reportData.value.apartmentCount || 0,
-    downtown_count: reportData.value.downtownCount || 0,
-    aria_multiplier: ariaData.value?.multiplier || 0.9,
-    segments: chosenReport.segments || [],
-    // 👇 AGREGA ESTO AL FINAL: El texto formateado del cálculo
-    calculation_text: `${stops} stops × ${mult} + ${apts} apts × 0.75 + ${dts} DT × 3 = ${totalAdded.toFixed(1)} min added`,
-    // 👆
+    
+    // NUEVOS CAMPOS PARA EL SLIDE
+    apartment_count: regularApts, // Solo regulares
+    downtown_count: totalDtInReport,
+    aria_multiplier: mult,
+    calculation_text: calcText,
+    segments: chosenReport.segments || [] 
   };
 }
 
