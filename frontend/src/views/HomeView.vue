@@ -383,17 +383,10 @@ function closeProfileModal() {
 async function processDischarge(type) {
   console.log("💰 Intentando procesar discharge:", type);
 
-  if (!selectedBlock.value) {
-    console.error("❌ No hay bloque seleccionado");
-    return;
-  }
+  if (!selectedBlock.value) return;
   
-  // Obtener usuario
   const { userId } = useAuth();
-  if (!userId.value) {
-    alert("Error: No se pudo identificar al usuario.");
-    return;
-  }
+  if (!userId.value) return;
 
   try {
     const block = selectedBlock.value;
@@ -402,48 +395,43 @@ async function processDischarge(type) {
     const payment = parseFloat(block.pago);
     const blockHours = parseFloat(block.duracion_horas) || 0;
 
-    // 🧮 CÁLCULOS PREVIOS (Para llenar los nulls)
-    // 1. Tax (15.3%)
-    const taxCalc = (payment * 0.153).toFixed(2);
+    // 1. Asegurar Vehículo (Forzar búsqueda si la lista está vacía o no se encuentra)
+    let vehicleNick = 'Unknown';
     
-    // 2. Pago Nominal por Hora (Base del bloque)
-    const pagoPorHoraNominal = blockHours > 0 ? (payment / blockHours).toFixed(2) : 0;
-
-    // 3. Nickname del vehículo (para campo legacy 'vehiculo')
+    if (vehicles.value.length === 0) {
+       await fetchActiveVehicles(userId.value); // Recargar si hace falta
+    }
+    
     const vehicleObj = vehicles.value.find(v => v.id === block.vehicle_id);
-    const vehicleNick = vehicleObj ? vehicleObj.nickname : 'Unknown';
+    if (vehicleObj) {
+      vehicleNick = vehicleObj.nickname;
+    } else {
+      console.warn("⚠️ Vehículo no encontrado en lista local:", block.vehicle_id);
+    }
 
-    // Payload Base (Común)
+    // 2. Payload Inicial (Para Crear)
     let payload = {
       fecha: block.fecha,
       hora: block.hora,
       vehicle_id: block.vehicle_id,
-      vehiculo: vehicleNick, // ✅ Llenamos el campo legacy
+      vehiculo: vehicleNick, 
       warehouse: whCode,
       pago: payment,
-      pago_por_hora: pagoPorHoraNominal, // ✅ Dato llenado
+      pago_por_hora: blockHours > 0 ? (payment / blockHours).toFixed(2) : 0,
       block_id: block.id,
       user_id: userId.value,
       destination_address: 'Casa (Discharge)',
       is_free_money: true,
-      status: 0, // ✅ FORZAMOS STATUS 0 (Completado)
-      tax: taxCalc, // ✅ Dato llenado
-      claim_por_milla: 0, // 0 porque no hay millas de trabajo
-      millas_por_hora: 0,
-      numero_paradas: 0,
-      first_stop: 0,
-      eta_optimista: 'N/A',
-      eta_normal: 'N/A',
-      eta_pesimista: 'N/A'
+      // Enviamos estos aunque el backend los ignore al crear (por si acaso)
+      status: 0, 
+      notes: type === 'station' ? '⚡ Station Discharge' : '🦄 Jackpot! Email',
+      tax: (payment * 0.153).toFixed(2)
     };
 
+    // Configurar Escenario
     if (type === 'station') {
-      // 🚚 ESCENARIO 1: STATION DISCHARGE
-      // Tiempos estimados
-      const driveTimeMinOneWay = commuteOneWay * 2; // 2 min por milla aprox
-      const driveTimeHoursRoundTrip = (driveTimeMinOneWay * 2) / 60;
-      const waitTimeHours = 27 / 60; // 0.45h
-      const totalHours = driveTimeHoursRoundTrip + waitTimeHours;
+      const driveTimeMinOneWay = commuteOneWay * 2; 
+      const totalHours = ((driveTimeMinOneWay * 2) + 27) / 60;
 
       payload = {
         ...payload,
@@ -453,19 +441,15 @@ async function processDischarge(type) {
         commute_2: commuteOneWay,
         millas_totales: commuteOneWay * 2,
         tiempo_total: totalHours.toFixed(2),
-        
-        // ⏱️ Desglose de Tiempos (Llenando nulls)
-        antes_del_bloque: driveTimeMinOneWay, // Minutos ida
-        despues_del_bloque: driveTimeMinOneWay, // Minutos vuelta
-        
+        antes_del_bloque: driveTimeMinOneWay,
+        despues_del_bloque: driveTimeMinOneWay,
         pago_real_por_hora: (payment / totalHours).toFixed(2),
         gasto_de_gasolina: ((commuteOneWay * 2) / 35 * 3.00).toFixed(2),
         desgaste_vehiculo: ((commuteOneWay * 2) * 0.25).toFixed(2),
-        route_score: 95,
-        notes: '⚡ Station Discharge (27min wait)' // ✅ Nota explicita
+        route_score: 95
       };
     } else {
-      // 🎰 ESCENARIO 2: JACKPOT
+      // Jackpot
       payload = {
         ...payload,
         duracion_horas: 0,
@@ -474,42 +458,61 @@ async function processDischarge(type) {
         commute_2: 0,
         millas_totales: 0,
         tiempo_total: 0.01,
-        antes_del_bloque: 0, // ✅
-        despues_del_bloque: 0, // ✅
+        antes_del_bloque: 0,
+        despues_del_bloque: 0,
         pago_real_por_hora: payment, 
         gasto_de_gasolina: 0,
         desgaste_vehiculo: 0,
-        route_score: 100,
-        notes: '🦄 Jackpot! Email Discharge' // ✅ Nota explicita
+        route_score: 100
       };
     }
 
-    console.log("📤 Enviando payload COMPLETO:", payload);
-
-    // Enviar al Backend
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-    const logResponse = await fetchWithAuth(`${backendUrl}/api/log-route`, {
+
+    // 🚀 PASO 1: CREAR EL REGISTRO
+    const createResponse = await fetchWithAuth(`${backendUrl}/api/log-route`, {
         method: 'POST',
         body: JSON.stringify(payload)
     });
     
-    const result = await logResponse.json();
+    const createResult = await createResponse.json();
     
-    if (logResponse.ok) {
-      alert(type === 'jackpot' ? '🦄 ¡JACKPOT REGISTRADO!' : '💰 Discharge registrado exitosamente');
+    if (!createResponse.ok) throw new Error(createResult.message);
+
+    // ✅ PASO 2: FORZAR ACTUALIZACIÓN (El "Parche")
+    // Si el backend ignoró el status 0 o las notas, las forzamos ahora con un PUT/PATCH
+    const newLogId = createResult.data?.[0]?.id;
+    
+    if (newLogId) {
+      console.log("🔄 Forzando cierre de ruta ID:", newLogId);
       
-      showDischargeOptions.value = false;
-      if (typeof closeModal === 'function') closeModal(); 
-      else selectedBlock.value = null; 
-      
-      window.location.reload();
-    } else {
-      throw new Error(result.message || 'Error en el servidor');
+      const updatePayload = {
+        status: 0, // Cerrar ruta
+        notes: payload.notes, // Asegurar notas
+        vehiculo: vehicleNick, // Asegurar nombre vehículo
+        // Reenviamos métricas clave por si acaso
+        route_score: payload.route_score,
+        pago_real_por_hora: payload.pago_real_por_hora
+      };
+
+      await fetchWithAuth(`${backendUrl}/api/log-route/${newLogId}`, {
+        method: 'PUT', // O 'PATCH', depende de tu API
+        body: JSON.stringify(updatePayload)
+      });
     }
+
+    // 🎉 ÉXITO FINAL
+    alert(type === 'jackpot' ? '🦄 ¡JACKPOT REGISTRADO!' : '💰 Discharge registrado exitosamente');
+    
+    showDischargeOptions.value = false;
+    if (typeof closeModal === 'function') closeModal(); 
+    else selectedBlock.value = null; 
+    
+    window.location.reload();
 
   } catch (e) {
     console.error("❌ Error:", e);
-    alert('Error al guardar: ' + e.message);
+    alert('Error: ' + e.message);
   }
 }
 </script>
