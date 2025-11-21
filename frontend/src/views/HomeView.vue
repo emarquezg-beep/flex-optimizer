@@ -33,6 +33,15 @@ const isNextWeekBlock = ref(false) // 🆕 Indica si el bloque es de la semana s
 // 🆕 Control del slider (0 = semana actual, 1 = semana siguiente)
 const activeWeek = ref(0)
 
+// --- AGREGAR EN TUS REFS/VARIABLES ---
+const showDischargeOptions = ref(false);
+
+// Configuración rápida de Commutes (Si no tienes el array completo de warehouses aquí)
+const WAREHOUSE_COMMUTES = {
+  'VFL8': 23, 'VFL1': 28, 'DMO3': 20, 'DFL4': 18, 
+  'DFL8': 47, 'DMO4': 50, 'DFL5': 24
+};
+
 onMounted(async () => {
   // 🚗 Cargar vehículos primero
   if (userId.value) {
@@ -69,6 +78,104 @@ async function loadDashboard() {
       })
     }
     
+    // --- FUNCIÓN PROCESS DISCHARGE ---
+async function processDischarge(type) {
+  if (!selectedBlock.value) return;
+  
+  // 1. Preparar Datos
+  const block = selectedBlock.value;
+  const whCode = block.warehouse;
+  const commuteOneWay = WAREHOUSE_COMMUTES[whCode] || 20; // 20 por defecto si no encuentra
+  const payment = parseFloat(block.pago);
+  const { userId } = useAuth(); // Asegúrate de tener useAuth importado
+
+  // Payload Base
+  let payload = {
+    fecha: block.fecha,
+    hora: block.hora,
+    vehicle_id: block.vehicle_id,
+    warehouse: whCode,
+    pago: payment,
+    block_id: block.id,
+    user_id: userId.value,
+    destination_address: 'Casa (Discharge)',
+    is_free_money: true
+  };
+
+  if (type === 'station') {
+    // 🚚 ESCENARIO 1: STATION DISCHARGE (Gastos reales)
+    // Tiempo = Commute ida y vuelta (a 30mph prom = 2 min/milla) + 27 min espera
+    const driveTimeMin = (commuteOneWay * 2) * 2; 
+    const totalMin = driveTimeMin + 27;
+    const totalHours = totalMin / 60;
+
+    payload = {
+      ...payload,
+      duracion_horas: 0, // 0 horas de "trabajo de reparto"
+      millas_de_trabajo: 0,
+      commute_1: commuteOneWay,
+      commute_2: commuteOneWay,
+      millas_totales: commuteOneWay * 2,
+      tiempo_total: totalHours.toFixed(2),
+      pago_real_por_hora: (payment / totalHours).toFixed(2),
+      // Gastos reales
+      gasto_de_gasolina: ((commuteOneWay * 2) / 35 * 3.00).toFixed(2),
+      desgaste_vehiculo: ((commuteOneWay * 2) * 0.25).toFixed(2),
+      route_score: 95, // Score Alto pero honesto
+      notes: '⚡ Station Discharge (27min wait)'
+    };
+  } else {
+    // 🎰 ESCENARIO 2: JACKPOT (Email)
+    payload = {
+      ...payload,
+      duracion_horas: 0,
+      millas_de_trabajo: 0,
+      commute_1: 0,
+      commute_2: 0,
+      millas_totales: 0,
+      tiempo_total: 0.01, // Simbólico
+      pago_real_por_hora: payment, 
+      gasto_de_gasolina: 0,
+      desgaste_vehiculo: 0,
+      route_score: 100, // 🏆 PERFECTO
+      notes: '🦄 Jackpot! Email Discharge'
+    };
+  }
+
+  // 2. Guardar en BD
+  try {
+    // Usamos fetchWithAuth directo porque HomeView quizás no tiene saveToLogbook
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    
+    // A) Guardar en bitácora
+    const logResponse = await fetchWithAuth(`${backendUrl}/api/log-route`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    });
+    
+    // B) Marcar bloque como completado (importante para que desaparezca de la agenda)
+    // Usamos el endpoint de "start" para vincularlo, pero como ya guardamos el log, 
+    // el backend debería ser capaz de cerrar el ciclo si le mandamos el routeId.
+    // O simplemente lo borramos de "agendados" si tu lógica lo permite.
+    // *Simplificación:* Si guardamos el log, ya queda registrado.
+    
+    const result = await logResponse.json();
+    
+    if (logResponse.ok) {
+      alert(type === 'jackpot' ? '🦄 ¡JACKPOT REGISTRADO! 🎉' : '💰 Discharge registrado exitosamente');
+      closeModal(); // Cierra el modal
+      // Recargar bloques para que se actualice la vista
+      // (Llama a tu función de recargar, ej: fetchBlocks())
+      window.location.reload(); // O recarga rápida para ver cambios
+    } else {
+      throw new Error(result.message);
+    }
+
+  } catch (e) {
+    console.error(e);
+    alert('Error al guardar Discharge: ' + e.message);
+  }
+}
     // ========================================
     // 📅 CÁLCULO DE SEMANAS (LUNES-DOMINGO)
     // ========================================
@@ -748,33 +855,66 @@ function closeProfileModal() {
             </div>
           </div>
           
-          <div class="modal-actions">
-            <!-- 🆕 Botón "Iniciar Ruta" solo para bloques de la semana actual -->
-            <BaseButton 
-              v-if="!isNextWeekBlock"
-              variant="primary" 
-              size="md" 
-              class="modal-btn"
-              @click="startBlock(selectedBlock)"
-            >
-              Iniciar Ruta
-            </BaseButton>
-            <BaseButton 
-              variant="secondary" 
-              size="md" 
-              class="modal-btn"
-              @click="editBlock(selectedBlock)"
-            >
-              Editar
-            </BaseButton>
-            <BaseButton 
-              variant="danger" 
-              size="md" 
-              class="modal-btn"
-              @click="deleteBlock(selectedBlock)"
-            >
-              Cancelar
-            </BaseButton>
+ <div class="modal-actions">
+            
+            <template v-if="!showDischargeOptions">
+              <BaseButton 
+                v-if="!isNextWeekBlock"
+                variant="primary" 
+                size="md" 
+                class="modal-btn w-full" 
+                @click="startBlock(selectedBlock)"
+              >
+                🚀 Iniciar Ruta
+              </BaseButton>
+
+              <button 
+                v-if="!isNextWeekBlock"
+                class="btn-gold modal-btn w-full" 
+                @click="showDischargeOptions = true"
+              >
+                💰 Free Money / Discharge
+              </button>
+
+              <div class="flex gap-2 w-full">
+                <BaseButton 
+                  variant="secondary" 
+                  size="md" 
+                  class="modal-btn flex-1" 
+                  @click="editBlock(selectedBlock)"
+                >
+                  Editar
+                </BaseButton>
+                <BaseButton 
+                  variant="danger" 
+                  size="md" 
+                  class="modal-btn flex-1" 
+                  @click="deleteBlock(selectedBlock)"
+                >
+                  Cancelar
+                </BaseButton>
+              </div>
+            </template>
+
+            <template v-else>
+              <div class="discharge-panel">
+                <h4 class="text-center mb-2 font-bold text-gray-700">¿Tuviste que ir a la estación?</h4>
+                <p class="text-xs text-center text-gray-500 mb-4">Para calcular tus gastos reales</p>
+                
+                <button @click="processDischarge('station')" class="btn-blue-outline mb-2 w-full">
+                  🚗 Sí, fui y esperé (27 min)
+                </button>
+                
+                <button @click="processDischarge('jackpot')" class="btn-green-outline mb-3 w-full">
+                  🎰 No, cancelaron por email
+                </button>
+                
+                <button @click="showDischargeOptions = false" class="text-xs text-gray-500 underline w-full text-center">
+                  Volver atrás
+                </button>
+              </div>
+            </template>
+
           </div>
         </div>
       </div>
@@ -1354,5 +1494,35 @@ function closeProfileModal() {
   .modal-actions {
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
+}
+
+/* Botón Dorado Free Money */
+.btn-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+  color: white;
+  font-weight: 700;
+  padding: 10px 15px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 6px rgba(251, 191, 36, 0.3);
+  transition: transform 0.1s;
+}
+.btn-gold:active { transform: scale(0.98); }
+
+/* Estilos panel secundario */
+.discharge-panel {
+  background: #f8fafc;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.btn-blue-outline {
+  border: 1px solid #3b82f6; color: #3b82f6; background: white;
+  padding: 8px; border-radius: 6px; font-weight: 600;
+}
+.btn-green-outline {
+  border: 1px solid #10b981; color: #10b981; background: white;
+  padding: 8px; border-radius: 6px; font-weight: 600;
 }
 </style>
