@@ -383,16 +383,10 @@ function closeProfileModal() {
 async function processDischarge(type) {
   console.log("💰 INICIO: Procesando Discharge tipo:", type);
 
-  if (!selectedBlock.value) {
-    console.error("❌ Error: No hay bloque seleccionado");
-    return;
-  }
+  if (!selectedBlock.value) return;
   
   const { userId } = useAuth();
-  if (!userId.value) {
-    alert("Error: Usuario no identificado.");
-    return;
-  }
+  if (!userId.value) return;
 
   try {
     const block = selectedBlock.value;
@@ -401,38 +395,19 @@ async function processDischarge(type) {
     const payment = parseFloat(block.pago);
     const blockHours = parseFloat(block.duracion_horas) || 0;
 
-    // ============================================================
-    // 🕵️‍♂️ PASO CRÍTICO: BUSCAR EL NOMBRE DEL VEHÍCULO
-    // ============================================================
-    console.log("🔍 Buscando vehículo ID:", block.vehicle_id);
-    
-    // 1. Si la lista está vacía, forzamos la carga
-    if (!vehicles.value || vehicles.value.length === 0) {
-       console.log("⚠️ Lista de vehículos vacía, recargando...");
-       await fetchActiveVehicles(userId.value);
+    // 1. Buscar Vehículo (Si falla, usa fallback)
+    let vehicleNick = "Unknown";
+    if (vehicles.value && vehicles.value.length > 0) {
+        const v = vehicles.value.find(v => v.id === block.vehicle_id);
+        if (v) vehicleNick = v.nickname;
     }
 
-    // 2. Buscamos el objeto
-    let vehicleNick = "Unknown Vehicle"; // Valor por defecto seguro
-    const vehicleObj = vehicles.value.find(v => v.id === block.vehicle_id);
-    
-    if (vehicleObj) {
-      vehicleNick = vehicleObj.nickname;
-      console.log("✅ Vehículo encontrado:", vehicleNick);
-    } else {
-      console.warn("⚠️ No se encontró el vehículo en la lista. IDs disponibles:", vehicles.value.map(v => v.id));
-    }
-
-    // ============================================================
-    // 📦 PREPARAR PAYLOAD
-    // ============================================================
-    // Nota: 'notes' y 'status' los mandamos aquí, pero si el backend los ignora,
-    // el PASO 2 se encargará de ellos.
+    // 2. Payload
     let payload = {
       fecha: block.fecha,
       hora: block.hora,
       vehicle_id: block.vehicle_id,
-      vehiculo: vehicleNick, // <--- AHORA SÍ DEBERÍA LLEVAR NOMBRE
+      vehiculo: vehicleNick,
       warehouse: whCode,
       pago: payment,
       pago_por_hora: blockHours > 0 ? (payment / blockHours).toFixed(2) : 0,
@@ -440,104 +415,62 @@ async function processDischarge(type) {
       user_id: userId.value,
       destination_address: 'Casa (Discharge)',
       is_free_money: true,
-      status: 0, 
+      status: 0, // Intentamos enviarlo
       notes: type === 'station' ? '⚡ Station Discharge' : '🦄 Jackpot! Email',
       tax: (payment * 0.153).toFixed(2)
     };
 
     if (type === 'station') {
-      // ESCENARIO 1: STATION
-      const driveTimeMinOneWay = commuteOneWay * 2; 
-      const totalHours = ((driveTimeMinOneWay * 2) + 27) / 60;
-
-      payload = {
-        ...payload,
-        duracion_horas: 0, 
-        millas_de_trabajo: 0,
-        commute_1: commuteOneWay,
-        commute_2: commuteOneWay,
-        millas_totales: commuteOneWay * 2,
-        tiempo_total: totalHours.toFixed(2),
-        antes_del_bloque: driveTimeMinOneWay,
-        despues_del_bloque: driveTimeMinOneWay,
-        pago_real_por_hora: (payment / totalHours).toFixed(2),
-        gasto_de_gasolina: ((commuteOneWay * 2) / 35 * 3.00).toFixed(2),
-        desgaste_vehiculo: ((commuteOneWay * 2) * 0.25).toFixed(2),
-        route_score: 95
-      };
+      const driveTimeMin = commuteOneWay * 2 * 2; 
+      const totalHours = (driveTimeMin + 27) / 60;
+      payload = { ...payload, duracion_horas: 0, millas_de_trabajo: 0, commute_1: commuteOneWay, commute_2: commuteOneWay, millas_totales: commuteOneWay * 2, tiempo_total: totalHours.toFixed(2), pago_real_por_hora: (payment / totalHours).toFixed(2), gasto_de_gasolina: ((commuteOneWay * 2) / 35 * 3.00).toFixed(2), desgaste_vehiculo: ((commuteOneWay * 2) * 0.25).toFixed(2), route_score: 95 };
     } else {
-      // ESCENARIO 2: JACKPOT
-      payload = {
-        ...payload,
-        duracion_horas: 0,
-        millas_de_trabajo: 0,
-        commute_1: 0,
-        commute_2: 0,
-        millas_totales: 0,
-        tiempo_total: 0.01,
-        antes_del_bloque: 0,
-        despues_del_bloque: 0,
-        pago_real_por_hora: payment, 
-        gasto_de_gasolina: 0,
-        desgaste_vehiculo: 0,
-        route_score: 100
-      };
+      payload = { ...payload, duracion_horas: 0, millas_de_trabajo: 0, commute_1: 0, commute_2: 0, millas_totales: 0, tiempo_total: 0.01, pago_real_por_hora: payment, gasto_de_gasolina: 0, desgaste_vehiculo: 0, route_score: 100 };
     }
 
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
-    // ============================================================
-    // 🚀 EJECUCIÓN: DOBLE GOLPE (POST + PUT)
-    // ============================================================
-    
-    // 1. CREAR (POST)
-    console.log("📤 Enviando POST (Creación)...");
+    // 🚀 PASO 1: CREAR (ESTO SÍ FUNCIONA)
     const createResponse = await fetchWithAuth(`${backendUrl}/api/log-route`, {
         method: 'POST',
         body: JSON.stringify(payload)
     });
     
-    const createResult = await createResponse.json();
-    if (!createResponse.ok) throw new Error(createResult.message);
-    
-    console.log("✅ POST Exitoso. ID Recibido:", createResult.data?.[0]?.id);
-    console.log("⚠️ Estado inicial recibido:", createResult.data?.[0]?.status); // Seguro dirá 1
-
-    // 2. ACTUALIZAR (PUT) - El Parche para Status y Notas
-    const newLogId = createResult.data?.[0]?.id;
-    
-    if (newLogId) {
-      console.log(`🔄 Iniciando PARCHE (PUT) para Log ID ${newLogId}...`);
-      
-      const updatePayload = {
-        status: 0, // Forzar cerrado
-        notes: payload.notes, // Forzar nota
-        vehiculo: payload.vehiculo // Reintentar vehículo por si acaso
-      };
-
-      const updateResponse = await fetchWithAuth(`${backendUrl}/api/log-route/${newLogId}`, {
-        method: 'PUT', 
-        body: JSON.stringify(updatePayload)
-      });
-      
-      const updateResult = await updateResponse.json();
-      console.log("✅ Respuesta del PUT (Parche):", updateResult);
+    // Verificamos si es HTML antes de parsear para evitar el error '<'
+    const contentType = createResponse.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") === -1) {
+       throw new Error("El servidor devolvió un error HTML en lugar de JSON.");
     }
 
-    // ============================================================
-    // 🎉 FINALIZACIÓN
-    // ============================================================
+    const createResult = await createResponse.json();
+    if (!createResponse.ok) throw new Error(createResult.message);
+
+    // ✅ PASO 2: INTENTO SILENCIOSO DE ACTUALIZAR
+    // Intentamos arreglar el status, pero si falla, NO detenemos el flujo.
+    try {
+        const newLogId = createResult.data?.[0]?.id;
+        if (newLogId) {
+            await fetchWithAuth(`${backendUrl}/api/log-route/${newLogId}`, {
+                method: 'PUT', 
+                body: JSON.stringify({ status: 0, notes: payload.notes, vehiculo: vehicleNick })
+            });
+        }
+    } catch (parcheError) {
+        console.warn("⚠️ El parche de status falló, pero el registro se guardó:", parcheError);
+        // No hacemos throw, dejamos que continúe al éxito
+    }
+
+    // 🎉 ÉXITO (Siempre llegamos aquí si el Paso 1 funcionó)
     alert(type === 'jackpot' ? '🦄 ¡JACKPOT REGISTRADO!' : '💰 Discharge registrado exitosamente');
     
     showDischargeOptions.value = false;
     if (typeof closeModal === 'function') closeModal(); 
     else selectedBlock.value = null; 
     
-    // Recargar para ver el cambio real en la bitácora
     window.location.reload();
 
   } catch (e) {
-    console.error("❌ Error CRÍTICO en processDischarge:", e);
+    console.error("❌ Error CRÍTICO:", e);
     alert('Error: ' + e.message);
   }
 }
