@@ -80,100 +80,105 @@ async function loadDashboard() {
     
     // --- FUNCIÓN PROCESS DISCHARGE ---
 async function processDischarge(type) {
-  if (!selectedBlock.value) return;
+  console.log("💰 Intentando procesar discharge:", type); // Debug
+
+  if (!selectedBlock.value) {
+    console.error("❌ No hay bloque seleccionado");
+    return;
+  }
   
-  // 1. Preparar Datos
-  const block = selectedBlock.value;
-  const whCode = block.warehouse;
-  const commuteOneWay = WAREHOUSE_COMMUTES[whCode] || 20; // 20 por defecto si no encuentra
-  const payment = parseFloat(block.pago);
-  const { userId } = useAuth(); // Asegúrate de tener useAuth importado
-
-  // Payload Base
-  let payload = {
-    fecha: block.fecha,
-    hora: block.hora,
-    vehicle_id: block.vehicle_id,
-    warehouse: whCode,
-    pago: payment,
-    block_id: block.id,
-    user_id: userId.value,
-    destination_address: 'Casa (Discharge)',
-    is_free_money: true
-  };
-
-  if (type === 'station') {
-    // 🚚 ESCENARIO 1: STATION DISCHARGE (Gastos reales)
-    // Tiempo = Commute ida y vuelta (a 30mph prom = 2 min/milla) + 27 min espera
-    const driveTimeMin = (commuteOneWay * 2) * 2; 
-    const totalMin = driveTimeMin + 27;
-    const totalHours = totalMin / 60;
-
-    payload = {
-      ...payload,
-      duracion_horas: 0, // 0 horas de "trabajo de reparto"
-      millas_de_trabajo: 0,
-      commute_1: commuteOneWay,
-      commute_2: commuteOneWay,
-      millas_totales: commuteOneWay * 2,
-      tiempo_total: totalHours.toFixed(2),
-      pago_real_por_hora: (payment / totalHours).toFixed(2),
-      // Gastos reales
-      gasto_de_gasolina: ((commuteOneWay * 2) / 35 * 3.00).toFixed(2),
-      desgaste_vehiculo: ((commuteOneWay * 2) * 0.25).toFixed(2),
-      route_score: 95, // Score Alto pero honesto
-      notes: '⚡ Station Discharge (27min wait)'
-    };
-  } else {
-    // 🎰 ESCENARIO 2: JACKPOT (Email)
-    payload = {
-      ...payload,
-      duracion_horas: 0,
-      millas_de_trabajo: 0,
-      commute_1: 0,
-      commute_2: 0,
-      millas_totales: 0,
-      tiempo_total: 0.01, // Simbólico
-      pago_real_por_hora: payment, 
-      gasto_de_gasolina: 0,
-      desgaste_vehiculo: 0,
-      route_score: 100, // 🏆 PERFECTO
-      notes: '🦄 Jackpot! Email Discharge'
-    };
+  // Obtener usuario (Asegúrate que useAuth funcione)
+  const { userId } = useAuth();
+  if (!userId.value) {
+    alert("Error: No se pudo identificar al usuario.");
+    return;
   }
 
-  // 2. Guardar en BD
   try {
-    // Usamos fetchWithAuth directo porque HomeView quizás no tiene saveToLogbook
+    const block = selectedBlock.value;
+    const whCode = block.warehouse;
+    const commuteOneWay = WAREHOUSE_COMMUTES[whCode] || 20; 
+    const payment = parseFloat(block.pago);
+
+    // Payload Base
+    let payload = {
+      fecha: block.fecha,
+      hora: block.hora,
+      vehicle_id: block.vehicle_id,
+      warehouse: whCode,
+      pago: payment,
+      block_id: block.id,
+      user_id: userId.value,
+      destination_address: 'Casa (Discharge)',
+      is_free_money: true
+    };
+
+    if (type === 'station') {
+      // 🚚 ESCENARIO 1: STATION DISCHARGE
+      const driveTimeMin = (commuteOneWay * 2) * 2; // 2 min por milla aprox
+      const totalHours = (driveTimeMin + 27) / 60;
+
+      payload = {
+        ...payload,
+        duracion_horas: 0,
+        millas_de_trabajo: 0,
+        commute_1: commuteOneWay,
+        commute_2: commuteOneWay,
+        millas_totales: commuteOneWay * 2,
+        tiempo_total: totalHours.toFixed(2),
+        pago_real_por_hora: (payment / totalHours).toFixed(2),
+        gasto_de_gasolina: ((commuteOneWay * 2) / 35 * 3.00).toFixed(2),
+        desgaste_vehiculo: ((commuteOneWay * 2) * 0.25).toFixed(2),
+        route_score: 95,
+        notes: '⚡ Station Discharge (27min wait)'
+      };
+    } else {
+      // 🎰 ESCENARIO 2: JACKPOT
+      payload = {
+        ...payload,
+        duracion_horas: 0,
+        millas_de_trabajo: 0,
+        commute_1: 0,
+        commute_2: 0,
+        millas_totales: 0,
+        tiempo_total: 0.01,
+        pago_real_por_hora: payment, 
+        gasto_de_gasolina: 0,
+        desgaste_vehiculo: 0,
+        route_score: 100,
+        notes: '🦄 Jackpot! Email Discharge'
+      };
+    }
+
+    console.log("📤 Enviando payload:", payload);
+
+    // Enviar al Backend
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-    
-    // A) Guardar en bitácora
     const logResponse = await fetchWithAuth(`${backendUrl}/api/log-route`, {
         method: 'POST',
         body: JSON.stringify(payload)
     });
     
-    // B) Marcar bloque como completado (importante para que desaparezca de la agenda)
-    // Usamos el endpoint de "start" para vincularlo, pero como ya guardamos el log, 
-    // el backend debería ser capaz de cerrar el ciclo si le mandamos el routeId.
-    // O simplemente lo borramos de "agendados" si tu lógica lo permite.
-    // *Simplificación:* Si guardamos el log, ya queda registrado.
-    
     const result = await logResponse.json();
     
     if (logResponse.ok) {
-      alert(type === 'jackpot' ? '🦄 ¡JACKPOT REGISTRADO! 🎉' : '💰 Discharge registrado exitosamente');
-      closeModal(); // Cierra el modal
-      // Recargar bloques para que se actualice la vista
-      // (Llama a tu función de recargar, ej: fetchBlocks())
-      window.location.reload(); // O recarga rápida para ver cambios
+      // 🎉 ÉXITO
+      alert(type === 'jackpot' ? '🦄 ¡JACKPOT REGISTRADO!' : '💰 Discharge registrado exitosamente');
+      
+      // Limpiar estado
+      showDischargeOptions.value = false;
+      if (typeof closeModal === 'function') closeModal(); 
+      else selectedBlock.value = null; // Fallback para cerrar modal
+      
+      // Recargar la página para ver cambios
+      window.location.reload();
     } else {
-      throw new Error(result.message);
+      throw new Error(result.message || 'Error en el servidor');
     }
 
   } catch (e) {
-    console.error(e);
-    alert('Error al guardar Discharge: ' + e.message);
+    console.error("❌ Error:", e);
+    alert('Error al guardar: ' + e.message);
   }
 }
     // ========================================
@@ -876,19 +881,22 @@ function closeProfileModal() {
                 💰 Free Money / Discharge
               </button>
 
-              <div class="flex gap-2 w-full">
+              <div style="display: flex; gap: 10px; width: 100%;">
                 <BaseButton 
                   variant="secondary" 
                   size="md" 
-                  class="modal-btn flex-1" 
+                  class="modal-btn"
+                  style="flex: 1;" 
                   @click="editBlock(selectedBlock)"
                 >
                   Editar
                 </BaseButton>
+                
                 <BaseButton 
                   variant="danger" 
                   size="md" 
-                  class="modal-btn flex-1" 
+                  class="modal-btn"
+                  style="flex: 1;" 
                   @click="deleteBlock(selectedBlock)"
                 >
                   Cancelar
