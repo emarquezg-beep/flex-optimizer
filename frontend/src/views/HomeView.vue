@@ -37,6 +37,14 @@ const activeWeek = ref(0)
 const showDischargeOptions = ref(false);
 const isProcessingJackpot = ref(false);
 
+// 👇 AGREGA "const props =" AL PRINCIPIO
+const props = defineProps({
+  block: {
+    type: Object,
+    required: true
+  },
+  // ... cualquier otra prop que tengas
+});
 // Configuración rápida de Commutes (Si no tienes el array completo de warehouses aquí)
 const WAREHOUSE_COMMUTES = {
   'VFL8': 23, 'VFL1': 28, 'DMO3': 20, 'DFL4': 18, 
