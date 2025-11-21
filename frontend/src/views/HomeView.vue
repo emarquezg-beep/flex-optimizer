@@ -395,14 +395,14 @@ async function processDischarge(type) {
     const payment = parseFloat(block.pago);
     const blockHours = parseFloat(block.duracion_horas) || 0;
 
-    // 1. Buscar Vehículo (Si falla, usa fallback)
+    // 1. Buscar Vehículo (Intento seguro)
     let vehicleNick = "Unknown";
     if (vehicles.value && vehicles.value.length > 0) {
         const v = vehicles.value.find(v => v.id === block.vehicle_id);
         if (v) vehicleNick = v.nickname;
     }
 
-    // 2. Payload
+    // 2. Payload Inicial (Para el POST)
     let payload = {
       fecha: block.fecha,
       hora: block.hora,
@@ -415,11 +415,12 @@ async function processDischarge(type) {
       user_id: userId.value,
       destination_address: 'Casa (Discharge)',
       is_free_money: true,
-      status: 0, // Intentamos enviarlo
+      status: 0, // Lo intentamos, aunque sabemos que el backend lo ignorará
       notes: type === 'station' ? '⚡ Station Discharge' : '🦄 Jackpot! Email',
       tax: (payment * 0.153).toFixed(2)
     };
 
+    // Configurar escenarios
     if (type === 'station') {
       const driveTimeMin = commuteOneWay * 2 * 2; 
       const totalHours = (driveTimeMin + 27) / 60;
@@ -430,34 +431,47 @@ async function processDischarge(type) {
 
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
-    // 🚀 PASO 1: CREAR (ESTO SÍ FUNCIONA)
+    // 🚀 PASO 1: CREAR (POST) - Esto asegura el dinero
     const createResponse = await fetchWithAuth(`${backendUrl}/api/log-route`, {
         method: 'POST',
         body: JSON.stringify(payload)
     });
     
-    // Verificamos si es HTML antes de parsear para evitar el error '<'
+    // Verificación de seguridad por si el servidor devuelve error HTML
     const contentType = createResponse.headers.get("content-type");
     if (contentType && contentType.indexOf("application/json") === -1) {
-       throw new Error("El servidor devolvió un error HTML en lugar de JSON.");
+       const text = await createResponse.text();
+       console.error("🔥 Error HTML recibido del servidor:", text.substring(0, 100));
+       throw new Error("El servidor devolvió un error inesperado (HTML).");
     }
 
     const createResult = await createResponse.json();
     if (!createResponse.ok) throw new Error(createResult.message);
 
-    // ✅ PASO 2: INTENTO SILENCIOSO DE ACTUALIZAR
-    // Intentamos arreglar el status, pero si falla, NO detenemos el flujo.
+    // ✅ PASO 2: EL CIERRE FANTASMA (PUT)
+    // Intentamos actualizar el status a 0 inmediatamente
     try {
         const newLogId = createResult.data?.[0]?.id;
+        
         if (newLogId) {
-            await fetchWithAuth(`${backendUrl}/api/log-route/${newLogId}`, {
+            console.log(`🔄 Ejecutando Cierre Fantasma para ID ${newLogId}...`);
+            
+            const updateResponse = await fetchWithAuth(`${backendUrl}/api/log-route/${newLogId}`, {
                 method: 'PUT', 
-                body: JSON.stringify({ status: 0, notes: payload.notes, vehiculo: vehicleNick })
+                body: JSON.stringify({ 
+                  status: 0, // ¡Aquí es donde ocurre la magia!
+                  notes: payload.notes, 
+                  vehiculo: vehicleNick 
+                })
             });
+            
+            // No necesitamos leer la respuesta, si falló, falló.
+            if (updateResponse.ok) console.log("✅ Cierre Fantasma Exitoso (Status 0)");
+            else console.warn("⚠️ El Cierre Fantasma no respondió OK, pero el registro existe.");
         }
     } catch (parcheError) {
-        console.warn("⚠️ El parche de status falló, pero el registro se guardó:", parcheError);
-        // No hacemos throw, dejamos que continúe al éxito
+        console.warn("⚠️ Error en el Cierre Fantasma (No crítico):", parcheError);
+        // Importante: NO lanzamos el error para no asustar al usuario. El registro ya existe.
     }
 
     // 🎉 ÉXITO (Siempre llegamos aquí si el Paso 1 funcionó)
