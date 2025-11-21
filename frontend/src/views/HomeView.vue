@@ -35,6 +35,7 @@ const activeWeek = ref(0)
 
 // --- AGREGAR EN TUS REFS/VARIABLES ---
 const showDischargeOptions = ref(false);
+const isProcessingJackpot = ref(false);
 
 // Configuración rápida de Commutes (Si no tienes el array completo de warehouses aquí)
 const WAREHOUSE_COMMUTES = {
@@ -380,112 +381,92 @@ function closeProfileModal() {
   showCompleteProfileModal.value = false
 }
 
-async function processDischarge(type) {
-  console.log("💰 INICIO: Procesando Discharge tipo:", type);
-
-  if (!selectedBlock.value) return;
+// ---------------------------------------------------------
+// 🚗 OPCIÓN 1: FUI A LA ESTACIÓN (Redirección a UploadView)
+// ---------------------------------------------------------
+function handleStationDischarge() {
+  // 1. Cerramos el modal
+  emit('close');
   
-  const { userId } = useAuth();
-  if (!userId.value) return;
+  // 2. Redirigimos a la calculadora potente con la bandera 'discharge'
+  router.push({
+    name: 'upload', // Asegúrate que este sea el nombre de la ruta en router.js
+    query: {
+      blockId: props.block.id,
+      mode: 'discharge', // 🚩 ESTA ES LA CLAVE
+      
+      // Datos vitales para pre-llenar
+      warehouse: props.block.warehouse,
+      hora: props.block.hora,
+      pago: props.block.pago,
+      duracion: props.block.duracion // Horas de nómina
+    }
+  });
+}
+
+// ---------------------------------------------------------
+// 🎰 OPCIÓN 2: JACKPOT (Email / No fui) - Ejecución Inmediata
+// ---------------------------------------------------------
+async function handleJackpot() {
+  if (!confirm("¿Confirmas que es un Jackpot (Email)? Se guardará con 0 millas y 0 tiempo.")) return;
+  
+  isProcessingJackpot.value = true;
+  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
   try {
-    const block = selectedBlock.value;
-    const whCode = block.warehouse;
-    const commuteOneWay = WAREHOUSE_COMMUTES[whCode] || 20; 
-    const payment = parseFloat(block.pago);
-    const blockHours = parseFloat(block.duracion_horas) || 0;
-
-    // 1. Buscar Vehículo (Intento seguro)
-    let vehicleNick = "Unknown";
-    if (vehicles.value && vehicles.value.length > 0) {
-        const v = vehicles.value.find(v => v.id === block.vehicle_id);
-        if (v) vehicleNick = v.nickname;
-    }
-
-    // 2. Payload Inicial (Para el POST)
-    let payload = {
-      fecha: block.fecha,
-      hora: block.hora,
-      vehicle_id: block.vehicle_id,
-      vehiculo: vehicleNick,
-      warehouse: whCode,
-      pago: payment,
-      pago_por_hora: blockHours > 0 ? (payment / blockHours).toFixed(2) : 0,
-      block_id: block.id,
-      user_id: userId.value,
-      destination_address: 'Casa (Discharge)',
+    // 1. Payload Directo (Sin Google Maps, todo en cero)
+    const payload = {
+      fecha: props.block.fecha,
+      hora: props.block.hora,
+      vehicle_id: props.block.vehicle_id,
+      warehouse: props.block.warehouse,
+      pago: props.block.pago,
+      user_id: userId.value, // Asegúrate de tener userId disponible (vía useAuth)
+      
+      // Datos Financieros (Jackpot Puro)
+      duracion_horas: props.block.duracion, // Nómina
+      tiempo_total: 0.01, // Simbólico
+      millas_totales: 0,
+      millas_de_trabajo: 0,
+      commute_1: 0,
+      commute_2: 0,
+      pago_real_por_hora: props.block.pago, // Líquido
+      gasto_de_gasolina: 0,
+      desgaste_vehiculo: 0,
+      
+      // Datos de Sistema
+      status: 0, // Finalizado
+      route_score: 100, // 🏆 Score Perfecto
       is_free_money: true,
-      status: 0, // Lo intentamos, aunque sabemos que el backend lo ignorará
-      notes: type === 'station' ? '⚡ Station Discharge' : '🦄 Jackpot! Email',
-      tax: (payment * 0.153).toFixed(2)
+      notes: 'Jackpot! Email Discharge',
+      
+      // Campos extra para compatibilidad
+      eta_normal: 'N/A',
+      primary_city: 'N/A'
     };
 
-    // Configurar escenarios
-    if (type === 'station') {
-      const driveTimeMin = commuteOneWay * 2 * 2; 
-      const totalHours = (driveTimeMin + 27) / 60;
-      payload = { ...payload, duracion_horas: 0, millas_de_trabajo: 0, commute_1: commuteOneWay, commute_2: commuteOneWay, millas_totales: commuteOneWay * 2, tiempo_total: totalHours.toFixed(2), pago_real_por_hora: (payment / totalHours).toFixed(2), gasto_de_gasolina: ((commuteOneWay * 2) / 35 * 3.00).toFixed(2), desgaste_vehiculo: ((commuteOneWay * 2) * 0.25).toFixed(2), route_score: 95 };
-    } else {
-      payload = { ...payload, duracion_horas: 0, millas_de_trabajo: 0, commute_1: 0, commute_2: 0, millas_totales: 0, tiempo_total: 0.01, pago_real_por_hora: payment, gasto_de_gasolina: 0, desgaste_vehiculo: 0, route_score: 100 };
-    }
-
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
-    // 🚀 PASO 1: CREAR (POST) - Esto asegura el dinero
-    const createResponse = await fetchWithAuth(`${backendUrl}/api/log-route`, {
-        method: 'POST',
-        body: JSON.stringify(payload)
+    // 2. Guardar en Bitácora
+    const logRes = await fetchWithAuth(`${backendUrl}/api/log-route`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
     });
     
-    // Verificación de seguridad por si el servidor devuelve error HTML
-    const contentType = createResponse.headers.get("content-type");
-    if (contentType && contentType.indexOf("application/json") === -1) {
-       const text = await createResponse.text();
-       console.error("🔥 Error HTML recibido del servidor:", text.substring(0, 100));
-       throw new Error("El servidor devolvió un error inesperado (HTML).");
-    }
+    if (!logRes.ok) throw new Error('Error guardando en bitácora');
 
-    const createResult = await createResponse.json();
-    if (!createResponse.ok) throw new Error(createResult.message);
+    // 3. Eliminar de la Agenda (Limpieza)
+    await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${props.block.id}`, {
+      method: 'DELETE'
+    });
 
-    // ✅ PASO 2: EL CIERRE FANTASMA (PUT)
-    // Intentamos actualizar el status a 0 inmediatamente
-    try {
-        const newLogId = createResult.data?.[0]?.id;
-        
-        if (newLogId) {
-            console.log(`🔄 Ejecutando Cierre Fantasma para ID ${newLogId}...`);
-            
-            const updateResponse = await fetchWithAuth(`${backendUrl}/api/log-route/${newLogId}`, {
-                method: 'PUT', 
-                body: JSON.stringify({ 
-                  status: 0, // ¡Aquí es donde ocurre la magia!
-                  notes: payload.notes, 
-                  vehiculo: vehicleNick 
-                })
-            });
-            
-            // No necesitamos leer la respuesta, si falló, falló.
-            if (updateResponse.ok) console.log("✅ Cierre Fantasma Exitoso (Status 0)");
-            else console.warn("⚠️ El Cierre Fantasma no respondió OK, pero el registro existe.");
-        }
-    } catch (parcheError) {
-        console.warn("⚠️ Error en el Cierre Fantasma (No crítico):", parcheError);
-        // Importante: NO lanzamos el error para no asustar al usuario. El registro ya existe.
-    }
-
-    // 🎉 ÉXITO (Siempre llegamos aquí si el Paso 1 funcionó)
-    alert(type === 'jackpot' ? '🦄 ¡JACKPOT REGISTRADO!' : '💰 Discharge registrado exitosamente');
-    
-    showDischargeOptions.value = false;
-    if (typeof closeModal === 'function') closeModal(); 
-    else selectedBlock.value = null; 
-    
-    window.location.reload();
+    alert('🎰 JACKPOT REGISTRADO! Bloque movido al historial. 💰');
+    emit('refresh'); 
+    emit('close');
 
   } catch (e) {
-    console.error("❌ Error CRÍTICO:", e);
-    alert('Error: ' + e.message);
+    console.error(e);
+    alert('Error en Jackpot: ' + e.message);
+  } finally {
+    isProcessingJackpot.value = false;
   }
 }
 </script>
@@ -868,65 +849,45 @@ async function processDischarge(type) {
             </div>
           </div>
           
- <div class="modal-actions">
+          <div class="modal-actions">
             
             <template v-if="!showDischargeOptions">
-              <BaseButton 
-                v-if="!isNextWeekBlock"
-                variant="primary" 
-                size="md" 
-                class="modal-btn w-full" 
-                @click="startBlock(selectedBlock)"
-              >
+              <button @click="startRoute" class="btn-primary">
                 🚀 Iniciar Ruta
-              </BaseButton>
-
-              <button 
-                v-if="!isNextWeekBlock"
-                class="btn-gold modal-btn w-full" 
-                @click="showDischargeOptions = true"
-              >
+              </button>
+              
+              <button @click="showDischargeOptions = true" class="btn-gold">
                 💰 Free Money / Discharge
               </button>
 
-              <div style="display: flex; gap: 10px; width: 100%;">
-                <BaseButton 
-                  variant="secondary" 
-                  size="md" 
-                  class="modal-btn"
-                  style="flex: 1;" 
-                  @click="editBlock(selectedBlock)"
-                >
-                  Editar
-                </BaseButton>
-                
-                <BaseButton 
-                  variant="danger" 
-                  size="md" 
-                  class="modal-btn"
-                  style="flex: 1;" 
-                  @click="deleteBlock(selectedBlock)"
-                >
-                  Cancelar
-                </BaseButton>
+              <div class="row-buttons">
+                <button @click="editBlock" class="btn-secondary">Editar</button>
+                <button @click="deleteBlock" class="btn-danger">Cancelar Bloque</button>
               </div>
             </template>
 
             <template v-else>
               <div class="discharge-panel">
-                <h4 class="text-center mb-2 font-bold text-gray-700">¿Tuviste que ir a la estación?</h4>
-                <p class="text-xs text-center text-gray-500 mb-4">Para calcular tus gastos reales</p>
+                <h4>🤑 ¡Qué suerte! ¿Qué pasó?</h4>
                 
-                <button @click="processDischarge('station')" class="btn-blue-outline mb-2 w-full">
-                  🚗 Sí, fui y esperé (27 min)
+                <button @click="handleStationDischarge" class="btn-option car-option">
+                  <div class="icon">🚗</div>
+                  <div class="text">
+                    <strong>Fui a la Estación</strong>
+                    <small>Calcula tráfico real y espera (27 min)</small>
+                  </div>
                 </button>
                 
-                <button @click="processDischarge('jackpot')" class="btn-green-outline mb-3 w-full">
-                  🎰 No, cancelaron por email
+                <button @click="handleJackpot" class="btn-option email-option">
+                  <div class="icon">📧</div>
+                  <div class="text">
+                    <strong>Email / No Fui (Jackpot)</strong>
+                    <small>0 millas • 0 tiempo • $$ Líquido</small>
+                  </div>
                 </button>
                 
-                <button @click="showDischargeOptions = false" class="text-xs text-gray-500 underline w-full text-center">
-                  Volver atrás
+                <button @click="showDischargeOptions = false" class="btn-text">
+                  « Volver
                 </button>
               </div>
             </template>
@@ -1540,5 +1501,75 @@ async function processDischarge(type) {
 .btn-green-outline {
   border: 1px solid #10b981; color: #10b981; background: white;
   padding: 8px; border-radius: 6px; font-weight: 600;
+}
+.btn-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+  color: white;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: none;
+  padding: 14px;
+  border-radius: 8px;
+  width: 100%;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+  transition: transform 0.2s;
+}
+.btn-gold:active { transform: scale(0.98); }
+
+.discharge-panel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 15px;
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.discharge-panel h4 {
+  color: #0f172a;
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+.btn-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.btn-option .icon { font-size: 1.5rem; margin-right: 12px; }
+.btn-option .text { display: flex; flex-direction: column; }
+.btn-option strong { font-size: 0.95rem; }
+.btn-option small { font-size: 0.75rem; opacity: 0.8; }
+
+/* Estilo Opción Carro */
+.car-option {
+  background: white;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+.car-option:hover { border-color: #3b82f6; background: #eff6ff; }
+
+/* Estilo Opción Email (Jackpot) */
+.email-option {
+  background: #ecfdf5; /* Verde muy claro */
+  border-color: #6ee7b7;
+  color: #065f46;
+}
+.email-option:hover { background: #d1fae5; border-color: #10b981; }
+
+.btn-text {
+  background: none; border: none; color: #64748b; 
+  font-size: 0.9rem; margin-top: 5px; cursor: pointer; text-decoration: underline;
 }
 </style>
