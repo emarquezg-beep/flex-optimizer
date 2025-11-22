@@ -220,6 +220,7 @@ function closeBlockModal() {
   showBlockModal.value = false
   selectedBlock.value = null
   isNextWeekBlock.value = false
+  showDischargeOptions.value = false
 }
 
 async function startBlock(block) {
@@ -393,21 +394,26 @@ function closeProfileModal() {
 // 🚗 OPCIÓN 1: FUI A LA ESTACIÓN (Redirección a UploadView)
 // ---------------------------------------------------------
 function handleStationDischarge() {
-  // 1. Cerramos el modal
-  emit('close');
-  
-  // 2. Redirigimos a la calculadora potente con la bandera 'discharge'
+  // Validar que tengamos un bloque seleccionado
+  if (!selectedBlock.value) return;
+
+  // Cerrar el modal (asumiendo que tienes una variable showBlockModal)
+  // showBlockModal.value = false; 
+  // O si usas una función close:
+  closeBlockModal(); 
+
+  // Redirigir con la bandera mágica
   router.push({
-    name: 'upload', // Asegúrate que este sea el nombre de la ruta en router.js
+    name: 'upload', // Asegúrate que este sea el nombre en tu router
     query: {
-      blockId: props.block.id,
-      mode: 'discharge', // 🚩 ESTA ES LA CLAVE
+      blockId: selectedBlock.value.id,
+      mode: 'discharge', // 🚩 LA BANDERA MÁGICA
       
-      // Datos vitales para pre-llenar
-      warehouse: props.block.warehouse,
-      hora: props.block.hora,
-      pago: props.block.pago,
-      duracion: props.block.duracion // Horas de nómina
+      // Datos pre-cargados
+      warehouse: selectedBlock.value.warehouse,
+      hora: selectedBlock.value.hora,
+      pago: selectedBlock.value.pago,
+      duracion: selectedBlock.value.duracion
     }
   });
 }
@@ -416,44 +422,48 @@ function handleStationDischarge() {
 // 🎰 OPCIÓN 2: JACKPOT (Email / No fui) - Ejecución Inmediata
 // ---------------------------------------------------------
 async function handleJackpot() {
+  if (!selectedBlock.value) return;
+  
   if (!confirm("¿Confirmas que es un Jackpot (Email)? Se guardará con 0 millas y 0 tiempo.")) return;
   
   isProcessingJackpot.value = true;
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
   try {
-    // 1. Payload Directo (Sin Google Maps, todo en cero)
+    const block = selectedBlock.value; // Alias para escribir menos
+
+    // 1. Payload Directo
     const payload = {
-      fecha: props.block.fecha,
-      hora: props.block.hora,
-      vehicle_id: props.block.vehicle_id,
-      warehouse: props.block.warehouse,
-      pago: props.block.pago,
-      user_id: userId.value, // Asegúrate de tener userId disponible (vía useAuth)
+      fecha: block.fecha,
+      hora: block.hora,
+      vehicle_id: block.vehicle_id,
+      warehouse: block.warehouse,
+      pago: block.pago,
+      user_id: userId.value, // Asegúrate de tener userId disponible
       
       // Datos Financieros (Jackpot Puro)
-      duracion_horas: props.block.duracion, // Nómina
-      tiempo_total: 0.01, // Simbólico
+      duracion_horas: block.duracion,
+      tiempo_total: 0.01,
       millas_totales: 0,
       millas_de_trabajo: 0,
       commute_1: 0,
       commute_2: 0,
-      pago_real_por_hora: props.block.pago, // Líquido
+      pago_real_por_hora: block.pago,
       gasto_de_gasolina: 0,
       desgaste_vehiculo: 0,
       
       // Datos de Sistema
       status: 0, // Finalizado
-      route_score: 100, // 🏆 Score Perfecto
+      route_score: 100, // 🏆
       is_free_money: true,
       notes: 'Jackpot! Email Discharge',
       
-      // Campos extra para compatibilidad
+      // Compatibilidad
       eta_normal: 'N/A',
       primary_city: 'N/A'
     };
 
-    // 2. Guardar en Bitácora
+    // 2. Guardar en Routes
     const logRes = await fetchWithAuth(`${backendUrl}/api/log-route`, {
       method: 'POST',
       body: JSON.stringify(payload)
@@ -461,14 +471,19 @@ async function handleJackpot() {
     
     if (!logRes.ok) throw new Error('Error guardando en bitácora');
 
-    // 3. Eliminar de la Agenda (Limpieza)
-    await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${props.block.id}`, {
+    // 3. Eliminar de Scheduled Blocks
+    await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${block.id}`, {
       method: 'DELETE'
     });
 
-    alert('🎰 JACKPOT REGISTRADO! Bloque movido al historial. 💰');
-    emit('refresh'); 
-    emit('close');
+    alert('🎰 JACKPOT REGISTRADO! 💰');
+    
+    // Refrescar la lista de bloques (Asumo que tienes una función fetchBlocks)
+    if (typeof fetchBlocks === 'function') {
+        await fetchBlocks();
+    }
+    
+    closeBlockModal(); // Cerrar modal
 
   } catch (e) {
     console.error(e);
@@ -860,37 +875,41 @@ async function handleJackpot() {
           <div class="modal-actions">
             
             <template v-if="!showDischargeOptions">
-              <button @click="startRoute" class="btn-primary">
-                🚀 Iniciar Ruta
+              <button 
+                @click="iniciarRuta(selectedBlock)" 
+                class="btn-primary w-full mb-2"
+              >
+                Iniciar Ruta
               </button>
               
-              <button @click="showDischargeOptions = true" class="btn-gold">
+              <button 
+                @click="showDischargeOptions = true" 
+                class="btn-gold w-full mb-2"
+              >
                 💰 Free Money / Discharge
               </button>
 
-              <div class="row-buttons">
-                <button @click="editBlock" class="btn-secondary">Editar</button>
-                <button @click="deleteBlock" class="btn-danger">Cancelar Bloque</button>
-              </div>
+              <button @click="editarBloque" class="btn-secondary w-full mb-2">Editar</button>
+              <button @click="cancelarBloque" class="btn-danger w-full">Cancelar</button>
             </template>
 
             <template v-else>
               <div class="discharge-panel">
-                <h4>🤑 ¡Qué suerte! ¿Qué pasó?</h4>
+                <h4 class="discharge-title">🤑 ¡Qué suerte! ¿Qué pasó?</h4>
                 
                 <button @click="handleStationDischarge" class="btn-option car-option">
-                  <div class="icon">🚗</div>
-                  <div class="text">
+                  <span class="icon">🚗</span>
+                  <div class="text-col">
                     <strong>Fui a la Estación</strong>
-                    <small>Calcula tráfico real y espera (27 min)</small>
+                    <small>Calcula espera y tráfico real</small>
                   </div>
                 </button>
                 
-                <button @click="handleJackpot" class="btn-option email-option">
-                  <div class="icon">📧</div>
-                  <div class="text">
-                    <strong>Email / No Fui (Jackpot)</strong>
-                    <small>0 millas • 0 tiempo • $$ Líquido</small>
+                <button @click="handleJackpot" class="btn-option email-option" :disabled="isProcessingJackpot">
+                  <span class="icon">📧</span>
+                  <div class="text-col">
+                    <strong>Email / No Fui</strong>
+                    <small>Jackpot Puro (0 mi • 0 min)</small>
                   </div>
                 </button>
                 
@@ -900,7 +919,7 @@ async function handleJackpot() {
               </div>
             </template>
 
-          </div>
+          </div>    
         </div>
       </div>
     </Teleport>
@@ -1579,5 +1598,68 @@ async function handleJackpot() {
 .btn-text {
   background: none; border: none; color: #64748b; 
   font-size: 0.9rem; margin-top: 5px; cursor: pointer; text-decoration: underline;
+}
+
+/* BOTONES FREE MONEY */
+.btn-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+  color: white;
+  font-weight: bold;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(217, 119, 6, 0.3);
+}
+
+.discharge-panel {
+  background: #f1f5f9; /* Fondo gris claro */
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 10px;
+  text-align: center;
+}
+
+.discharge-title {
+  color: #0f172a;
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.1rem;
+}
+
+.btn-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-align: left;
+}
+
+.icon { font-size: 1.5rem; margin-right: 15px; }
+.text-col { display: flex; flex-direction: column; }
+.text-col strong { font-size: 0.95rem; color: #1e293b; }
+.text-col small { font-size: 0.75rem; color: #64748b; }
+
+/* Car Option Style */
+.car-option {
+  background: white;
+  border-color: #cbd5e1;
+}
+.car-option:hover { border-color: #3b82f6; background: #eff6ff; }
+
+/* Jackpot Option Style */
+.email-option {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+}
+.email-option:hover { background: #d1fae5; border-color: #10b981; }
+
+.btn-text {
+  background: none; border: none; color: #64748b;
+  text-decoration: underline; cursor: pointer; font-size: 0.9rem;
 }
 </style>
