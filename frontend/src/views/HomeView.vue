@@ -430,38 +430,55 @@ async function handleJackpot() {
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
   try {
-    const block = selectedBlock.value; // Alias para escribir menos
+    const block = selectedBlock.value; 
+    
+    // 🧮 PRE-CÁLCULOS PARA EVITAR NULLS
+    const duration = parseFloat(block.duracion) || 0;
+    const payment = parseFloat(block.pago) || 0;
+    const payPerHour = duration > 0 ? (payment / duration) : 0;
+    const taxCalc = payment * 0.153; // 15.3% tax estandar
 
-    // 1. Payload Directo
+    // 1. Payload Directo (Calculado manualmente)
     const payload = {
+      // Datos Identificadores
       fecha: block.fecha,
       hora: block.hora,
-      vehicle_id: block.vehicle_id,
+      vehicle_id: block.vehicle_id, // UUID del vehículo
       warehouse: block.warehouse,
-      pago: block.pago,
-      user_id: userId.value, // Asegúrate de tener userId disponible
+      user_id: userId.value, 
       
-      // Datos Financieros (Jackpot Puro)
-      duracion_horas: block.duracion,
-      tiempo_total: 0.01,
+      // Datos Financieros del Bloque (Lo prometido)
+      pago: payment,
+      duracion_horas: duration, // ✅ Corregido: Pasamos el valor limpio
+      pago_por_hora: payPerHour.toFixed(2), // ✅ Corregido: Calculado
+      
+      // Datos Reales del "Trabajo" (La realidad del Jackpot)
+      tiempo_total: 0.01, // Mínimo simbólico
       millas_totales: 0,
       millas_de_trabajo: 0,
       commute_1: 0,
       commute_2: 0,
-      pago_real_por_hora: block.pago,
+      pago_real_por_hora: payment, // Al ser 0 horas, el pago real es el total
+      
+      // Gastos e Impuestos
       gasto_de_gasolina: 0,
       desgaste_vehiculo: 0,
+      tax: taxCalc.toFixed(2), // ✅ Corregido: Calculado
+      claim_por_milla: 0,      // 0 millas = 0 deducción :(
       
-      // Datos de Sistema
-      status: 0, // Finalizado
-      route_score: 100, // 🏆
+      // Estado y Sistema
+      status: 0, // ✅ FORZADO A CERO (Finalizado)
+      route_score: 100, 
       is_free_money: true,
       notes: 'Jackpot! Email Discharge',
       
-      // Compatibilidad
+      // Campos de relleno para evitar errores de API
       eta_normal: 'N/A',
-      primary_city: 'N/A'
+      primary_city: 'N/A',
+      stops_json: [] // Array vacío explícito
     };
+
+    console.log("📤 Enviando Payload Jackpot:", payload); // Para depurar si falla de nuevo
 
     // 2. Guardar en Routes
     const logRes = await fetchWithAuth(`${backendUrl}/api/log-route`, {
@@ -469,25 +486,28 @@ async function handleJackpot() {
       body: JSON.stringify(payload)
     });
     
-    if (!logRes.ok) throw new Error('Error guardando en bitácora');
+    const logResult = await logRes.json();
+
+    if (!logRes.ok) {
+        throw new Error(logResult.message || 'Error guardando en bitácora');
+    }
 
     // 3. Eliminar de Scheduled Blocks
     await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${block.id}`, {
       method: 'DELETE'
     });
 
-    alert('🎰 JACKPOT REGISTRADO! 💰');
+    alert('🎰 JACKPOT REGISTRADO EXITOSAMENTE 💰');
     
-    // Refrescar la lista de bloques (Asumo que tienes una función fetchBlocks)
+    // 4. Refrescar UI
     if (typeof fetchBlocks === 'function') {
         await fetchBlocks();
     }
-    
-    closeBlockModal(); // Cerrar modal
+    closeBlockModal(); 
 
   } catch (e) {
-    console.error(e);
-    alert('Error en Jackpot: ' + e.message);
+    console.error("Error Jackpot:", e);
+    alert('Error al procesar Jackpot: ' + e.message);
   } finally {
     isProcessingJackpot.value = false;
   }
