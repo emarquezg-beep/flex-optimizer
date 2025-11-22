@@ -419,7 +419,7 @@ function handleStationDischarge() {
 }
 
 // ---------------------------------------------------------
-// 🎰 OPCIÓN 2: JACKPOT (Email / No fui) - Ejecución Inmediata
+// 🎰 OPCIÓN 2: JACKPOT (Email / No fui) - CORREGIDO
 // ---------------------------------------------------------
 async function handleJackpot() {
   if (!selectedBlock.value) return;
@@ -432,78 +432,95 @@ async function handleJackpot() {
   try {
     const block = selectedBlock.value; 
     
-    // 🧮 PRE-CÁLCULOS PARA EVITAR NULLS
-    const duration = parseFloat(block.duracion) || 0;
+    // 1. Obtener hora actual formateada para que el servidor no explote
+    // Formato necesario: "HH:MM AM" (ej: "10:30 AM")
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit', 
+      hour12: true 
+    });
+
+    // 2. Cálculos seguros
+    // Limpiamos la duración (quitamos la 'h' si viene como string "4h")
+    const durationStr = String(block.duracion || '0').replace(/[^\d.]/g, '');
+    const duration = parseFloat(durationStr) || 0;
+    
     const payment = parseFloat(block.pago) || 0;
     const payPerHour = duration > 0 ? (payment / duration) : 0;
-    const taxCalc = payment * 0.153; // 15.3% tax estandar
+    const taxCalc = payment * 0.153;
 
-    // 1. Payload Directo (Calculado manualmente)
+    // 3. Payload Blindado 🛡️
     const payload = {
-      // Datos Identificadores
+      // Identificación
       fecha: block.fecha,
       hora: block.hora,
-      vehicle_id: block.vehicle_id, // UUID del vehículo
+      vehicle_id: block.vehicle_id,
       warehouse: block.warehouse,
-      user_id: userId.value, 
+      user_id: userId.value,
       
-      // Datos Financieros del Bloque (Lo prometido)
+      // Finanzas
       pago: payment,
-      duracion_horas: duration, // ✅ Corregido: Pasamos el valor limpio
-      pago_por_hora: payPerHour.toFixed(2), // ✅ Corregido: Calculado
+      duracion_horas: duration, 
+      pago_por_hora: payPerHour.toFixed(2),
       
-      // Datos Reales del "Trabajo" (La realidad del Jackpot)
-      tiempo_total: 0.01, // Mínimo simbólico
+      // Datos Reales "Jackpot"
+      tiempo_total: 0.01,
       millas_totales: 0,
       millas_de_trabajo: 0,
       commute_1: 0,
       commute_2: 0,
-      pago_real_por_hora: payment, // Al ser 0 horas, el pago real es el total
+      pago_real_por_hora: payment, 
       
-      // Gastos e Impuestos
+      // Gastos
       gasto_de_gasolina: 0,
       desgaste_vehiculo: 0,
-      tax: taxCalc.toFixed(2), // ✅ Corregido: Calculado
-      claim_por_milla: 0,      // 0 millas = 0 deducción :(
+      tax: taxCalc.toFixed(2),
+      claim_por_milla: 0,
       
-      // Estado y Sistema
-      status: 0, // ✅ FORZADO A CERO (Finalizado)
+      // Estado
+      status: 0, // Finalizado
       route_score: 100, 
       is_free_money: true,
-      notes: 'Jackpot! Email Discharge',
+      notes: 'Jackpot! Email Discharge', // Ahora sí se guardará
       
-      // Campos de relleno para evitar errores de API
-      eta_normal: 'N/A',
+      // 🔥 FIX CRÍTICO: ETAs ficticios para que el server no explote
+      eta_normal: timeString,     // ej: "10:30 AM"
+      eta_optimista: timeString,  // Mismo valor
+      eta_pesimista: timeString,  // Mismo valor
+      
       primary_city: 'N/A',
-      stops_json: [] // Array vacío explícito
+      stops_json: [] 
     };
 
-    console.log("📤 Enviando Payload Jackpot:", payload); // Para depurar si falla de nuevo
+    console.log("📤 Enviando Payload Jackpot:", payload);
 
-    // 2. Guardar en Routes
+    // 4. Guardar
     const logRes = await fetchWithAuth(`${backendUrl}/api/log-route`, {
       method: 'POST',
       body: JSON.stringify(payload)
     });
     
-    const logResult = await logRes.json();
-
     if (!logRes.ok) {
-        throw new Error(logResult.message || 'Error guardando en bitácora');
+        const errData = await logRes.json();
+        throw new Error(errData.message || 'Error guardando en bitácora');
     }
 
-    // 3. Eliminar de Scheduled Blocks
+    // 5. Borrar de la Agenda
     await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${block.id}`, {
       method: 'DELETE'
     });
 
-    alert('🎰 JACKPOT REGISTRADO EXITOSAMENTE 💰');
+    alert('🎰 JACKPOT GUARDADO! Bloque cerrado correctamente.');
     
-    // 4. Refrescar UI
-    if (typeof fetchBlocks === 'function') {
-        await fetchBlocks();
-    }
-    closeBlockModal(); 
+    if (typeof fetchBlocks === 'function') await fetchBlocks();
+    
+    // Cerrar modal y resetear vista
+    showDischargeOptions.value = false; 
+    // Si tienes una función para cerrar el modal, úsala:
+    // closeBlockModal(); 
+    // Si no, reseteamos la selección manualmente:
+    selectedBlock.value = null;
 
   } catch (e) {
     console.error("Error Jackpot:", e);
