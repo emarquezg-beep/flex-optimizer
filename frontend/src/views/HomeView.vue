@@ -772,21 +772,32 @@ function closeProfileModal() {
           </div>
           
           <div class="modal-actions">
-            <button 
-              @click="iniciarRuta(selectedBlock)" 
-              class="btn-primary w-full mb-2"
+            <!-- 🆕 Botón "Iniciar Ruta" solo para bloques de la semana actual -->
+            <BaseButton 
+              v-if="!isNextWeekBlock"
+              variant="primary" 
+              size="md" 
+              class="modal-btn"
+              @click="startBlock(selectedBlock)"
             >
-              🚀 Iniciar Ruta
-            </button>
-
-            <div style="display: flex; gap: 10px;">
-              <button @click="editarBloque" class="btn-secondary" style="flex: 1;">
-                Editar
-              </button>
-              <button @click="cancelarBloque" class="btn-danger" style="flex: 1;">
-                Cancelar
-              </button>
-            </div>
+              Iniciar Ruta
+            </BaseButton>
+            <BaseButton 
+              variant="secondary" 
+              size="md" 
+              class="modal-btn"
+              @click="editBlock(selectedBlock)"
+            >
+              Editar
+            </BaseButton>
+            <BaseButton 
+              variant="danger" 
+              size="md" 
+              class="modal-btn"
+              @click="deleteBlock(selectedBlock)"
+            >
+              Cancelar
+            </BaseButton>
           </div>
         </div>
       </div>
