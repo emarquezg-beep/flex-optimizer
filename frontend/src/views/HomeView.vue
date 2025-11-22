@@ -390,145 +390,7 @@ function closeProfileModal() {
   showCompleteProfileModal.value = false
 }
 
-// ---------------------------------------------------------
-// 🚗 OPCIÓN 1: FUI A LA ESTACIÓN (Redirección a UploadView)
-// ---------------------------------------------------------
-function handleStationDischarge() {
-  // Validar que tengamos un bloque seleccionado
-  if (!selectedBlock.value) return;
 
-  // Cerrar el modal (asumiendo que tienes una variable showBlockModal)
-  // showBlockModal.value = false; 
-  // O si usas una función close:
-  closeBlockModal(); 
-
-  // Redirigir con la bandera mágica
-  router.push({
-    name: 'upload', // Asegúrate que este sea el nombre en tu router
-    query: {
-      blockId: selectedBlock.value.id,
-      mode: 'discharge', // 🚩 LA BANDERA MÁGICA
-      
-      // Datos pre-cargados
-      warehouse: selectedBlock.value.warehouse,
-      hora: selectedBlock.value.hora,
-      pago: selectedBlock.value.pago,
-      duracion: selectedBlock.value.duracion
-    }
-  });
-}
-
-// ---------------------------------------------------------
-// 🎰 OPCIÓN 2: JACKPOT (Email / No fui) - CORREGIDO
-// ---------------------------------------------------------
-async function handleJackpot() {
-  if (!selectedBlock.value) return;
-  
-  if (!confirm("¿Confirmas que es un Jackpot (Email)? Se guardará con 0 millas y 0 tiempo.")) return;
-  
-  isProcessingJackpot.value = true;
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
-  try {
-    const block = selectedBlock.value; 
-    
-    // 1. Obtener hora actual formateada para que el servidor no explote
-    // Formato necesario: "HH:MM AM" (ej: "10:30 AM")
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit', 
-      hour12: true 
-    });
-
-    // 2. Cálculos seguros
-    // Limpiamos la duración (quitamos la 'h' si viene como string "4h")
-    const durationStr = String(block.duracion || '0').replace(/[^\d.]/g, '');
-    const duration = parseFloat(durationStr) || 0;
-    
-    const payment = parseFloat(block.pago) || 0;
-    const payPerHour = duration > 0 ? (payment / duration) : 0;
-    const taxCalc = payment * 0.153;
-
-    // 3. Payload Blindado 🛡️
-    const payload = {
-      // Identificación
-      fecha: block.fecha,
-      hora: block.hora,
-      vehicle_id: block.vehicle_id,
-      warehouse: block.warehouse,
-      user_id: userId.value,
-      
-      // Finanzas
-      pago: payment,
-      duracion_horas: duration, 
-      pago_por_hora: payPerHour.toFixed(2),
-      
-      // Datos Reales "Jackpot"
-      tiempo_total: 0.01,
-      millas_totales: 0,
-      millas_de_trabajo: 0,
-      commute_1: 0,
-      commute_2: 0,
-      pago_real_por_hora: payment, 
-      
-      // Gastos
-      gasto_de_gasolina: 0,
-      desgaste_vehiculo: 0,
-      tax: taxCalc.toFixed(2),
-      claim_por_milla: 0,
-      
-      // Estado
-      status: 0, // Finalizado
-      route_score: 100, 
-      is_free_money: true,
-      notes: 'Jackpot! Email Discharge', // Ahora sí se guardará
-      
-      // 🔥 FIX CRÍTICO: ETAs ficticios para que el server no explote
-      eta_normal: timeString,     // ej: "10:30 AM"
-      eta_optimista: timeString,  // Mismo valor
-      eta_pesimista: timeString,  // Mismo valor
-      
-      primary_city: 'N/A',
-      stops_json: [] 
-    };
-
-    console.log("📤 Enviando Payload Jackpot:", payload);
-
-    // 4. Guardar
-    const logRes = await fetchWithAuth(`${backendUrl}/api/log-route`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    
-    if (!logRes.ok) {
-        const errData = await logRes.json();
-        throw new Error(errData.message || 'Error guardando en bitácora');
-    }
-
-    // 5. Borrar de la Agenda
-    await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${block.id}`, {
-      method: 'DELETE'
-    });
-
-    alert('🎰 JACKPOT GUARDADO! Bloque cerrado correctamente.');
-    
-    if (typeof fetchBlocks === 'function') await fetchBlocks();
-    
-    // Cerrar modal y resetear vista
-    showDischargeOptions.value = false; 
-    // Si tienes una función para cerrar el modal, úsala:
-    // closeBlockModal(); 
-    // Si no, reseteamos la selección manualmente:
-    selectedBlock.value = null;
-
-  } catch (e) {
-    console.error("Error Jackpot:", e);
-    alert('Error al procesar Jackpot: ' + e.message);
-  } finally {
-    isProcessingJackpot.value = false;
-  }
-}
 </script>
 
 <template>
@@ -910,53 +772,22 @@ async function handleJackpot() {
           </div>
           
           <div class="modal-actions">
-            
-            <template v-if="!showDischargeOptions">
-              <button 
-                @click="iniciarRuta(selectedBlock)" 
-                class="btn-primary w-full mb-2"
-              >
-                Iniciar Ruta
+            <button 
+              @click="iniciarRuta(selectedBlock)" 
+              class="btn-primary w-full mb-2"
+            >
+              🚀 Iniciar Ruta
+            </button>
+
+            <div style="display: flex; gap: 10px;">
+              <button @click="editarBloque" class="btn-secondary" style="flex: 1;">
+                Editar
               </button>
-              
-              <button 
-                @click="showDischargeOptions = true" 
-                class="btn-gold w-full mb-2"
-              >
-                💰 Free Money / Discharge
+              <button @click="cancelarBloque" class="btn-danger" style="flex: 1;">
+                Cancelar
               </button>
-
-              <button @click="editarBloque" class="btn-secondary w-full mb-2">Editar</button>
-              <button @click="cancelarBloque" class="btn-danger w-full">Cancelar</button>
-            </template>
-
-            <template v-else>
-              <div class="discharge-panel">
-                <h4 class="discharge-title">🤑 ¡Qué suerte! ¿Qué pasó?</h4>
-                
-                <button @click="handleStationDischarge" class="btn-option car-option">
-                  <span class="icon">🚗</span>
-                  <div class="text-col">
-                    <strong>Fui a la Estación</strong>
-                    <small>Calcula espera y tráfico real</small>
-                  </div>
-                </button>
-                
-                <button @click="handleJackpot" class="btn-option email-option" :disabled="isProcessingJackpot">
-                  <span class="icon">📧</span>
-                  <div class="text-col">
-                    <strong>Email / No Fui</strong>
-                    <small>Jackpot Puro (0 mi • 0 min)</small>
-                  </div>
-                </button>
-                
-                <button @click="showDischargeOptions = false" class="btn-text">
-                  « Volver
-                </button>
-              </div>
-            </template>
-
-          </div>    
+            </div>
+          </div>
         </div>
       </div>
     </Teleport>

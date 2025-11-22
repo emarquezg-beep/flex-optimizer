@@ -179,9 +179,12 @@ const routeProgress = computed(() => {
   return Math.round(((total - remaining) / total) * 100)
 })
 
+/*
 const canComplete = computed(() => {
   return liveETAs.value !== null
 })
+*/
+const canComplete = computed(() => true)  
 </script>
 
 <template>
