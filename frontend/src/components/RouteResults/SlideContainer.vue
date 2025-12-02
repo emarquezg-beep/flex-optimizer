@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router'; // 👈 Importante para redirigir
 import SummarySlide from './SummarySlide.vue';
 import FinancialSlide from './FinancialSlide.vue';
 import RouteSegmentsSlide from './RouteSegmentsSlide.vue';
+import DestinationSlide from './DestinationSlide.vue'; // 👈 NUEVO
 import TimeSlide from './TimeSlide.vue';
 
 const props = defineProps({
@@ -57,6 +58,10 @@ const goHome = () => {
           :selectedScenario="currentSelection"
           @update:selectedScenario="val => currentSelection = val"
         />
+      </swiper-slide>
+      
+      <swiper-slide>
+        <DestinationSlide :data="selectedData" />
       </swiper-slide>
 
       <swiper-slide>
