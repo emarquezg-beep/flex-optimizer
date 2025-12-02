@@ -904,6 +904,24 @@ function calculateLogData(scenarioKey) {
   // Texto de cálculo matemático
   const calcText = `${numero_paradas} stops × ${mult.toFixed(2)} + ${regularApts} apts × 0.75 + ${totalDtInReport} DT × 3`;
 
+  // 📐 CÁLCULO DE TRAMOS REALES
+  // 1. Ida: Almacén -> Primera Parada (Datos crudos de Google)
+  const leg1_dist = parseFloat(chosenReport.toStart.distance) || 0;
+  const leg1_time = Math.round(parseFloat(chosenReport.toStart.duration) || 0);
+
+  // 2. Ejecución: Primera -> Última (Manejo interno + Tiempo en paradas)
+  // totalWorkDuration ya incluye: Manejo Total + Extras por Apts/DT
+  // Le restamos la ida (leg1) y le sumamos el tiempo base por parada (ARIA)
+  const work_drive_plus_extras = chosenReport.totalWorkDuration - leg1_time;
+  const work_base_stop_time = numero_paradas * mult;
+  const leg2_time = Math.round(work_drive_plus_extras + work_base_stop_time);
+  
+  const leg2_dist = parseFloat(chosenReport.totalWorkMiles) - leg1_dist;
+
+  // 3. Retorno: Última -> Casa (Datos crudos de Google)
+  const leg3_dist = parseFloat(chosenReport.toEnd.distance) || 0;
+  const leg3_time = Math.round(parseFloat(chosenReport.toEnd.duration) || 0);
+
   return {
     fecha: data.fecha,
     block_id: route.query.blockId || null,
@@ -941,7 +959,15 @@ function calculateLogData(scenarioKey) {
     downtown_count: totalDtInReport,
     aria_multiplier: mult,
     calculation_text: calcText,
-    segments: chosenReport.segments || [] 
+    segments: chosenReport.segments || [],
+
+    // 👇👇👇 NUEVOS DATOS TÁCTICOS 👇👇👇
+    tactical: {
+      leg1: { dist: leg1_dist.toFixed(1), time: leg1_time }, // To 1st Stop
+      leg2: { dist: leg2_dist.toFixed(1), time: leg2_time }, // The Route
+      leg3: { dist: leg3_dist.toFixed(1), time: leg3_time }  // To Home
+    }
+    // 👆👆👆
   };
 }
 
