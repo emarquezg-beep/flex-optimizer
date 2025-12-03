@@ -736,6 +736,79 @@ if (logData.vehicle_id && logData.millas_de_trabajo) {
 });
 // --- Fin FASE 3 ---
 
+// ============================================
+// 🌤️ ENDPOINT DE CLIMA (OpenWeatherMap)
+// ============================================
+app.get('/api/weather', async (req, res) => {
+  try {
+    const { city } = req.query;
+    
+    if (!city) {
+      return res.status(400).json({ error: 'City name required' });
+    }
+
+    // ✅ FORMA CORRECTA: Leer directo del entorno
+    const API_KEY = process.env.OPENWEATHER_API_KEY; 
+
+    // Validación de seguridad extra (opcional pero recomendada)
+    if (!API_KEY) {
+      throw new Error('Server configuration error: Missing Weather API Key');
+    }
+    
+    // Usamos unidades imperiales (Fahrenheit, mph)
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=imperial&appid=${API_KEY}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.cod !== 200) {
+      throw new Error(data.message);
+    }
+
+    // Formateamos la respuesta para que el Frontend la consuma fácil
+    const formattedWeather = {
+      temp: `${Math.round(data.main.temp)}°`,
+      condition: data.weather[0].main, // ej: "Clouds", "Rain"
+      description: data.weather[0].description, // ej: "scattered clouds"
+      icon: getWeatherIcon(data.weather[0].icon), // Convertir código a emoji
+      humidity: `${data.main.humidity}%`,
+      wind: `${Math.round(data.wind.speed)} mph`,
+      // OpenWeather Free no da probabilidad de lluvia exacta directa en el endpoint 'weather',
+      // pero podemos inferir si está lloviendo por el 'condition'.
+      rainChance: data.weather[0].main === 'Rain' ? 'High' : 'Low' 
+    };
+
+    res.json(formattedWeather);
+
+  } catch (error) {
+    console.error('Error fetching weather:', error);
+    // En caso de error, devolvemos un clima genérico para no romper la UI
+    res.json({
+      temp: '--°',
+      condition: 'Unavailable',
+      icon: '🤷‍♂️',
+      humidity: '--%',
+      wind: '-- mph',
+      rainChance: '--'
+    });
+  }
+});
+
+// Helper para convertir códigos de iconos de OpenWeather a Emojis
+function getWeatherIcon(code) {
+  const map = {
+    '01d': '☀️', '01n': '🌙', // Clear
+    '02d': '⛅', '02n': '☁️', // Few clouds
+    '03d': '☁️', '03n': '☁️', // Scattered clouds
+    '04d': '☁️', '04n': '☁️', // Broken clouds
+    '09d': '🌧️', '09n': '🌧️', // Shower rain
+    '10d': '🌦️', '10n': '🌧️', // Rain
+    '11d': '⛈️', '11n': '⛈️', // Thunderstorm
+    '13d': '❄️', '13n': '❄️', // Snow
+    '50d': '🌫️', '50n': '🌫️'  // Mist
+  };
+  return map[code] || '🌤️';
+}
 
 // --- 🆕 FASE 4: Nuevos Endpoints ---
 

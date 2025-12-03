@@ -17,14 +17,17 @@ const { weather, cityImage, fetchCityImage, fetchWeather } = useAtmosphere();
 onMounted(() => {
   if (props.data.primary_city) {
     fetchCityImage(props.data.primary_city);
-    // Aquí pasaríamos lat/lon reales si los tuviéramos en el payload
-    fetchWeather(0, 0); 
+    // 👇 CAMBIO: Pasamos el nombre de la ciudad
+    fetchWeather(props.data.primary_city); 
   }
 });
 
-// Vigilamos cambios por si acaso
+// Y en el watcher también:
 watch(() => props.data.primary_city, (newCity) => {
-  if (newCity) fetchCityImage(newCity);
+  if (newCity) {
+    fetchCityImage(newCity);
+    fetchWeather(newCity); // 👈 Agregar esto para que reaccione si cambia
+  }
 });
 </script>
 

@@ -36,24 +36,27 @@ export function useAtmosphere() {
     cityImage.value = img ? CITY_IMAGES[img] : CITY_IMAGES['default'];
   };
 
-  // 2. Obtener Clima (Simulado por ahora para no requerir API Key ya mismo)
-  // Cuando tengas tu API Key de OpenWeather, cambiamos esto por el fetch real.
-  const fetchWeather = async (lat, lon) => {
+  // 2. Fetch Clima (AHORA REAL) 📡
+  const fetchWeather = async (cityName) => {
+    if (!cityName) return;
     loading.value = true;
     
-    // SIMULACIÓN REALISTA (Para ver el diseño ya)
-    // En producción: const res = await fetch(`https://api.openweathermap.org...`)
-    setTimeout(() => {
-      weather.value = {
-        temp: '84°',
-        condition: 'Partly Cloudy',
-        icon: '⛅',
-        humidity: '65%',
-        wind: '8 mph',
-        rainChance: '15%'
-      };
+    try {
+      const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+      // Limpiamos el nombre de la ciudad (ej: "Orlando, FL" -> "Orlando")
+      const cleanCity = cityName.split(',')[0].trim();
+      
+      const response = await fetch(`${backendUrl}/api/weather?city=${cleanCity}`);
+      const data = await response.json();
+      
+      weather.value = data;
+      
+    } catch (e) {
+      console.error("Weather error:", e);
+      weather.value = null; // La UI mostrará el estado de carga o error
+    } finally {
       loading.value = false;
-    }, 500);
+    }
   };
 
   return {
