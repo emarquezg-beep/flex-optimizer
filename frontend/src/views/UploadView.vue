@@ -1048,7 +1048,11 @@ async function sendToBackend() {
         addresses: fullRoute,
         finalDestination: selectedDestination.value === 'custom' 
           ? customDestination.value 
-          : selectedDestination.value
+          : selectedDestination.value,
+          // 👇 DATOS NUEVOS PARA EL CÁLCULO DE TRÁFICO 👇
+          startTime: blockData.value.hora, // Ej: "14:00"
+          warehouseDelay: blockData.value.retraso_almacen, // Ej: 20
+          currentDate: blockData.value.fecha // Ej: "2025-11-21"
       }),
     });
       const result = await response.json();
