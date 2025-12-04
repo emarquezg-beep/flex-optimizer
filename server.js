@@ -950,7 +950,13 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     
     // Extraemos solo direcciones de trabajo (SIN el destino final)
     const workPoints = remainingStops.map(s => s.address);
-    const lastWorkStopAddress = workPoints[workPoints.length - 1];
+    let lastWorkStopAddress = workPoints.length > 0 ? workPoints[workPoints.length - 1] : null;
+
+    if (!lastWorkStopAddress) {
+       // Fallback de emergencia: Si no hay paradas de trabajo, la "última parada" es donde estás ahora.
+       // (Aunque el filtro anterior ya validó que remainingStops > 0, mejor prevenir).
+       lastWorkStopAddress = remainingStops[0]?.address; 
+    }
 
     // Segmentamos si son muchas paradas (Google admite max 25 waypoints)
     const STOPS_PER_SEGMENT = 26;
@@ -1022,9 +1028,15 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
     const predictedExitTime = new Date(departureTimestamp * 1000);
     console.log(`🔮 Predicción: Terminarás en la última parada a las ${predictedExitTime.toLocaleTimeString()}`);
 
-    // 2. Calculamos el retorno con tráfico futuro
-    // Usamos el 4to parámetro de nuestra función calculateLeg
-    const returnLeg = await calculateLeg(lastStopAddress, finalDestinationAddress, [], departureTimestamp);
+// 2. Calculamos el retorno con tráfico futuro
+    let returnLeg = { duration: 0, distance: 0 }; // Valor por defecto
+
+    if (lastWorkStopAddress) {
+        // Solo llamamos si tenemos una dirección de salida válida
+        returnLeg = await calculateLeg(lastWorkStopAddress, finalDestinationAddress, [], departureTimestamp);
+    } else {
+        console.error("⚠️ No se pudo determinar lastWorkStopAddress para el retorno.");
+    }
     
     const returnMinutes = parseFloat(returnLeg.duration || 0);
     const returnMiles = parseFloat(returnLeg.distance || 0);
