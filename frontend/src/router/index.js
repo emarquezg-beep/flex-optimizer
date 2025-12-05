@@ -67,6 +67,12 @@ const routes = [
     meta: { requiresAuth: true, title: 'Bitácora' }
   },
   {
+  path: '/nerd-stats',
+  name: 'nerd-stats',
+  component: NerdStatsView,
+  meta: { requiresAuth: true }
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue'),

@@ -7,9 +7,9 @@ const route = useRoute()
 
 const navItems = [
   { name: 'Home', path: '/', icon: Home }, // 🔥 Ahora apunta a Dashboard
-  { name: 'Upload', path: '/upload', icon: Upload }, // Ahora es solo "Upload"
   { name: 'En Vivo', path: '/live-eta', icon: Flame },
   { name: 'Bitácora', path: '/logbook', icon: BookOpen },
+  { name: 'Nerd', path: '/nerd-stats', icon: BarChart2 },
   { name: 'Ajustes', path: '/settings', icon: Settings }
 ]
 
