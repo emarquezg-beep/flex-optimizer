@@ -1110,7 +1110,111 @@ app.post('/api/calculate-live-eta', authenticateUser, async (req, res) => {
   }
 });
 
-    // ========================================
+// 📊 ENDPOINT: NERD STATS
+app.get('/api/driver-stats/:userId', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // 1. Obtener fecha de hace 6 semanas
+    const sixWeeksAgo = new Date();
+    sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42); // 6 * 7 días
+    const dateStr = sixWeeksAgo.toISOString().split('T')[0];
+
+    // 2. Consulta a Supabase (Traemos todas las rutas finalizadas del usuario)
+    // Nota: Traemos todas para calcular "Lifetime stats" (Favoritos)
+    const { data: routes, error } = await supabase
+      .from('routes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 0); // Solo rutas finalizadas
+
+    if (error) throw error;
+
+    if (!routes || routes.length === 0) {
+      return res.json({ empty: true });
+    }
+
+    // --- CÁLCULOS LIFETIME (Resumen Superior) ---
+    
+    // A. Ciudad Favorita
+    const cityCounts = {};
+    routes.forEach(r => {
+      const city = r.primary_city || 'N/A';
+      cityCounts[city] = (cityCounts[city] || 0) + 1;
+    });
+    // Ordenar y tomar la mayor
+    const favCity = Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0];
+
+    // B. Warehouse Favorito
+    const whCounts = {};
+    routes.forEach(r => {
+      const wh = r.warehouse || 'N/A';
+      whCounts[wh] = (whCounts[wh] || 0) + 1;
+    });
+    const favWh = Object.entries(whCounts).sort((a, b) => b[1] - a[1])[0];
+
+    // C. Promedio Millas por Bloque (Lifetime)
+    const totalMilesLifetime = routes.reduce((sum, r) => sum + (parseFloat(r.millas_totales) || 0), 0);
+    const avgMilesBlock = (totalMilesLifetime / routes.length).toFixed(1);
+
+
+    // --- CÁLCULOS 6 SEMANAS (Detalle) ---
+    
+    // Filtramos solo las recientes
+    const recentRoutes = routes.filter(r => r.fecha >= dateStr);
+
+    const stats6Weeks = {
+      totalMoney: 0,
+      totalMiles: 0,
+      workMiles: 0,
+      totalHours: 0,
+      routeCount: recentRoutes.length
+    };
+
+    recentRoutes.forEach(r => {
+      stats6Weeks.totalMoney += parseFloat(r.pago) || 0;
+      stats6Weeks.totalMiles += parseFloat(r.millas_totales) || 0;
+      stats6Weeks.workMiles += parseFloat(r.millas_de_trabajo) || 0;
+      // Usamos duracion_horas (lo que paga Amazon) o tiempo_total (real), tú decides.
+      // Para métricas de rendimiento ($/h), solemos usar tiempo real.
+      // Para "cuánto trabajé", usamos el real.
+      stats6Weeks.totalHours += parseFloat(r.tiempo_total) || 0;
+    });
+
+    // Promedios calculados
+    const dollarsPerMile = stats6Weeks.totalMiles > 0 
+      ? (stats6Weeks.totalMoney / stats6Weeks.totalMiles).toFixed(2) 
+      : 0;
+    
+    const realHourly = stats6Weeks.totalHours > 0
+      ? (stats6Weeks.totalMoney / stats6Weeks.totalHours).toFixed(2)
+      : 0;
+
+    res.json({
+      empty: false,
+      lifetime: {
+        favCity: favCity ? favCity[0] : 'N/A',
+        favWh: favWh ? favWh[0] : 'N/A',
+        avgMilesBlock,
+        totalRoutes: routes.length
+      },
+      recent: {
+        money: stats6Weeks.totalMoney.toFixed(2),
+        miles: stats6Weeks.totalMiles.toFixed(1),
+        workMiles: stats6Weeks.workMiles.toFixed(1),
+        hours: stats6Weeks.totalHours.toFixed(1),
+        dollarsPerMile,
+        realHourly,
+        count: stats6Weeks.routeCount
+      }
+    });
+
+  } catch (error) {
+    console.error('Error calculating stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+}); 
+// ========================================
 // SCHEDULED BLOCKS ENDPOINTS - v4.1
 // ========================================
 
