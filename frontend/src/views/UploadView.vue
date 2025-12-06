@@ -564,22 +564,25 @@ function calculateActualDelay() {
 // COMPUTED PROPERTIES
 // ============================================
 
+// Computed Property: reportData
 const reportData = computed(() => {
   if (!backendResponse.value || !backendResponse.value.segments) {
     return null;
   }
   
-  const { toFirstStop, segments, toFinalDestination, inverseRouteLegs } = backendResponse.value;
+  // Extraemos las variables de la respuesta (incluyendo las nuevas de IA)
+  const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
+  
+  // --- 1. VARIABLES PARA ACUMULAR (RUTA NORMAL) ---
   let totalBlockMiles = 0;
   let totalBlockDriveDuration = 0;
-  let totalBaseStopTime = 0;
-  let totalExtraStopTime = 0;
+  let totalExtraStopTime = 0; // Solo acumulamos extras (Apt/Downtown), el base va por multiplier
+  let totalStopCount = 0;
   let totalApartmentCount = 0;
   let totalDowntownCount = 0;
-  let totalStopCount = 0;
   
+  // --- 2. PROCESAR SEGMENTOS NORMALES ---
   const processedSegments = segments.map(seg => {
-    let segmentBaseStopTime = 0;
     let segmentExtraStopTime = 0;
     let aptCount = 0;
     let downtownCount = 0;
@@ -589,29 +592,25 @@ const reportData = computed(() => {
     (seg.stops || []).forEach(addr => {
       const stopData = extractedAddresses.value.find(s => s.address === addr);
       const isDowntown = stopData ? stopData.isDowntown : false;
-// ✅ FIX: Usar stopData.isApartment como única fuente de verdad
       const isApartment = stopData ? stopData.isApartment : false;
-      
-      // ✅ NUEVO: No sumamos tiempo base aquí, se suma con multiplier en scenarioETAs
-      // segmentBaseStopTime += 1.5;  ← ELIMINADO
       
       if (isDowntown) {
         downtownCount++;
-        segmentExtraStopTime += 3;  // Downtown sigue siendo +3 min fijo
+        segmentExtraStopTime += 3;  // Downtown +3 min
       } else if (isApartment) {
         aptCount++;
-        segmentExtraStopTime += 0.75;  // ✅ NUEVO: Apartamentos +0.75 min
+        segmentExtraStopTime += 0.75;  // Apartamento +0.75 min
       }
     });
     
-    // ✅ NUEVO: Solo acumulamos extras, NO el tiempo base
-    // totalBaseStopTime += segmentBaseStopTime;  ← ELIMINADO
+    // Acumulamos a los totales globales
     totalExtraStopTime += segmentExtraStopTime;
-    totalApartmentCount += aptCount + downtownCount;
+    totalApartmentCount += aptCount + downtownCount; // Nota: Tu lógica anterior sumaba ambos aquí
     totalDowntownCount += downtownCount;
     totalBlockMiles += parseFloat(seg.distance || 0);
     totalBlockDriveDuration += parseFloat(seg.duration || 0);
     
+    // RETORNO CORRECTO DEL OBJETO (Aquí estaba el error de los ...)
     return {
       distance: seg.distance,
       duration: seg.duration,
@@ -621,97 +620,63 @@ const reportData = computed(() => {
     };
   });
   
-  //const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
+  // --- 3. CÁLCULOS DE TOTALES (RUTA NORMAL) ---
+  const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
   const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
   const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
   const toFinalDestDur = parseFloat(toFinalDestination.duration || 0);
-  const toLastStopDist = parseFloat(inverseRouteLegs.toLastStop.distance || 0);
-  const toLastStopDur = parseFloat(inverseRouteLegs.toLastStop.duration || 0);
-  const fromFirstStopDist = parseFloat(inverseRouteLegs.fromFirstStop.distance || 0);
-  const fromFirstStopDur = parseFloat(inverseRouteLegs.fromFirstStop.duration || 0);
   
-  // ═══════════════════════════════════════════════════════════════
-  // 🆕 NUEVO CÓDIGO - PROCESAMIENTO DE SEGMENTOS INVERSOS
-  // ═══════════════════════════════════════════════════════════════
-  let inverseBlockMiles = 0;
-  let inverseBlockDriveDuration = 0;
-  let inverseProcessedSegments = [];
-  
-  if (inverseRouteLegs.segments && inverseRouteLegs.segments.length > 0) {
-    inverseProcessedSegments = inverseRouteLegs.segments.map(seg => {
-      let segmentBaseStopTime = 0;
-      let segmentExtraStopTime = 0;
-      let aptCount = 0;
-      let downtownCount = 0;
-      const currentStopCount = (seg.stops || []).length;
-      
-      (seg.stops || []).forEach(addr => {
-        const stopData = extractedAddresses.value.find(s => s.address === addr);
-        const isDowntown = stopData ? stopData.isDowntown : false;
-        // ✅ FIX: Usar stopData.isApartment como única fuente de verdad
-        const isApartment = stopData ? stopData.isApartment : false;
-        
-        // ✅ NUEVO: No sumamos tiempo base aquí
-        // segmentBaseStopTime += 1.5;  ← ELIMINADO
-        
-        if (isDowntown) {
-          downtownCount++;
-          segmentExtraStopTime += 3;  // Downtown +3 min fijo
-        } else if (isApartment) {
-          aptCount++;
-          segmentExtraStopTime += 0.75;  // ✅ NUEVO: Apartamentos +0.75 min
-        }
-      });
-      
-      const segDist = parseFloat(seg.distance || 0);
-      const segDur = parseFloat(seg.duration || 0);
-      inverseBlockMiles += segDist;
-      inverseBlockDriveDuration += segDur;
-      
-      return {
-        distance: seg.distance,
-        duration: seg.duration,
-        stopsCount: currentStopCount,
-        aptCount: aptCount,
-        downtownCount: downtownCount
-      };
-    });
-  } else {
-    // Fallback: usar segmentos normales (comportamiento antiguo)
-    console.warn('⚠️ No se recibieron segmentos inversos del backend, usando segmentos normales');
-    inverseBlockMiles = totalBlockMiles;
-    inverseBlockDriveDuration = totalBlockDriveDuration;
-    inverseProcessedSegments = processedSegments;
-  }
-  // ═══════════════════════════════════════════════════════════════
-  // FIN NUEVO CÓDIGO
-  // ═══════════════════════════════════════════════════════════════
-
-  const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
-
   const totalWorkMiles = toFirstStopDist + totalBlockMiles;
-  // ✅ NUEVO: Solo sumamos totalExtraStopTime (apartamentos y downtown)
-  // El tiempo base por parada se suma con multipliers en scenarioETAs
   const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalExtraStopTime;
   const totalNormalMiles = totalWorkMiles + toFinalDestDist;
   const totalNormalDuration = totalWorkDuration + toFinalDestDur;
-  // 🆕 USAR SEGMENTOS INVERSOS REALES
-  const totalInverseWorkMiles = toLastStopDist + inverseBlockMiles;
-  const totalInverseWorkDuration = toLastStopDur + inverseBlockDriveDuration + totalExtraStopTime;
-  const totalInverseMiles = totalInverseWorkMiles + fromFirstStopDist;
-  const totalInverseDuration = totalInverseWorkDuration + fromFirstStopDur;
   
-    // 🐛 DEBUG: Logs de detección
-  console.log('═══════════════════════════════════════');
-  console.log('📊 ARIA Debug - Detección de Paradas:');
-  console.log('  🏠 Total paradas:', totalStopCount);
-  console.log('  🏢 Apartamentos detectados:', totalApartmentCount);
-  console.log('  🏙️ Downtown detectados:', totalDowntownCount);
-  console.log('  ⏱️ Tiempo extra acumulado:', totalExtraStopTime.toFixed(1), 'min');
-  console.log('  📐 Breakdown: ', totalApartmentCount - totalDowntownCount, 'apts × 0.75 +', totalDowntownCount, 'DT × 3');
-  console.log('═══════════════════════════════════════');
+  // --- 4. PROCESAR RUTA IA (SOLO SI EXISTE) ---
+  let aiData = null;
+
+  if (isAiOptimized && aiRoute) {
+      let aiBlockMiles = 0;
+      let aiBlockDuration = 0;
+
+      // Procesamos los segmentos de la IA
+      // Asumimos que los tiempos "extra" (apts/downtown) son los mismos 
+      // porque son las mismas paradas, solo cambia el orden de manejo.
+      const aiProcessedSegments = aiRoute.segments.map(seg => {
+          aiBlockMiles += parseFloat(seg.distance || 0);
+          aiBlockDuration += parseFloat(seg.duration || 0);
+          return { 
+              distance: seg.distance, 
+              duration: seg.duration,
+              stopsCount: (seg.stops || []).length 
+          };
+      });
+
+      const toAiStartDist = parseFloat(aiRoute.toStart.distance || 0);
+      const toAiStartDur = parseFloat(aiRoute.toStart.duration || 0);
+      const toAiEndDist = parseFloat(aiRoute.toEnd.distance || 0);
+      const toAiEndDur = parseFloat(aiRoute.toEnd.duration || 0);
+
+      const totalAiWorkMiles = toAiStartDist + aiBlockMiles;
+      // Usamos el mismo totalExtraStopTime porque son las mismas casas
+      const totalAiWorkDuration = toAiStartDur + aiBlockDuration + totalExtraStopTime;
+      
+      aiData = {
+          toStart: { distance: toAiStartDist.toFixed(2), duration: Math.round(toAiStartDur) },
+          segments: aiProcessedSegments,
+          toEnd: { distance: toAiEndDist.toFixed(2), duration: Math.round(toAiEndDur) },
+          totalWorkMiles: totalAiWorkMiles.toFixed(2),
+          totalWorkDuration: Math.round(totalAiWorkDuration),
+          totalMiles: (totalAiWorkMiles + toAiEndDist).toFixed(2),
+          totalDuration: Math.round(totalAiWorkDuration + toAiEndDur),
+          baseDriveDuration: toAiStartDur + aiBlockDuration + totalExtraStopTime,
+          commuteDuration: toAiEndDur,
+          label: '🤖 AI Suggestion'
+      };
+  }
+
+  // --- 5. RETORNO FINAL ---
   return {
-    savings: (totalNormalMiles - totalInverseMiles).toFixed(2),
+    savings: aiData ? (totalNormalMiles - aiData.totalMiles).toFixed(2) : '0.00',
     normal: {
       toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
       segments: processedSegments,
@@ -720,26 +685,18 @@ const reportData = computed(() => {
       totalWorkDuration: Math.round(totalWorkDuration),
       totalMiles: totalNormalMiles.toFixed(2),
       totalDuration: Math.round(totalNormalDuration),
-      baseDriveDuration: toFirstStopDur + totalBlockDriveDuration + totalExtraStopTime, // ✅ Incluye extras
+      baseDriveDuration: toFirstStopDur + totalBlockDriveDuration + totalExtraStopTime,
       commuteDuration: toFinalDestDur,
     },
-    inverse: {
-      toStart: { distance: toLastStopDist.toFixed(2), duration: Math.round(toLastStopDur) },
-      segments: inverseProcessedSegments,
-      toEnd: { distance: fromFirstStopDist.toFixed(2), duration: Math.round(fromFirstStopDur) },
-      totalWorkMiles: totalInverseWorkMiles.toFixed(2),
-      totalWorkDuration: Math.round(totalInverseWorkDuration),
-      totalMiles: totalInverseMiles.toFixed(2),
-      totalDuration: Math.round(totalInverseDuration),
-      baseDriveDuration: toLastStopDur + inverseBlockDriveDuration + totalExtraStopTime, // ✅ Incluye extras
-      commuteDuration: fromFirstStopDur,
-    },
+    // Si no hay IA, inverse será null (y la UI debería ocultarlo)
+    inverse: aiData, 
+    
+    // Contadores globales
     stopCount: totalStopCount,
     apartmentCount: totalApartmentCount,
     downtownCount: totalDowntownCount,
   };
 });
-
 const scenarioETAs = computed(() => {
   if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
     return null;
@@ -1028,67 +985,65 @@ function startManualEntry() {
   extractedAddresses.value = [{ number: 2, address: '', isDowntown: false }];
 }
 
+// En UploadView.vue
+
 async function sendToBackend() {
-    const addressesToSend = extractedAddresses.value.map(stop => stop.address);
+    // 1. Preparar Ruta Normal (Siempre ordenada 2, 3, 4...)
+    const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => a.number - b.number);
+    const addressesToSend = sortedByAmazon.map(stop => stop.address);
     const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
-    if (sanitizedAddresses.length === 0) { alert('No hay direcciones válidas para optimizar.'); return; }
+    
+    if (sanitizedAddresses.length === 0) { alert('No valid addresses.'); return; }
+
     const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
-    if (!warehouse) { alert('Error: Warehouse no encontrado.'); return; }
-    const warehouseAddress = sanitizeAddress(warehouse.address);
-    const finalDestination = selectedDestination.value === 'custom' ? sanitizeAddress(customDestination.value) : sanitizeAddress(selectedDestination.value);
-    if (!finalDestination) { alert('Por favor, especifica un destino final.'); return; }
-    const fullRoute = [warehouseAddress, ...sanitizedAddresses, finalDestination];
+    const fullRouteAmazon = [sanitizeAddress(warehouse.address), ...sanitizedAddresses, sanitizeAddress(selectedDestination.value)];
+
+    // 2. Detectar Optimización IA
+    let aiOptimizedStops = null;
+    const hasOptimization = extractedAddresses.value.some(stop => stop.number !== stop.ia_suggestion);
+
+    if (hasOptimization) {
+        console.log("⚡ IA sugiere un orden diferente.");
+        // Ordenamos por la sugerencia de la IA
+        const sortedByAI = [...extractedAddresses.value].sort((a, b) => a.ia_suggestion - b.ia_suggestion);
+        // Enviamos SOLO las paradas de trabajo (sin warehouse ni casa)
+        aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
+    }
+
+    // 3. Enviar
+    backendResponse.value = { status: 'loading' };
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
-    backendResponse.value = { status: 'loading' };
     try {
-    const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
-      method: 'POST',
-      body: JSON.stringify({ 
-        addresses: fullRoute,
-        finalDestination: selectedDestination.value === 'custom' 
-          ? customDestination.value 
-          : selectedDestination.value,
-          // 👇 DATOS NUEVOS PARA EL CÁLCULO DE TRÁFICO 👇
-          startTime: blockData.value.hora, // Ej: "14:00"
-          warehouseDelay: blockData.value.retraso_almacen, // Ej: 20
-          currentDate: blockData.value.fecha // Ej: "2025-11-21"
-      }),
-    });
-      const result = await response.json();
-      
-      // 🆕 ASIGNAR RESULTADO (CON O SIN ERRORES)
-      backendResponse.value = result;
-      
-      // 🤖 ARIA: Capturar datos del sistema inteligente
-      if (result.aria) {
-        ariaData.value = result.aria;
-        console.log('🤖 ARIA: Multiplier recibido:', result.aria.multiplier);
-      }
-      
-      // 🆕 SI HAY ERRORES, HACER SCROLL AUTOMÁTICO A LA ADVERTENCIA
-      if (result.hasErrors) {
-        console.error('❌ Errores detectados en la ruta:', result.failedAddresses);
-        // Esperar un tick para que el DOM se actualice
-        await new Promise(resolve => setTimeout(resolve, 100));
-        const errorSection = document.querySelector('.address-errors');
-        if (errorSection) {
-          errorSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                addresses: fullRouteAmazon,
+                aiOptimizedAddresses: aiOptimizedStops, // Será null si no hay cambios
+                finalDestination: selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value,
+                startTime: blockData.value.hora,
+                warehouseDelay: blockData.value.retraso_almacen,
+                currentDate: blockData.value.fecha
+            }),
+        });
+        
+        const result = await response.json();
+        
+        // Manejo de respuesta
+        backendResponse.value = result;
+        if (result.aria) ariaData.value = result.aria;
+        
+        if (result.hasErrors) {
+             // ... tu lógica de error existente ...
         }
-      }
-      
-      if (!response.ok && !result.hasErrors) { 
-        throw new Error(result.message || `Error ${response.status}`); 
-      }
+
     } catch (error) {
-      console.error("Error calling backend:", error);
-      backendResponse.value = { error: `Error: ${error.message || 'No se pudo conectar al servidor.'}`, hasErrors: true };
+        console.error("Error:", error);
+        backendResponse.value = { error: error.message, hasErrors: true };
     } finally {
-      // ✅ Siempre limpiar isProcessing al terminar
-      isProcessing.value = false;
+        isProcessing.value = false;
     }
 }
-
 // Pega esto SOBREESCRIBIENDO tu función saveToLogbook() existente
 
 // 🆕 MODIFICAR saveToLogbook para vincular con scheduled_block

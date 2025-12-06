@@ -1,33 +1,55 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Swiper, SwiperSlide } from 'swiper/vue';
 import 'swiper/css';
 import 'swiper/css/pagination';
 import { Pagination } from 'swiper/modules';
-import { useRouter } from 'vue-router'; // 👈 Importante para redirigir
+import { useRouter } from 'vue-router'; 
 
 // Componentes
 import SummarySlide from './SummarySlide.vue';
 import FinancialSlide from './FinancialSlide.vue';
 import RouteSegmentsSlide from './RouteSegmentsSlide.vue';
-import DestinationSlide from './DestinationSlide.vue'; // 👈 NUEVO
+import DestinationSlide from './DestinationSlide.vue';
 import TimeSlide from './TimeSlide.vue';
 
 const props = defineProps({
   normalPayload: { type: Object, required: true },
-  inversePayload: { type: Object, required: true }
+  inversePayload: { type: Object, default: null } // 👈 CAMBIO 1: Ahora acepta null
 });
 
-const emit = defineEmits(['save-route']); // Quitamos 'reset' porque ahora navegamos
-
-const router = useRouter(); // Hook del router
-const currentSelection = ref('normal');
+const emit = defineEmits(['save-route']);
+const router = useRouter();
 const swiperModules = [Pagination];
 
+// Estado de selección
+const currentSelection = ref('normal');
+
+// 🛡️ CAMBIO 2: Watcher de seguridad
+// Si la ruta alternativa desaparece (o es null), forzamos volver a 'normal'
+watch(() => props.inversePayload, (newVal) => {
+  if (!newVal) {
+    currentSelection.value = 'normal';
+  }
+}, { immediate: true });
+
+// Computed para los datos a mostrar
 const selectedData = computed(() => {
-  return currentSelection.value === 'normal' 
-    ? props.normalPayload 
-    : props.inversePayload;
+  if (currentSelection.value === 'inverse' && props.inversePayload) {
+    return props.inversePayload;
+  }
+  return props.normalPayload;
+});
+
+// 🤖 CAMBIO 3: Texto dinámico para el botón
+const saveButtonLabel = computed(() => {
+  if (currentSelection.value === 'normal') {
+    return '💾 Log Normal Route';
+  }
+  // Si estamos en la vista alternativa, usamos su etiqueta si existe (ej: "🤖 AI Suggestion")
+  // o un fallback por defecto.
+  const label = props.inversePayload?.label || 'Alternative Route';
+  return `💾 Log ${label}`;
 });
 
 const handleSave = () => {
@@ -35,10 +57,7 @@ const handleSave = () => {
 };
 
 const goHome = () => {
-  // 🏠 Redirige al inicio para forzar flujo de agenda
   router.push('/'); 
-  // Si tu ruta home tiene otro nombre o path, ajústalo aquí. 
-  // Ej: router.push({ name: 'Home' });
 };
 </script>
 
@@ -78,7 +97,7 @@ const goHome = () => {
           
           <div class="action-footer">
             <button class="btn-save" @click="handleSave">
-              💾 Log {{ currentSelection === 'normal' ? 'Normal' : 'Inverse' }} Route
+              {{ saveButtonLabel }}
             </button>
             <button class="btn-home" @click="goHome">
               🏠 Back to Home
@@ -91,9 +110,10 @@ const goHome = () => {
 </template>
 
 <style scoped>
+/* TUS ESTILOS SE MANTIENEN IGUALES */
 .swiper-wrapper-custom {
   height: auto;
-  min-height: 680px; /* Altura segura */
+  min-height: 680px; 
   width: 100%;
   background: var(--bg-surface);
   border-radius: 12px;
@@ -116,7 +136,6 @@ const goHome = () => {
   justify-content: space-between;
 }
 
-/* FOOTER CON Z-INDEX ALTO PARA QUE FUNCIONEN LOS CLICKS */
 .action-footer {
   margin-top: auto;
   padding: 20px;
@@ -124,11 +143,9 @@ const goHome = () => {
   flex-direction: column;
   gap: 12px;
   background: transparent;
-  
-  /* 👇 ESTO ES CRÍTICO PARA QUE LOS BOTONES FUNCIONEN */
   position: relative;
   z-index: 50; 
-  margin-bottom: 25px; /* Levanta los botones sobre los dots de paginación */
+  margin-bottom: 25px; 
 }
 
 .btn-save {
@@ -142,6 +159,10 @@ const goHome = () => {
   cursor: pointer;
   box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4);
   transition: transform 0.2s;
+  /* Añadido para manejar textos largos en móvil */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .btn-save:active { transform: scale(0.98); }
 

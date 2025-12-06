@@ -3,7 +3,7 @@ import { defineProps, defineEmits } from 'vue';
 
 const props = defineProps({
   normalData: { type: Object, required: true },
-  inverseData: { type: Object, required: true },
+  inverseData: { type: Object, default: null }, // 👈 CAMBIO 1: Opcional
   selectedScenario: { type: String, required: true }
 });
 
@@ -36,7 +36,10 @@ const getAriaFactor = (data) => {
     
     <div 
       class="split-side normal-side" 
-      :class="{ 'is-active': selectedScenario === 'normal' }"
+      :class="{ 
+        'is-active': selectedScenario === 'normal',
+        'is-solo': !inverseData // Clase extra si está solo
+      }"
       @click="emit('update:selectedScenario', 'normal')"
     >
       <div class="aria-badge">
@@ -45,7 +48,7 @@ const getAriaFactor = (data) => {
       </div>
 
       <div class="selection-indicator">
-        <div class="radio-circle">
+        <div class="radio-circle" v-if="inverseData">
           <div v-if="selectedScenario === 'normal'" class="radio-dot"></div>
         </div>
         <span class="scenario-label">NORMAL</span>
@@ -85,6 +88,7 @@ const getAriaFactor = (data) => {
     </div>
 
     <div 
+      v-if="inverseData"
       class="split-side inverse-side" 
       :class="{ 'is-active': selectedScenario === 'inverse' }"
       @click="emit('update:selectedScenario', 'inverse')"
@@ -98,7 +102,7 @@ const getAriaFactor = (data) => {
         <div class="radio-circle">
           <div v-if="selectedScenario === 'inverse'" class="radio-dot"></div>
         </div>
-        <span class="scenario-label">INVERSA</span>
+        <span class="scenario-label">{{ inverseData.label || 'INVERSA' }}</span>
       </div>
 
       <div class="hero-score">
@@ -147,11 +151,10 @@ const getAriaFactor = (data) => {
 }
 
 .split-side {
-  flex: 1;
+  flex: 1; /* Esto hace que si hay uno solo, ocupe el 100% */
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Justify space-between ayuda a distribuir mejor si sobra espacio */
   justify-content: space-between; 
   padding: 15px 8px;
   transition: all 0.3s ease;
@@ -160,6 +163,14 @@ const getAriaFactor = (data) => {
   background-color: var(--bg-secondary);
   opacity: 0.6;
   position: relative;
+}
+
+/* Si está solo (no hay IA), quitamos opacidad y cursor pointer */
+.split-side.is-solo {
+  opacity: 1;
+  cursor: default;
+  background-color: var(--bg-primary); /* Fondo activo por defecto */
+  border-bottom-color: transparent; /* Sin borde de selección */
 }
 
 .split-side.is-active {
@@ -171,7 +182,7 @@ const getAriaFactor = (data) => {
 .normal-side.is-active { border-bottom-color: #4facfe; }
 .inverse-side.is-active { border-bottom-color: #ff9a9e; }
 
-/* --- ARIA BADGE --- */
+/* El resto de estilos se mantiene igual... */
 .aria-badge {
   position: absolute;
   top: 10px;
@@ -189,13 +200,13 @@ const getAriaFactor = (data) => {
 
 /* --- SELECTION HEADER --- */
 .selection-indicator {
-  margin-top: 15px; /* Un poco de aire arriba */
+  margin-top: 15px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
 }
-.scenario-label { font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; color: var(--text-secondary); }
+.scenario-label { font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; color: var(--text-secondary); text-transform: uppercase; }
 .radio-circle { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--text-secondary); display: flex; align-items: center; justify-content: center; }
 .is-active .radio-circle { border-color: var(--brand-primary); }
 .radio-dot { width: 8px; height: 8px; background-color: var(--brand-primary); border-radius: 50%; }
@@ -222,17 +233,16 @@ const getAriaFactor = (data) => {
 }
 .stop-summary-pill.has-apts {
   background: rgba(245, 158, 11, 0.15);
-  color: #d97706; /* Naranja más oscuro para leer mejor */
+  color: #d97706; 
   border-color: rgba(245, 158, 11, 0.3);
 }
 
-/* --- NUEVO ESTILO PARA EL CÁLCULO --- */
 .calc-text {
   margin-top: 8px;
   font-size: 0.6rem;
-  font-family: 'Courier New', monospace; /* Fuente tipo código */
+  font-family: 'Courier New', monospace;
   color: var(--text-secondary);
-  background: rgba(0,0,0,0.05); /* Fondo sutil */
+  background: rgba(0,0,0,0.05);
   padding: 4px 8px;
   border-radius: 4px;
   width: 90%;
@@ -251,9 +261,7 @@ const getAriaFactor = (data) => {
   margin-bottom: 10px;
 }
 
-/* --- ETAS LIMPIOS (Sin fondo gris) --- */
 .eta-group {
-  /* Quitamos el background gris */
   background: transparent;
   padding: 0;
   display: flex;
@@ -267,21 +275,18 @@ const getAriaFactor = (data) => {
   align-items: center;
   font-size: 0.75rem;
   padding: 2px 4px;
-  border-bottom: 1px dashed rgba(0,0,0,0.1); /* Línea separadora sutil */
+  border-bottom: 1px dashed rgba(0,0,0,0.1);
 }
 .eta-row:last-child { border-bottom: none; }
 
 .eta-row span { font-weight: 500; opacity: 0.9; }
 .eta-row strong { font-size: 0.85rem; font-weight: 700; }
 
-/* Colores de texto más legibles */
-.opt span { color: #16a34a; } /* Verde oscuro */
-.norm span { color: #d97706; } /* Naranja oscuro */
-.pes span { color: #dc2626; } /* Rojo oscuro */
-/* Los tiempos en negro/blanco según el tema */
+.opt span { color: #16a34a; }
+.norm span { color: #d97706; }
+.pes span { color: #dc2626; }
 .opt strong, .norm strong, .pes strong { color: var(--text-primary); } 
 
-/* Métricas Finales (Distancia/Dinero) */
 .metric-row {
   display: flex;
   gap: 8px;
@@ -291,7 +296,7 @@ const getAriaFactor = (data) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: rgba(0,0,0,0.05); /* Fondo muy sutil */
+  background: rgba(0,0,0,0.05);
   padding: 6px;
   border-radius: 8px;
   border: 1px solid rgba(0,0,0,0.05);
