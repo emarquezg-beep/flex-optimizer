@@ -25,7 +25,7 @@ onMounted(async () => {
     isLoading.value = false;
   }
 });
-
+// Forzando nuevo commit
 // Helper para fecha
 const formatDate = (dateStr) => {
   const d = new Date(dateStr);
