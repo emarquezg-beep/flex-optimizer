@@ -25,6 +25,16 @@ onMounted(async () => {
     isLoading.value = false;
   }
 });
+
+// Helper para fecha
+const formatDate = (dateStr) => {
+  const d = new Date(dateStr);
+  // Ajuste de zona horaria simple para evitar que se atrase un día
+  const userTimezoneOffset = d.getTimezoneOffset() * 60000;
+  const adjustedDate = new Date(d.getTime() + userTimezoneOffset);
+  
+  return adjustedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 </script>
 
 <template>
@@ -105,7 +115,31 @@ onMounted(async () => {
           </div>
         </div>
       </section>
+      <section class="history-section">
+        <h3 class="section-title">Weekly Breakdown</h3>
+        
+        <div class="weekly-list">
+          <div class="list-header">
+            <span>Week Of</span>
+            <span>Blocks</span>
+            <span>Hrs</span>
+            <span class="text-right">Earnings</span>
+          </div>
 
+          <div v-for="(week, index) in stats.history" :key="index" class="week-row">
+            <div class="col-date">
+              <span class="date">{{ formatDate(week.weekStart) }}</span>
+              <span class="sub-date">${{ week.hourly }}/h</span>
+            </div>
+            <div class="col-stat">{{ week.count }}</div>
+            <div class="col-stat">{{ week.hours }}</div>
+            <div class="col-money text-right">
+              <span class="money">${{ week.money }}</span>
+              <span class="miles">{{ week.miles }} mi</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
     <div v-else class="empty-state">
@@ -210,4 +244,50 @@ onMounted(async () => {
 .m-lbl { display: block; font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-top: 4px; }
 
 .loading, .empty-state { text-align: center; padding: 40px; color: var(--text-secondary); }
+
+/* --- HISTORY SECTION --- */
+.history-section {
+  margin-top: 30px;
+}
+
+.weekly-list {
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+}
+
+.list-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 2fr;
+  padding: 15px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.week-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 2fr;
+  padding: 15px;
+  border-bottom: 1px solid var(--border-secondary);
+  align-items: center;
+}
+
+.week-row:last-child { border-bottom: none; }
+
+.col-date { display: flex; flex-direction: column; }
+.date { font-weight: 700; color: var(--text-primary); }
+.sub-date { font-size: 0.75rem; color: var(--brand-primary); }
+
+.col-stat { color: var(--text-secondary); font-weight: 500; }
+
+.col-money { display: flex; flex-direction: column; }
+.text-right { text-align: right; }
+.money { font-weight: 800; color: #10b981; font-size: 1rem; }
+.miles { font-size: 0.75rem; color: var(--text-tertiary); }
 </style>
