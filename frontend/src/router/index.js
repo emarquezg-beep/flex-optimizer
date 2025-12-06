@@ -66,11 +66,11 @@ const routes = [
     component: () => import('@/views/LogbookView.vue'),
     meta: { requiresAuth: true, title: 'Bitácora' }
   },
-  {
-  path: '/nerd-stats',
-  name: 'nerd-stats',
-  component: NerdStatsView,
-  meta: { requiresAuth: true }
+{
+    path: '/nerd-stats',
+    name: 'nerd-stats',
+    component: () => import('@/views/NerdStatsView.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/settings',

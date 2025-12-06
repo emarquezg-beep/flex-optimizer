@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Home, Flame, BookOpen, Settings, Upload } from 'lucide-vue-next'
+import { Home, Flame, BookOpen, Settings, BarChart2 } from 'lucide-vue-next'
 
 const route = useRoute()
 
