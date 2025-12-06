@@ -23,6 +23,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'https://flex-optimizer.vercel.app',
   'https://flex-optimizer-git-feature-sl-7cb1e8-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-feature-ai-ad3680-ernestos-projects-d9e7c95d.vercel.app',
 ];
 const corsOptions = {
   origin: function (origin, callback) {
@@ -322,204 +323,153 @@ async function calculateLeg(origin, destination, waypoints = [], departureTime =
 }
 
 // --- Tu endpoint `/api/optimize-route` (sin cambios) ---
+// server.js - Endpoint optimizado (Sin Inversa Obligatoria)
+
 app.post('/api/optimize-route', authenticateUser, async (req, res) => {
-    // 1. Desestructuración ampliada para recibir datos de tiempo
     let { 
-        addresses, 
+        addresses,              // Ruta A: Original (Strings)
+        aiOptimizedAddresses,   // Ruta B: Sugerida (Strings) o Null
         finalDestination: customFinalDestination,
-        startTime,       // Ej: "14:00"
-        warehouseDelay,  // Ej: 20
-        currentDate      // Ej: "2025-11-21"
+        startTime,
+        warehouseDelay,
+        currentDate
     } = req.body;
 
+    // Validación básica
     addresses = addresses.filter(addr => addr && addr.trim() !== '');
-
     if (!addresses || addresses.length < 3) {
-        return res.status(400).json({ 
-            message: 'Se necesitan al menos Origen, una Parada y un Destino.',
-            hasErrors: true 
-        });
+        return res.status(400).json({ message: 'Datos insuficientes.', hasErrors: true });
     }
 
     try {
-        // 🤖 ARIA: Calcular multiplier dinámico
         const ariaResult = await calcularMultiplierARIA(req.userId);
-        console.log(`🤖 ARIA: Usando multiplier ${ariaResult.multiplier.toFixed(2)} para esta ruta`);
         
+        // --- 1. PREPARAR RUTA NORMAL (Siempre se calcula) ---
         const origin = addresses[0]; 
         const finalDestination = customFinalDestination || addresses[addresses.length - 1];
-        const workStops = addresses.slice(1, -1); 
-        const firstStop = workStops[0]; 
-        const lastStop = workStops[workStops.length - 1]; 
-
-        console.log('✅ v2.0: Calculando ruta con Predicción de Tráfico...');
-
-        // --- CÁLCULO PARALELO INICIAL (Igual que antes) ---
-        const toFirstStopPromise = calculateLeg(origin, firstStop);
-        const toFinalDestinationPromise = calculateLeg(lastStop, finalDestination); // Cálculo preliminar (tráfico actual)
-        const toLastStopForInversePromise = calculateLeg(origin, lastStop);
-        const fromFirstStopToHomePromise = calculateLeg(firstStop, finalDestination);
-
-        // Generar Segmentos
-        const workStopSegments = [];
-        for (let i = 0; i < workStops.length; i += 9) { 
-            const segmentStops = workStops.slice(i, i + 10); 
-            if (segmentStops.length > 0) {
-                workStopSegments.push({
-                    origin: segmentStops[0], 
-                    destination: segmentStops[segmentStops.length - 1], 
-                    waypoints: segmentStops.slice(1, -1) 
-                });
-            }
-        }
-
-        // Generar Segmentos Inversos
-        const inverseWorkStops = [...workStops].reverse();
-        const inverseSegments = [];
-        for (let i = 0; i < inverseWorkStops.length; i += 9) {
-            const segmentStops = inverseWorkStops.slice(i, i + 10);
-            if (segmentStops.length > 0) {
-                inverseSegments.push({
-                    origin: segmentStops[0],
-                    destination: segmentStops[segmentStops.length - 1],
-                    waypoints: segmentStops.slice(1, -1)
-                });
-            }
-        }
-
-        const segmentPromises = workStopSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints));
-        const inverseSegmentPromises = inverseSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints));
+        const workStops = addresses.slice(1, -1);
         
-        // Ejecutar promesas iniciales
-        let [toFirstStop, toFinalDestination, toLastStopForInverse, fromFirstStopToHome, ...allSegmentResults] = await Promise.all([
-            toFirstStopPromise,
-            toFinalDestinationPromise,
-            toLastStopForInversePromise,
-            fromFirstStopToHomePromise,
-            ...segmentPromises,
-            ...inverseSegmentPromises
-        ]);
-
-        const normalSegmentCount = workStopSegments.length;
-        const segmentResults = allSegmentResults.slice(0, normalSegmentCount);
-        const inverseSegmentResults = allSegmentResults.slice(normalSegmentCount);
-
-        // ============================================================
-        // 🔮 FASE PROFETA: CÁLCULO DE TRÁFICO FUTURO (NUEVO)
-        // ============================================================
-        if (startTime && currentDate && !toFirstStop.error) {
-            try {
-                console.log("🔮 Iniciando cálculo de Departure Time real...");
-
-                // A. Parsear Hora de Inicio
-                // Formato esperado currentDate: "YYYY-MM-DD", startTime: "HH:MM"
-                const startDateTime = new Date(`${currentDate}T${startTime}:00`);
-                
-                // B. Delay de Almacén (minutos -> ms)
-                const delayMs = (parseInt(warehouseDelay) || 15) * 60 * 1000;
-
-                // C. Tiempo de Manejo (Segundos)
-                // Sumamos Leg 1 + Todos los Segmentos Intermedios
-                // Nota: calculateLeg debe devolver .durationValue (segundos) o parseamos el texto
-                let totalDriveSeconds = parseDurationToSeconds(toFirstStop.duration);
-                
-                segmentResults.forEach(seg => {
-                    if (!seg.error) {
-                        totalDriveSeconds += parseDurationToSeconds(seg.duration);
-                    }
-                });
-
-                // D. Tiempo en Paradas (ARIA)
-                // Multiplier (min/parada) * Cantidad de paradas
-                const stopCount = workStops.length;
-                const stopTimeSeconds = stopCount * (ariaResult.multiplier * 60);
-
-                // E. Hora de Salida Calculada
-                const totalDurationMs = (totalDriveSeconds + stopTimeSeconds) * 1000 + delayMs;
-                const predictedDepartureTime = new Date(startDateTime.getTime() + totalDurationMs);
-                
-                // Timestamp UNIX para Google (segundos)
-                const departureTimestamp = Math.floor(predictedDepartureTime.getTime() / 1000);
-
-                // Validar que sea futuro (Google da error si es pasado)
-                const nowUnix = Math.floor(Date.now() / 1000);
-                if (departureTimestamp > nowUnix) {
-                    console.log(`🔮 Predicción: Salida estimada a las ${predictedDepartureTime.toLocaleTimeString()} (Unix: ${departureTimestamp})`);
-                    console.log(`   --> Recalculando tráfico de retorno (Last Stop -> Casa)...`);
-
-                    // F. SOBREESCRIBIR toFinalDestination con tráfico real
-                    // Llamamos a calculateLeg pasando el 4to parámetro: departureTime
-                    const preciseReturn = await calculateLeg(lastStop, finalDestination, [], departureTimestamp);
-                    
-                    if (!preciseReturn.error) {
-                        toFinalDestination = preciseReturn; // ¡Reemplazo exitoso!
-                        console.log(`✅ Tráfico futuro aplicado: ${preciseReturn.duration} (vs original)`);
-                    }
-                } else {
-                    console.log("⚠️ La hora estimada es en el pasado, se usa tráfico actual.");
+        // Helper para segmentos (lotes de 10)
+        const generateSegments = (stops) => {
+            const segs = [];
+            for (let i = 0; i < stops.length; i += 9) { 
+                const chunk = stops.slice(i, i + 10); 
+                if (chunk.length > 0) {
+                    segs.push({
+                        origin: chunk[0], 
+                        destination: chunk[chunk.length - 1], 
+                        waypoints: chunk.slice(1, -1) 
+                    });
                 }
-
-            } catch (calcError) {
-                console.error("⚠️ Error calculando tráfico futuro (se mantiene tráfico actual):", calcError);
             }
+            return segs;
+        };
+
+        const normalSegments = generateSegments(workStops);
+        const firstStop = workStops[0];
+        const lastStop = workStops[workStops.length - 1];
+
+        // --- 2. PREPARAR RUTA IA (Solo si existe) ---
+        let isAiOptimized = false;
+        let altFirstStop, altLastStop, altSegments = [];
+
+        if (aiOptimizedAddresses && aiOptimizedAddresses.length > 0) {
+            console.log("🤖 Calculando ruta sugerida por IA...");
+            isAiOptimized = true;
+            // La IA ya manda los stops de trabajo ordenados (sin warehouse ni casa)
+            const altWorkStops = aiOptimizedAddresses; 
+            
+            altFirstStop = altWorkStops[0];
+            altLastStop = altWorkStops[altWorkStops.length - 1];
+            altSegments = generateSegments(altWorkStops);
+        } else {
+            console.log("ℹ️ No hay sugerencia de IA. Se calculará solo ruta Normal.");
         }
-        // ============================================================
-        // FIN FASE PROFETA
-        // ============================================================
 
+        // --- 3. EJECUCIÓN DE PROMESAS (GOOGLE MAPS) ---
+        
+        // A. Promesas Obligatorias (Ruta Normal)
+        const promises = [
+            calculateLeg(origin, firstStop),                // Ida
+            calculateLeg(lastStop, finalDestination),       // Vuelta Normal
+            ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints)) // Tramos Normales
+        ];
 
-        // --- MANEJO DE ERRORES (Igual que antes) ---
-        const failedAddresses = [];
-        // ... (Tu lógica de validación de errores se mantiene idéntica aquí) ...
-        if (toFirstStop.error) failedAddresses.push({ type: 'Warehouse → Primera', from: origin, to: firstStop, errorType: toFirstStop.errorType });
-        if (toFinalDestination.error) failedAddresses.push({ type: 'Última → Destino', from: lastStop, to: finalDestination, errorType: toFinalDestination.errorType });
-        // ... (resto de validaciones) ...
-
-        // (Si hay errores, devolver failedAddresses como tenías antes)
-        if (failedAddresses.length > 0) {
-             return res.status(400).json({ /* ... tu respuesta de error existente ... */ });
+        // B. Promesas Opcionales (Ruta IA)
+        let aiStartIndex = -1; // Para saber dónde empiezan los resultados de la IA
+        
+        if (isAiOptimized) {
+            aiStartIndex = promises.length; // Marcamos el índice
+            promises.push(calculateLeg(origin, altFirstStop));          // Ida IA
+            promises.push(calculateLeg(altLastStop, finalDestination)); // Vuelta IA
+            altSegments.forEach(seg => {
+                promises.push(calculateLeg(seg.origin, seg.destination, seg.waypoints));
+            });
         }
 
-        // --- PREPARAR RESPUESTA FINAL ---
-        const segmentsWithStops = segmentResults.map((result, index) => {
-            const seg = workStopSegments[index];
+        // C. ¡Fuego! (Una sola llamada masiva o parcial)
+        const allResults = await Promise.all(promises);
+
+        // --- 4. PROCESAR RESULTADOS ---
+        
+        // Extraer Normales
+        const toFirstStop = allResults[0];
+        const toFinalDestination = allResults[1];
+        const normalSegmentResults = allResults.slice(2, 2 + normalSegments.length);
+
+        // Reconstruir con stops para el frontend
+        const segmentsWithStops = normalSegmentResults.map((result, index) => {
+            const seg = normalSegments[index];
             return { ...result, stops: [seg.origin, ...seg.waypoints, seg.destination] };
         });
 
-        const inverseSegmentsWithStops = inverseSegmentResults.map((result, idx) => {
-            const segStops = inverseSegments[idx].waypoints.length > 0 
-                ? [inverseSegments[idx].origin, ...inverseSegments[idx].waypoints, inverseSegments[idx].destination]
-                : [inverseSegments[idx].origin, inverseSegments[idx].destination];
-            return { distance: result.distance, duration: result.duration, stops: segStops };
-        });
+        // Extraer IA (Si aplica)
+        let aiRouteData = null;
 
+        if (isAiOptimized && aiStartIndex !== -1) {
+            const toAltFirstStop = allResults[aiStartIndex];
+            const fromAltLastStop = allResults[aiStartIndex + 1];
+            const altSegmentResults = allResults.slice(aiStartIndex + 2);
+
+            const altSegmentsWithStops = altSegmentResults.map((result, idx) => {
+                const seg = altSegments[idx];
+                const segStops = seg.waypoints.length > 0 
+                    ? [seg.origin, ...seg.waypoints, seg.destination]
+                    : [seg.origin, seg.destination];
+                return { ...result, stops: segStops };
+            });
+
+            aiRouteData = {
+                toStart: toAltFirstStop,
+                toEnd: fromAltLastStop,
+                segments: altSegmentsWithStops
+            };
+        }
+
+        // --- 5. RESPUESTA ---
         res.json({
             hasErrors: false,
+            isAiOptimized,
+            
+            // Datos Normales
             toFirstStop,
             segments: segmentsWithStops,
-            toFinalDestination, // Este ahora trae el tráfico predictivo si aplicó
-            inverseRouteLegs: {
-                toLastStop: toLastStopForInverse,
-                fromFirstStop: fromFirstStopToHome,
-                segments: inverseSegmentsWithStops
-            },
+            toFinalDestination, // (Aquí iría tu lógica de tráfico predictivo si la reactivas)
+            
+            // Datos IA (Será null si no hubo sugerencia)
+            aiRoute: aiRouteData,
+            
             aria: {
                 multiplier: ariaResult.multiplier,
-                rutasAnalizadas: ariaResult.rutasAnalizadas,
-                ajuste: ariaResult.ajuste
+                rutasAnalizadas: ariaResult.rutasAnalizadas
             }
         });
 
     } catch (error) {
-        console.error("❌ Error endpoint optimize-route:", error.message);
-        res.status(500).json({ 
-            hasErrors: true, 
-            message: 'Error interno al calcular ruta.', 
-            error: error.message 
-        });
+        console.error("❌ Error:", error.message);
+        res.status(500).json({ hasErrors: true, message: error.message });
     }
 });
-
 // =========================================================
 // 🛠️ HELPER: PARSEAR DURACIÓN (Si google devuelve texto)
 // =========================================================
