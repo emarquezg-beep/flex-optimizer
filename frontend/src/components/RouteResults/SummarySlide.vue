@@ -3,7 +3,7 @@ import { defineProps, defineEmits } from 'vue';
 
 const props = defineProps({
   normalData: { type: Object, required: true },
-  inverseData: { type: Object, default: null }, // 👈 CAMBIO 1: Opcional
+  inverseData: { type: Object, default: null }, 
   selectedScenario: { type: String, required: true }
 });
 
@@ -38,7 +38,7 @@ const getAriaFactor = (data) => {
       class="split-side normal-side" 
       :class="{ 
         'is-active': selectedScenario === 'normal',
-        'is-solo': !inverseData // Clase extra si está solo
+        'is-solo': !inverseData 
       }"
       @click="emit('update:selectedScenario', 'normal')"
     >
@@ -89,7 +89,7 @@ const getAriaFactor = (data) => {
 
     <div 
       v-if="inverseData"
-      class="split-side inverse-side" 
+      class="split-side alt-side" 
       :class="{ 'is-active': selectedScenario === 'inverse' }"
       @click="emit('update:selectedScenario', 'inverse')"
     >
@@ -102,7 +102,7 @@ const getAriaFactor = (data) => {
         <div class="radio-circle">
           <div v-if="selectedScenario === 'inverse'" class="radio-dot"></div>
         </div>
-        <span class="scenario-label">{{ inverseData.label || 'INVERSA' }}</span>
+        <span class="scenario-label">{{ inverseData.label || 'AI ROUTE' }}</span>
       </div>
 
       <div class="hero-score">
@@ -142,6 +142,7 @@ const getAriaFactor = (data) => {
 </template>
 
 <style scoped>
+/* ESTILOS BASE */
 .slide-content {
   height: 100%;
   width: 100%;
@@ -151,7 +152,7 @@ const getAriaFactor = (data) => {
 }
 
 .split-side {
-  flex: 1; /* Esto hace que si hay uno solo, ocupe el 100% */
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -165,12 +166,11 @@ const getAriaFactor = (data) => {
   position: relative;
 }
 
-/* Si está solo (no hay IA), quitamos opacidad y cursor pointer */
 .split-side.is-solo {
   opacity: 1;
   cursor: default;
-  background-color: var(--bg-primary); /* Fondo activo por defecto */
-  border-bottom-color: transparent; /* Sin borde de selección */
+  background-color: var(--bg-primary);
+  border-bottom-color: transparent;
 }
 
 .split-side.is-active {
@@ -179,10 +179,13 @@ const getAriaFactor = (data) => {
   box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
 }
 
+/* Colores de Borde Activo */
 .normal-side.is-active { border-bottom-color: #4facfe; }
-.inverse-side.is-active { border-bottom-color: #ff9a9e; }
 
-/* El resto de estilos se mantiene igual... */
+/* ✅ CAMBIO: Renombrado de .inverse-side a .alt-side para ser agnóstico */
+.alt-side.is-active { border-bottom-color: #8b5cf6; /* Violeta/Morado para IA */ }
+
+/* Resto de estilos (Badge, Score, etc) igual que antes... */
 .aria-badge {
   position: absolute;
   top: 10px;
@@ -198,7 +201,6 @@ const getAriaFactor = (data) => {
 .aria-icon { font-size: 0.8rem; }
 .aria-val { font-size: 0.7rem; font-weight: bold; color: white; }
 
-/* --- SELECTION HEADER --- */
 .selection-indicator {
   margin-top: 15px;
   display: flex;
@@ -211,7 +213,6 @@ const getAriaFactor = (data) => {
 .is-active .radio-circle { border-color: var(--brand-primary); }
 .radio-dot { width: 8px; height: 8px; background-color: var(--brand-primary); border-radius: 50%; }
 
-/* --- SCORE AREA --- */
 .hero-score {
   text-align: center;
   display: flex;
@@ -251,7 +252,6 @@ const getAriaFactor = (data) => {
   border: 1px dashed rgba(0,0,0,0.1);
 }
 
-/* --- METRICS AREA --- */
 .hero-metrics {
   width: 100%;
   padding: 0 5px;
