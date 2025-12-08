@@ -570,6 +570,8 @@ const reportData = computed(() => {
   if (!backendResponse.value || !backendResponse.value.segments) return null;
   
   const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
+
+
   
   // --- 1. PROCESAR RUTA NORMAL ---
   let totalBlockMiles = 0;
@@ -617,7 +619,7 @@ const reportData = computed(() => {
   
   // --- 2. GENERAR SECUENCIA NORMAL (Visualización) ---
   // ✅ CORRECCIÓN CRÍTICA: Usamos [...copia] para no mutar el original y causar crash
-  const normalSequenceStr = [...extractedAddresses.value]
+    const normalSequenceStr = [...extractedAddresses.value]
     .sort((a,b) => Number(a.number) - Number(b.number))
     .map(s => s.number)
     .join('-');
@@ -662,7 +664,11 @@ const reportData = computed(() => {
           
           // ✅ CORRECCIÓN CRÍTICA: Usamos [...copia]
           const aiSequenceStr = [...extractedAddresses.value]
-            .sort((a,b) => Number(a.ia_suggestion) - Number(b.ia_suggestion))
+            .sort((a,b) => {
+                const valA = a.ia_suggestion ?? a.number;
+                const valB = b.ia_suggestion ?? b.number;
+                return Number(valA) - Number(valB);
+            })
             .map(s => s.number)
             .join('-');
 
@@ -1018,19 +1024,24 @@ async function sendToBackend() {
     // 2. 🔍 COMPARACIÓN INICIAL (Caso A vs Caso B)
     let aiOptimizedStops = null;
     
-    // Verificamos si hay ALGUNA diferencia entre el orden actual y la sugerencia
-    const hasDifference = extractedAddresses.value.some(stop => 
-        Number(stop.number) !== Number(stop.ia_suggestion)
-    );
+    // Usamos Number() en AMBOS lados para que "20" sea igual a 20.
+        const hasDifference = extractedAddresses.value.some(stop => {
+        // Si ia_suggestion viene en el JSON, úsalo. Si no, usa el número original.
+        const suggestion = (stop.ia_suggestion !== undefined && stop.ia_suggestion !== null) 
+             ? stop.ia_suggestion 
+             : stop.number;
+             
+        return Number(stop.number) !== Number(suggestion);
+    });
 
     if (hasDifference) {
-        console.log("⚡ Caso B: Diferencias detectadas. Preparando cálculo doble...");
+        console.log("⚡ Diferencia detectada (IA activa)...");
         // Ordenamos por la sugerencia de la IA
         const sortedByAI = [...extractedAddresses.value].sort((a, b) => Number(a.ia_suggestion) - Number(b.ia_suggestion));
         // Extraemos solo las direcciones
         aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
     } else {
-        console.log("💤 Caso A: Rutas idénticas. Se enviará solo ruta Normal.");
+        console.log("💤 Rutas idénticas (IA inactiva).");
     }
 
     // 3. Enviar al Backend
