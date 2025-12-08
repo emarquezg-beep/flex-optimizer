@@ -564,7 +564,7 @@ function calculateActualDelay() {
 // COMPUTED PROPERTIES
 // ============================================
 
-// En UploadView.vue
+// En UploadView.vue - Reemplaza todo el bloque 'const reportData = computed(...)'
 
 const reportData = computed(() => {
   if (!backendResponse.value || !backendResponse.value.segments) return null;
@@ -572,7 +572,6 @@ const reportData = computed(() => {
   const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
   
   // --- 1. PROCESAR RUTA NORMAL ---
-  // (Esta lógica de conteo se mantiene igual que antes)
   let totalBlockMiles = 0;
   let totalBlockDriveDuration = 0;
   let totalExtraStopTime = 0; 
@@ -617,17 +616,17 @@ const reportData = computed(() => {
   const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration || 0);
   
   // --- 2. GENERAR SECUENCIA NORMAL (Visualización) ---
-  // Ordenamos extractedAddresses por 'number' para mostrar 2-3-4...
-  const normalSequenceStr = extractedAddresses.value
+  // ✅ CORRECCIÓN CRÍTICA: Usamos [...copia] para no mutar el original y causar crash
+  const normalSequenceStr = [...extractedAddresses.value]
     .sort((a,b) => Number(a.number) - Number(b.number))
     .map(s => s.number)
     .join('-');
 
   // --- 3. PROCESAR RUTA IA (Lógica de Decisión) ---
   let aiData = null;
-  let aiMessage = "La IA no pudo encontrar una mejor ruta que la propuesta por Amazon."; // Mensaje por defecto (Caso A y B2)
+  let aiMessage = "La IA no pudo encontrar una mejor ruta que la propuesta por Amazon.";
 
-  // Solo entramos aquí si pasamos el Filtro 1 (son diferentes) y el backend devolvió datos
+  // Solo entramos si el backend confirma que calculó IA
   if (isAiOptimized && aiRoute) {
       let aiBlockMiles = 0;
       let aiBlockDuration = 0;
@@ -639,7 +638,6 @@ const reportData = computed(() => {
       });
 
       const totalAiWorkMiles = parseFloat(aiRoute.toStart.distance || 0) + aiBlockMiles;
-      // Usamos el mismo tiempo extra de paradas (son las mismas casas)
       const totalAiWorkDuration = parseFloat(aiRoute.toStart.duration || 0) + aiBlockDuration + totalExtraStopTime;
       
       const totalAiMiles = totalAiWorkMiles + parseFloat(aiRoute.toEnd.distance || 0);
@@ -647,25 +645,25 @@ const reportData = computed(() => {
 
       // --- ⚖️ EL JUEZ: CÁLCULO DEL 5% ---
       const diffMiles = totalNormalMiles - totalAiMiles;
-      const diffTime = totalNormalDuration - totalAiDuration; // minutos
+      const diffTime = totalNormalDuration - totalAiDuration;
 
-      // Calculamos % de mejora (evitando división por cero)
       const pctMiles = totalNormalMiles > 0 ? (diffMiles / totalNormalMiles) : 0;
       const pctTime = totalNormalDuration > 0 ? (diffTime / totalNormalDuration) : 0;
       
-      const UMBRAL = 0.05; // 5% (Configurable)
-
-      // ¿Supera el umbral en AL MENOS UNO de los dos factores?
+      const UMBRAL = 0.05; 
       const isSignificant = (pctMiles >= UMBRAL) || (pctTime >= UMBRAL);
 
+      // 🔍 DEBUG: Ver por qué se calculó y qué decidió el juez
+      console.log(`⚖️ Juez IA: Ahorro ${diffMiles.toFixed(1)}mi / ${diffTime.toFixed(0)}min. Significativo? ${isSignificant}`);
+
       if (isSignificant) {
-          // ✅ CASO B1: Mejora Significativa
+          // ✅ CASO B1: Mejora Real
           aiMessage = `La IA consiguió ahorrar ${diffMiles.toFixed(1)} millas y/o ${Math.round(diffTime)} minutos.`;
           
-          // Generar Secuencia IA
-          const aiSequenceStr = extractedAddresses.value
+          // ✅ CORRECCIÓN CRÍTICA: Usamos [...copia]
+          const aiSequenceStr = [...extractedAddresses.value]
             .sort((a,b) => Number(a.ia_suggestion) - Number(b.ia_suggestion))
-            .map(s => s.number) // Mostramos el número original, pero en el orden nuevo
+            .map(s => s.number)
             .join('-');
 
           aiData = {
@@ -679,19 +677,17 @@ const reportData = computed(() => {
               baseDriveDuration: parseFloat(aiRoute.toStart.duration) + aiBlockDuration + totalExtraStopTime,
               commuteDuration: parseFloat(aiRoute.toEnd.duration),
               label: '🤖 AI ROUTE',
-              sequence: aiSequenceStr // <--- Nueva propiedad para mostrar
+              sequence: aiSequenceStr
           };
       } else {
-          // ❌ CASO B2: Mejora Insignificante (< 5%)
-          console.log(`IA descartada: Mejora irrelevante (Millas: ${(pctMiles*100).toFixed(1)}%, Tiempo: ${(pctTime*100).toFixed(1)}%)`);
-          // Dejamos aiData en null para que el frontend solo muestre 1 card
-          // pero mantenemos el mensaje de "No pudo encontrar mejor ruta"
+          // ❌ CASO B2: Mejora Insignificante -> Se descarta visualmente
+          console.log("🚫 IA Descartada por mejora insuficiente (<5%)");
       }
   }
 
   return {
     savings: aiData ? (totalNormalMiles - aiData.totalMiles).toFixed(2) : '0.00',
-    aiMessage: aiMessage, // <--- Pasamos el mensaje a la vista
+    aiMessage: aiMessage,
     
     stopCount: totalStopCount,
     apartmentCount: totalApartmentCount,
@@ -707,12 +703,14 @@ const reportData = computed(() => {
       totalDuration: Math.round(totalNormalDuration),
       baseDriveDuration: parseFloat(toFirstStop.duration) + totalBlockDriveDuration + totalExtraStopTime,
       commuteDuration: toFinalDestDur,
-      sequence: normalSequenceStr // <--- Nueva propiedad
+      sequence: normalSequenceStr
     },
     
-    inverse: aiData // Será null si es Caso A o Caso B2
+    inverse: aiData // Será null si no superó el umbral o si eran iguales
   };
 });
+
+
 
 const scenarioETAs = computed(() => {
   if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
@@ -1025,6 +1023,14 @@ async function sendToBackend() {
         Number(stop.number) !== Number(stop.ia_suggestion)
     );
 
+    // DEBUG: Encontrar al culpable
+    const diffs = extractedAddresses.value.filter(s => Number(s.number) !== Number(s.ia_suggestion));
+    if (diffs.length > 0) {
+        console.table(diffs.map(s => ({ Stop: s.number, IA: s.ia_suggestion, TypeStop: typeof s.number, TypeIA: typeof s.ia_suggestion })));
+    }
+    
+    const hasDifference = diffs.length > 0;
+    
     if (hasDifference) {
         console.log("⚡ Caso B: Diferencias detectadas. Preparando cálculo doble...");
         // Ordenamos por la sugerencia de la IA
