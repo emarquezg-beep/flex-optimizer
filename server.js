@@ -322,13 +322,12 @@ async function calculateLeg(origin, destination, waypoints = [], departureTime =
     }
 }
 
-// --- Tu endpoint `/api/optimize-route` (sin cambios) ---
-// server.js - Endpoint optimizado (Sin Inversa Obligatoria)
+// server.js - Endpoint '/api/optimize-route' REFACTORIZADO
 
 app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     let { 
-        addresses,              // Ruta A: Original (Strings)
-        aiOptimizedAddresses,   // Ruta B: Sugerida (Strings) o Null
+        addresses,              // Ruta A (Normal)
+        aiOptimizedAddresses,   // Ruta B (IA)
         finalDestination: customFinalDestination,
         startTime,
         warehouseDelay,
@@ -338,18 +337,19 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     // Validación básica
     addresses = addresses.filter(addr => addr && addr.trim() !== '');
     if (!addresses || addresses.length < 3) {
-        return res.status(400).json({ message: 'Datos insuficientes.', hasErrors: true });
+        return res.status(400).json({ message: 'Datos insuficientes (faltan paradas).', hasErrors: true });
     }
 
     try {
         const ariaResult = await calcularMultiplierARIA(req.userId);
         
-        // --- 1. PREPARAR RUTA NORMAL (Siempre se calcula) ---
+        // ==========================================
+        // 1. PREPARACIÓN COMÚN
+        // ==========================================
         const origin = addresses[0]; 
         const finalDestination = customFinalDestination || addresses[addresses.length - 1];
-        const workStops = addresses.slice(1, -1);
         
-        // Helper para segmentos (lotes de 10)
+        // Helper para segmentos
         const generateSegments = (stops) => {
             const segs = [];
             for (let i = 0; i < stops.length; i += 9) { 
@@ -365,99 +365,105 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
             return segs;
         };
 
+        // ==========================================
+        // 2. CÁLCULO RUTA NORMAL (OBLIGATORIO)
+        // ==========================================
+        const workStops = addresses.slice(1, -1);
         const normalSegments = generateSegments(workStops);
         const firstStop = workStops[0];
         const lastStop = workStops[workStops.length - 1];
 
-        // --- 2. PREPARAR RUTA IA (Solo si existe) ---
-        let isAiOptimized = false;
-        let altFirstStop, altLastStop, altSegments = [];
+        console.log(`🛣️ Calculando Ruta Normal (${workStops.length} paradas)...`);
 
-        if (aiOptimizedAddresses && aiOptimizedAddresses.length > 0) {
-            console.log("🤖 Calculando ruta sugerida por IA...");
-            isAiOptimized = true;
-            // La IA ya manda los stops de trabajo ordenados (sin warehouse ni casa)
-            const altWorkStops = aiOptimizedAddresses; 
-            
-            altFirstStop = altWorkStops[0];
-            altLastStop = altWorkStops[altWorkStops.length - 1];
-            altSegments = generateSegments(altWorkStops);
-        } else {
-            console.log("ℹ️ No hay sugerencia de IA. Se calculará solo ruta Normal.");
-        }
-
-        // --- 3. EJECUCIÓN DE PROMESAS (GOOGLE MAPS) ---
-        
-        // A. Promesas Obligatorias (Ruta Normal)
-        const promises = [
-            calculateLeg(origin, firstStop),                // Ida
-            calculateLeg(lastStop, finalDestination),       // Vuelta Normal
-            ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints)) // Tramos Normales
+        // Ejecución Normal
+        const normalPromises = [
+            calculateLeg(origin, firstStop),                // 0: Ida
+            calculateLeg(lastStop, finalDestination),       // 1: Vuelta
+            ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints)) // 2+: Segmentos
         ];
 
-        // B. Promesas Opcionales (Ruta IA)
-        let aiStartIndex = -1; // Para saber dónde empiezan los resultados de la IA
-        
-        if (isAiOptimized) {
-            aiStartIndex = promises.length; // Marcamos el índice
-            promises.push(calculateLeg(origin, altFirstStop));          // Ida IA
-            promises.push(calculateLeg(altLastStop, finalDestination)); // Vuelta IA
-            altSegments.forEach(seg => {
-                promises.push(calculateLeg(seg.origin, seg.destination, seg.waypoints));
-            });
-        }
+        const normalResults = await Promise.all(normalPromises);
 
-        // C. ¡Fuego! (Una sola llamada masiva o parcial)
-        const allResults = await Promise.all(promises);
+        // Procesar Resultados Normales
+        const toFirstStop = normalResults[0];
+        const toFinalDestination = normalResults[1];
+        const normalSegmentResults = normalResults.slice(2);
 
-        // --- 4. PROCESAR RESULTADOS ---
-        
-        // Extraer Normales
-        const toFirstStop = allResults[0];
-        const toFinalDestination = allResults[1];
-        const normalSegmentResults = allResults.slice(2, 2 + normalSegments.length);
-
-        // Reconstruir con stops para el frontend
         const segmentsWithStops = normalSegmentResults.map((result, index) => {
             const seg = normalSegments[index];
             return { ...result, stops: [seg.origin, ...seg.waypoints, seg.destination] };
         });
 
-        // Extraer IA (Si aplica)
+        // ==========================================
+        // 3. CÁLCULO RUTA IA (OPCIONAL Y SEGURO)
+        // ==========================================
         let aiRouteData = null;
+        let isAiOptimized = false;
 
-        if (isAiOptimized && aiStartIndex !== -1) {
-            const toAltFirstStop = allResults[aiStartIndex];
-            const fromAltLastStop = allResults[aiStartIndex + 1];
-            const altSegmentResults = allResults.slice(aiStartIndex + 2);
+        // Validación fuerte: debe ser array y tener contenido
+        if (aiOptimizedAddresses && Array.isArray(aiOptimizedAddresses) && aiOptimizedAddresses.length > 0) {
+            console.log(`🤖 Intentando calcular Ruta IA (${aiOptimizedAddresses.length} paradas)...`);
+            
+            try {
+                const altWorkStops = aiOptimizedAddresses;
+                const altFirstStop = altWorkStops[0];
+                const altLastStop = altWorkStops[altWorkStops.length - 1];
+                const altSegments = generateSegments(altWorkStops);
 
-            const altSegmentsWithStops = altSegmentResults.map((result, idx) => {
-                const seg = altSegments[idx];
-                const segStops = seg.waypoints.length > 0 
-                    ? [seg.origin, ...seg.waypoints, seg.destination]
-                    : [seg.origin, seg.destination];
-                return { ...result, stops: segStops };
-            });
+                // Ejecución IA (Independiente)
+                const aiPromises = [
+                    calculateLeg(origin, altFirstStop),          // 0: Ida IA
+                    calculateLeg(altLastStop, finalDestination), // 1: Vuelta IA
+                    ...altSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints))
+                ];
 
-            aiRouteData = {
-                toStart: toAltFirstStop,
-                toEnd: fromAltLastStop,
-                segments: altSegmentsWithStops
-            };
+                const aiResults = await Promise.all(aiPromises);
+
+                // Procesar Resultados IA
+                const toAltFirstStop = aiResults[0];
+                const fromAltLastStop = aiResults[1];
+                const altSegmentResults = aiResults.slice(2);
+
+                const altSegmentsWithStops = altSegmentResults.map((result, idx) => {
+                    const seg = altSegments[idx];
+                    const segStops = seg.waypoints.length > 0 
+                        ? [seg.origin, ...seg.waypoints, seg.destination]
+                        : [seg.origin, seg.destination];
+                    return { ...result, stops: segStops };
+                });
+
+                aiRouteData = {
+                    toStart: toAltFirstStop,
+                    toEnd: fromAltLastStop,
+                    segments: altSegmentsWithStops
+                };
+                
+                isAiOptimized = true;
+                console.log("✅ Ruta IA calculada exitosamente.");
+
+            } catch (aiError) {
+                console.error("⚠️ Error calculando Ruta IA (Se omite):", aiError.message);
+                // No hacemos 'throw', simplemente isAiOptimized se queda en false
+                // y la app no se rompe.
+            }
+        } else {
+            console.log("ℹ️ Sin sugerencia válida de IA.");
         }
 
-        // --- 5. RESPUESTA ---
+        // ==========================================
+        // 4. RESPUESTA FINAL
+        // ==========================================
         res.json({
             hasErrors: false,
-            isAiOptimized,
+            isAiOptimized, // Será true solo si el bloque try funcionó
             
             // Datos Normales
             toFirstStop,
             segments: segmentsWithStops,
-            toFinalDestination, // (Aquí iría tu lógica de tráfico predictivo si la reactivas)
+            toFinalDestination,
             
-            // Datos IA (Será null si no hubo sugerencia)
-            aiRoute: aiRouteData,
+            // Datos IA
+            aiRoute: aiRouteData, // null o el objeto completo
             
             aria: {
                 multiplier: ariaResult.multiplier,
@@ -466,10 +472,16 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error:", error.message);
-        res.status(500).json({ hasErrors: true, message: error.message });
+        console.error("❌ Error CRÍTICO en endpoint:", error);
+        // Devolver JSON incluso en error crítico para que el frontend no reciba HTML (pantalla blanca)
+        res.status(500).json({ 
+            hasErrors: true, 
+            message: 'Error interno del servidor al procesar la ruta.',
+            error: error.message 
+        });
     }
 });
+
 // =========================================================
 // 🛠️ HELPER: PARSEAR DURACIÓN (Si google devuelve texto)
 // =========================================================

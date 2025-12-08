@@ -1067,9 +1067,11 @@ async function sendToBackend() {
 
     } catch (error) {
         console.error("Error:", error);
+        // IMPORTANTE: Asegúrate de que esto muestre algo en pantalla
+        alert(`Ocurrió un error: ${error.message}`); 
         backendResponse.value = { error: error.message, hasErrors: true };
     } finally {
-        isProcessing.value = false;
+        isProcessing.value = false; // 👈 CRÍTICO: Si esto no ocurre, el botón se queda girando.
     }
 }
 
