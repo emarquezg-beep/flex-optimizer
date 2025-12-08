@@ -564,24 +564,22 @@ function calculateActualDelay() {
 // COMPUTED PROPERTIES
 // ============================================
 
-// Computed Property: reportData
+// En UploadView.vue
+
 const reportData = computed(() => {
-  if (!backendResponse.value || !backendResponse.value.segments) {
-    return null;
-  }
+  if (!backendResponse.value || !backendResponse.value.segments) return null;
   
-  // Extraemos las variables de la respuesta (incluyendo las nuevas de IA)
   const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
   
-  // --- 1. VARIABLES PARA ACUMULAR (RUTA NORMAL) ---
+  // --- 1. PROCESAR RUTA NORMAL ---
+  // (Esta lógica de conteo se mantiene igual que antes)
   let totalBlockMiles = 0;
   let totalBlockDriveDuration = 0;
-  let totalExtraStopTime = 0; // Solo acumulamos extras (Apt/Downtown), el base va por multiplier
+  let totalExtraStopTime = 0; 
   let totalStopCount = 0;
   let totalApartmentCount = 0;
   let totalDowntownCount = 0;
-  
-  // --- 2. PROCESAR SEGMENTOS NORMALES ---
+
   const processedSegments = segments.map(seg => {
     let segmentExtraStopTime = 0;
     let aptCount = 0;
@@ -594,89 +592,111 @@ const reportData = computed(() => {
       const isDowntown = stopData ? stopData.isDowntown : false;
       const isApartment = stopData ? stopData.isApartment : false;
       
-      if (isDowntown) {
-        downtownCount++;
-        segmentExtraStopTime += 3;  // Downtown +3 min
-      } else if (isApartment) {
-        aptCount++;
-        segmentExtraStopTime += 0.75;  // Apartamento +0.75 min
-      }
+      if (isDowntown) { downtownCount++; segmentExtraStopTime += 3; } 
+      else if (isApartment) { aptCount++; segmentExtraStopTime += 0.75; }
     });
     
-    // Acumulamos a los totales globales
     totalExtraStopTime += segmentExtraStopTime;
-    totalApartmentCount += aptCount + downtownCount; // Nota: Tu lógica anterior sumaba ambos aquí
+    totalApartmentCount += aptCount + downtownCount;
     totalDowntownCount += downtownCount;
     totalBlockMiles += parseFloat(seg.distance || 0);
     totalBlockDriveDuration += parseFloat(seg.duration || 0);
     
-    // RETORNO CORRECTO DEL OBJETO (Aquí estaba el error de los ...)
     return {
       distance: seg.distance,
       duration: seg.duration,
       stopsCount: currentStopCount,
-      aptCount: aptCount,
-      downtownCount: downtownCount
+      aptCount, downtownCount
     };
   });
   
-  // --- 3. CÁLCULOS DE TOTALES (RUTA NORMAL) ---
-  const toFirstStopDist = parseFloat(toFirstStop.distance || 0);
-  const toFirstStopDur = parseFloat(toFirstStop.duration || 0);
-  const toFinalDestDist = parseFloat(toFinalDestination.distance || 0);
-  const toFinalDestDur = parseFloat(toFinalDestination.duration || 0);
+  // Totales Normales
+  const totalWorkMiles = parseFloat(toFirstStop.distance || 0) + totalBlockMiles;
+  const totalWorkDuration = parseFloat(toFirstStop.duration || 0) + totalBlockDriveDuration + totalExtraStopTime;
+  const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance || 0);
+  const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration || 0);
   
-  const totalWorkMiles = toFirstStopDist + totalBlockMiles;
-  const totalWorkDuration = toFirstStopDur + totalBlockDriveDuration + totalExtraStopTime;
-  const totalNormalMiles = totalWorkMiles + toFinalDestDist;
-  const totalNormalDuration = totalWorkDuration + toFinalDestDur;
-  
-  // --- 4. PROCESAR RUTA IA (SOLO SI EXISTE) ---
-  let aiData = null;
+  // --- 2. GENERAR SECUENCIA NORMAL (Visualización) ---
+  // Ordenamos extractedAddresses por 'number' para mostrar 2-3-4...
+  const normalSequenceStr = extractedAddresses.value
+    .sort((a,b) => Number(a.number) - Number(b.number))
+    .map(s => s.number)
+    .join('-');
 
+  // --- 3. PROCESAR RUTA IA (Lógica de Decisión) ---
+  let aiData = null;
+  let aiMessage = "La IA no pudo encontrar una mejor ruta que la propuesta por Amazon."; // Mensaje por defecto (Caso A y B2)
+
+  // Solo entramos aquí si pasamos el Filtro 1 (son diferentes) y el backend devolvió datos
   if (isAiOptimized && aiRoute) {
       let aiBlockMiles = 0;
       let aiBlockDuration = 0;
 
-      // Procesamos los segmentos de la IA
-      // Asumimos que los tiempos "extra" (apts/downtown) son los mismos 
-      // porque son las mismas paradas, solo cambia el orden de manejo.
       const aiProcessedSegments = aiRoute.segments.map(seg => {
           aiBlockMiles += parseFloat(seg.distance || 0);
           aiBlockDuration += parseFloat(seg.duration || 0);
-          return { 
-              distance: seg.distance, 
-              duration: seg.duration,
-              stopsCount: (seg.stops || []).length 
-          };
+          return { distance: seg.distance, duration: seg.duration, stopsCount: (seg.stops || []).length };
       });
 
-      const toAiStartDist = parseFloat(aiRoute.toStart.distance || 0);
-      const toAiStartDur = parseFloat(aiRoute.toStart.duration || 0);
-      const toAiEndDist = parseFloat(aiRoute.toEnd.distance || 0);
-      const toAiEndDur = parseFloat(aiRoute.toEnd.duration || 0);
-
-      const totalAiWorkMiles = toAiStartDist + aiBlockMiles;
-      // Usamos el mismo totalExtraStopTime porque son las mismas casas
-      const totalAiWorkDuration = toAiStartDur + aiBlockDuration + totalExtraStopTime;
+      const totalAiWorkMiles = parseFloat(aiRoute.toStart.distance || 0) + aiBlockMiles;
+      // Usamos el mismo tiempo extra de paradas (son las mismas casas)
+      const totalAiWorkDuration = parseFloat(aiRoute.toStart.duration || 0) + aiBlockDuration + totalExtraStopTime;
       
-      aiData = {
-          toStart: { distance: toAiStartDist.toFixed(2), duration: Math.round(toAiStartDur) },
-          segments: aiProcessedSegments,
-          toEnd: { distance: toAiEndDist.toFixed(2), duration: Math.round(toAiEndDur) },
-          totalWorkMiles: totalAiWorkMiles.toFixed(2),
-          totalWorkDuration: Math.round(totalAiWorkDuration),
-          totalMiles: (totalAiWorkMiles + toAiEndDist).toFixed(2),
-          totalDuration: Math.round(totalAiWorkDuration + toAiEndDur),
-          baseDriveDuration: toAiStartDur + aiBlockDuration + totalExtraStopTime,
-          commuteDuration: toAiEndDur,
-          label: '🤖 AI Suggestion'
-      };
+      const totalAiMiles = totalAiWorkMiles + parseFloat(aiRoute.toEnd.distance || 0);
+      const totalAiDuration = totalAiWorkDuration + parseFloat(aiRoute.toEnd.duration || 0);
+
+      // --- ⚖️ EL JUEZ: CÁLCULO DEL 5% ---
+      const diffMiles = totalNormalMiles - totalAiMiles;
+      const diffTime = totalNormalDuration - totalAiDuration; // minutos
+
+      // Calculamos % de mejora (evitando división por cero)
+      const pctMiles = totalNormalMiles > 0 ? (diffMiles / totalNormalMiles) : 0;
+      const pctTime = totalNormalDuration > 0 ? (diffTime / totalNormalDuration) : 0;
+      
+      const UMBRAL = 0.05; // 5% (Configurable)
+
+      // ¿Supera el umbral en AL MENOS UNO de los dos factores?
+      const isSignificant = (pctMiles >= UMBRAL) || (pctTime >= UMBRAL);
+
+      if (isSignificant) {
+          // ✅ CASO B1: Mejora Significativa
+          aiMessage = `La IA consiguió ahorrar ${diffMiles.toFixed(1)} millas y/o ${Math.round(diffTime)} minutos.`;
+          
+          // Generar Secuencia IA
+          const aiSequenceStr = extractedAddresses.value
+            .sort((a,b) => Number(a.ia_suggestion) - Number(b.ia_suggestion))
+            .map(s => s.number) // Mostramos el número original, pero en el orden nuevo
+            .join('-');
+
+          aiData = {
+              toStart: { distance: parseFloat(aiRoute.toStart.distance).toFixed(2), duration: Math.round(parseFloat(aiRoute.toStart.duration)) },
+              segments: aiProcessedSegments,
+              toEnd: { distance: parseFloat(aiRoute.toEnd.distance).toFixed(2), duration: Math.round(parseFloat(aiRoute.toEnd.duration)) },
+              totalWorkMiles: totalAiWorkMiles.toFixed(2),
+              totalWorkDuration: Math.round(totalAiWorkDuration),
+              totalMiles: totalAiMiles.toFixed(2),
+              totalDuration: Math.round(totalAiDuration),
+              baseDriveDuration: parseFloat(aiRoute.toStart.duration) + aiBlockDuration + totalExtraStopTime,
+              commuteDuration: parseFloat(aiRoute.toEnd.duration),
+              label: '🤖 AI ROUTE',
+              sequence: aiSequenceStr // <--- Nueva propiedad para mostrar
+          };
+      } else {
+          // ❌ CASO B2: Mejora Insignificante (< 5%)
+          console.log(`IA descartada: Mejora irrelevante (Millas: ${(pctMiles*100).toFixed(1)}%, Tiempo: ${(pctTime*100).toFixed(1)}%)`);
+          // Dejamos aiData en null para que el frontend solo muestre 1 card
+          // pero mantenemos el mensaje de "No pudo encontrar mejor ruta"
+      }
   }
 
-  // --- 5. RETORNO FINAL ---
   return {
     savings: aiData ? (totalNormalMiles - aiData.totalMiles).toFixed(2) : '0.00',
+    aiMessage: aiMessage, // <--- Pasamos el mensaje a la vista
+    
+    stopCount: totalStopCount,
+    apartmentCount: totalApartmentCount,
+    downtownCount: totalDowntownCount,
+
     normal: {
       toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
       segments: processedSegments,
@@ -685,18 +705,15 @@ const reportData = computed(() => {
       totalWorkDuration: Math.round(totalWorkDuration),
       totalMiles: totalNormalMiles.toFixed(2),
       totalDuration: Math.round(totalNormalDuration),
-      baseDriveDuration: toFirstStopDur + totalBlockDriveDuration + totalExtraStopTime,
+      baseDriveDuration: parseFloat(toFirstStop.duration) + totalBlockDriveDuration + totalExtraStopTime,
       commuteDuration: toFinalDestDur,
+      sequence: normalSequenceStr // <--- Nueva propiedad
     },
-    // Si no hay IA, inverse será null (y la UI debería ocultarlo)
-    inverse: aiData, 
     
-    // Contadores globales
-    stopCount: totalStopCount,
-    apartmentCount: totalApartmentCount,
-    downtownCount: totalDowntownCount,
+    inverse: aiData // Será null si es Caso A o Caso B2
   };
 });
+
 const scenarioETAs = computed(() => {
   if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
     return null;
@@ -987,9 +1004,11 @@ function startManualEntry() {
 
 // En UploadView.vue
 
+// En UploadView.vue
+
 async function sendToBackend() {
-    // 1. Preparar Ruta Normal (Siempre ordenada 2, 3, 4...)
-    const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => a.number - b.number);
+    // 1. Preparar Ruta Normal (Siempre ordenada por stop_number)
+    const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => Number(a.number) - Number(b.number));
     const addressesToSend = sortedByAmazon.map(stop => stop.address);
     const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
     
@@ -998,19 +1017,25 @@ async function sendToBackend() {
     const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
     const fullRouteAmazon = [sanitizeAddress(warehouse.address), ...sanitizedAddresses, sanitizeAddress(selectedDestination.value)];
 
-    // 2. Detectar Optimización IA
+    // 2. 🔍 COMPARACIÓN INICIAL (Caso A vs Caso B)
     let aiOptimizedStops = null;
-    const hasOptimization = extractedAddresses.value.some(stop => stop.number !== stop.ia_suggestion);
+    
+    // Verificamos si hay ALGUNA diferencia entre el orden actual y la sugerencia
+    const hasDifference = extractedAddresses.value.some(stop => 
+        Number(stop.number) !== Number(stop.ia_suggestion)
+    );
 
-    if (hasOptimization) {
-        console.log("⚡ IA sugiere un orden diferente.");
+    if (hasDifference) {
+        console.log("⚡ Caso B: Diferencias detectadas. Preparando cálculo doble...");
         // Ordenamos por la sugerencia de la IA
-        const sortedByAI = [...extractedAddresses.value].sort((a, b) => a.ia_suggestion - b.ia_suggestion);
-        // Enviamos SOLO las paradas de trabajo (sin warehouse ni casa)
+        const sortedByAI = [...extractedAddresses.value].sort((a, b) => Number(a.ia_suggestion) - Number(b.ia_suggestion));
+        // Extraemos solo las direcciones
         aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
+    } else {
+        console.log("💤 Caso A: Rutas idénticas. Se enviará solo ruta Normal.");
     }
 
-    // 3. Enviar
+    // 3. Enviar al Backend
     backendResponse.value = { status: 'loading' };
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -1019,7 +1044,7 @@ async function sendToBackend() {
             method: 'POST',
             body: JSON.stringify({ 
                 addresses: fullRouteAmazon,
-                aiOptimizedAddresses: aiOptimizedStops, // Será null si no hay cambios
+                aiOptimizedAddresses: aiOptimizedStops, // Será null en Caso A
                 finalDestination: selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value,
                 startTime: blockData.value.hora,
                 warehouseDelay: blockData.value.retraso_almacen,
@@ -1029,12 +1054,15 @@ async function sendToBackend() {
         
         const result = await response.json();
         
-        // Manejo de respuesta
         backendResponse.value = result;
         if (result.aria) ariaData.value = result.aria;
         
         if (result.hasErrors) {
-             // ... tu lógica de error existente ...
+            // Manejo de errores visual...
+            setTimeout(() => {
+                const errorSection = document.querySelector('.address-errors');
+                if (errorSection) errorSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
         }
 
     } catch (error) {
@@ -1044,10 +1072,7 @@ async function sendToBackend() {
         isProcessing.value = false;
     }
 }
-// Pega esto SOBREESCRIBIENDO tu función saveToLogbook() existente
 
-// 🆕 MODIFICAR saveToLogbook para vincular con scheduled_block
-// 🆕 MODIFICADO: Recibe payloadDirecto desde el SlideContainer
 async function saveToLogbook(payloadDirecto) {
     // Si viene del evento del slide, usamos ese payload. Si no, fallback (seguridad).
     const dataToSave = payloadDirecto || normalPayload.value; 
