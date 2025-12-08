@@ -1023,14 +1023,6 @@ async function sendToBackend() {
         Number(stop.number) !== Number(stop.ia_suggestion)
     );
 
-    // DEBUG: Encontrar al culpable
-    const diffs = extractedAddresses.value.filter(s => Number(s.number) !== Number(s.ia_suggestion));
-    if (diffs.length > 0) {
-        console.table(diffs.map(s => ({ Stop: s.number, IA: s.ia_suggestion, TypeStop: typeof s.number, TypeIA: typeof s.ia_suggestion })));
-    }
-    
-    const hasDifference = diffs.length > 0;
-    
     if (hasDifference) {
         console.log("⚡ Caso B: Diferencias detectadas. Preparando cálculo doble...");
         // Ordenamos por la sugerencia de la IA
