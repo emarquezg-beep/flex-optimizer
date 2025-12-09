@@ -566,10 +566,13 @@ function calculateActualDelay() {
 
 // En UploadView.vue
 
+// EN UploadView.vue -> Reemplaza todo el bloque 'const reportData = computed(...)'
+
 const reportData = computed(() => {
-  // 1. Si no hay respuesta del backend, no hacemos nada
+  // 1. Protección inicial
   if (!backendResponse.value || !backendResponse.value.segments) return null;
   
+  // ⚠️ NOTA: Ya no desestructuramos 'inverseRouteLegs' porque no existe en el nuevo backend
   const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
   
   // --- A. PROCESAR RUTA NORMAL ---
@@ -589,7 +592,7 @@ const reportData = computed(() => {
     
     (seg.stops || []).forEach(addr => {
       const stopData = extractedAddresses.value.find(s => s.address === addr);
-      // Validación segura por si stopData no existe
+      // Validación segura (Optional Chaining)
       const isDowntown = stopData?.isDowntown || false;
       const isApartment = stopData?.isApartment || false;
       
@@ -616,19 +619,17 @@ const reportData = computed(() => {
   const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance || 0);
   const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration || 0);
   
-  // --- B. SECUENCIA NORMAL (BLINDADA CONTRA CRASH) ---
-  // ⚠️ CRÍTICO: Usamos [... ] para copiar el array antes de ordenar.
-  // Si quitas los corchetes, la app volverá a ponerse blanca.
+  // --- B. GENERAR SECUENCIA NORMAL (BLINDADA) ---
   const normalSequenceStr = [...extractedAddresses.value]
     .sort((a,b) => Number(a.number) - Number(b.number))
     .map(s => s.number)
     .join('-');
 
-  // --- C. PROCESAR RUTA IA (Si existe) ---
+  // --- C. PROCESAR RUTA IA (Nueva Lógica) ---
   let aiData = null;
-  // Mensaje por defecto para cuando no hay IA o no mejora suficiente
-  let aiMessage = "La IA no encontró una mejora significativa (>5%)."; 
+  let aiMessage = "La IA no encontró una mejora significativa.";
 
+  // Solo procesamos si el backend mandó aiRoute
   if (isAiOptimized && aiRoute) {
       let aiBlockMiles = 0;
       let aiBlockDuration = 0;
@@ -645,7 +646,7 @@ const reportData = computed(() => {
       const totalAiMiles = totalAiWorkMiles + parseFloat(aiRoute.toEnd.distance || 0);
       const totalAiDuration = totalAiWorkDuration + parseFloat(aiRoute.toEnd.duration || 0);
 
-      // JUEZ DEL 5%
+      // Juez del 5%
       const diffMiles = totalNormalMiles - totalAiMiles;
       const diffTime = totalNormalDuration - totalAiDuration;
       const pctMiles = totalNormalMiles > 0 ? (diffMiles / totalNormalMiles) : 0;
@@ -653,9 +654,8 @@ const reportData = computed(() => {
       const UMBRAL = 0.05; 
 
       if ((pctMiles >= UMBRAL) || (pctTime >= UMBRAL)) {
-          aiMessage = `¡Ahorro detectado! ${diffMiles.toFixed(1)} mi / ${Math.round(diffTime)} min.`;
+          aiMessage = `¡Ahorro! ${diffMiles.toFixed(1)} mi / ${Math.round(diffTime)} min.`;
           
-          // ⚠️ CRÍTICO: Copia segura también aquí
           const aiSequenceStr = [...extractedAddresses.value]
             .sort((a,b) => {
                 const valA = a.ia_suggestion ?? a.number;
@@ -681,7 +681,7 @@ const reportData = computed(() => {
       }
   }
 
-  // RETORNO FINAL
+  // --- RETORNO FINAL ---
   return {
     savings: aiData ? (totalNormalMiles - aiData.totalMiles).toFixed(2) : '0.00',
     aiMessage: aiMessage,
@@ -703,12 +703,10 @@ const reportData = computed(() => {
       sequence: normalSequenceStr
     },
     
-    // Si no hubo IA o no superó el 5%, esto será null.
-    // SlideContainer y SummarySlide deben estar preparados para recibir null aquí.
+    // Si no hay IA, esto es null y SlideContainer lo oculta
     inverse: aiData 
   };
 });
-
 
 // En UploadView.vue
 
@@ -965,7 +963,7 @@ const normalPayload = computed(() => {
 // 3. Payload para Escenario INVERSO (Incluye Score)
 const inversePayload = computed(() => {
   const baseData = calculateLogData('inverse');
-  if (!baseData) return {};
+  if (!baseData) return null;
 
   const scoreResult = computeScoreV5(baseData);
   const mensaje = obtenerMensajeConsciente(scoreResult.total);
