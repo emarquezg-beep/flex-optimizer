@@ -566,12 +566,13 @@ function calculateActualDelay() {
 
 // En UploadView.vue - Reemplaza todo el bloque 'const reportData = computed(...)'
 
+// En UploadView.vue
+
 const reportData = computed(() => {
+  // 1. Protección inicial: Si no hay datos del backend, no hacemos nada
   if (!backendResponse.value || !backendResponse.value.segments) return null;
   
   const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
-
-
   
   // --- 1. PROCESAR RUTA NORMAL ---
   let totalBlockMiles = 0;
@@ -611,24 +612,25 @@ const reportData = computed(() => {
     };
   });
   
-  // Totales Normales
   const totalWorkMiles = parseFloat(toFirstStop.distance || 0) + totalBlockMiles;
   const totalWorkDuration = parseFloat(toFirstStop.duration || 0) + totalBlockDriveDuration + totalExtraStopTime;
   const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance || 0);
   const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration || 0);
   
   // --- 2. GENERAR SECUENCIA NORMAL (Visualización) ---
-  // ✅ CORRECCIÓN CRÍTICA: Usamos [...copia] para no mutar el original y causar crash
-    const normalSequenceStr = [...extractedAddresses.value]
+  
+  // 🔥🔥🔥 AQUÍ ESTABA EL ERROR DEL PANTALLAZO BLANCO 🔥🔥🔥
+  // El uso de [...extractedAddresses.value] crea una COPIA.
+  // Sin los [...], Vue entra en bucle infinito y crashea.
+  const normalSequenceStr = [...extractedAddresses.value]
     .sort((a,b) => Number(a.number) - Number(b.number))
     .map(s => s.number)
     .join('-');
 
-  // --- 3. PROCESAR RUTA IA (Lógica de Decisión) ---
+  // --- 3. PROCESAR RUTA IA ---
   let aiData = null;
   let aiMessage = "La IA no pudo encontrar una mejor ruta que la propuesta por Amazon.";
 
-  // Solo entramos si el backend confirma que calculó IA
   if (isAiOptimized && aiRoute) {
       let aiBlockMiles = 0;
       let aiBlockDuration = 0;
@@ -655,14 +657,10 @@ const reportData = computed(() => {
       const UMBRAL = 0.05; 
       const isSignificant = (pctMiles >= UMBRAL) || (pctTime >= UMBRAL);
 
-      // 🔍 DEBUG: Ver por qué se calculó y qué decidió el juez
-      console.log(`⚖️ Juez IA: Ahorro ${diffMiles.toFixed(1)}mi / ${diffTime.toFixed(0)}min. Significativo? ${isSignificant}`);
-
       if (isSignificant) {
-          // ✅ CASO B1: Mejora Real
           aiMessage = `La IA consiguió ahorrar ${diffMiles.toFixed(1)} millas y/o ${Math.round(diffTime)} minutos.`;
           
-          // ✅ CORRECCIÓN CRÍTICA: Usamos [...copia]
+          // 🔥🔥🔥 AQUÍ TAMBIÉN USAMOS LA COPIA CON [...] 🔥🔥🔥
           const aiSequenceStr = [...extractedAddresses.value]
             .sort((a,b) => {
                 const valA = a.ia_suggestion ?? a.number;
@@ -685,9 +683,6 @@ const reportData = computed(() => {
               label: '🤖 AI ROUTE',
               sequence: aiSequenceStr
           };
-      } else {
-          // ❌ CASO B2: Mejora Insignificante -> Se descarta visualmente
-          console.log("🚫 IA Descartada por mejora insuficiente (<5%)");
       }
   }
 
@@ -715,7 +710,6 @@ const reportData = computed(() => {
     inverse: aiData // Será null si no superó el umbral o si eran iguales
   };
 });
-
 
 
 const scenarioETAs = computed(() => {
