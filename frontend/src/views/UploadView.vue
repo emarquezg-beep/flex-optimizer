@@ -564,17 +564,15 @@ function calculateActualDelay() {
 // COMPUTED PROPERTIES
 // ============================================
 
-// En UploadView.vue - Reemplaza todo el bloque 'const reportData = computed(...)'
-
 // En UploadView.vue
 
 const reportData = computed(() => {
-  // 1. Protección inicial: Si no hay datos del backend, no hacemos nada
+  // 1. Si no hay respuesta del backend, no hacemos nada
   if (!backendResponse.value || !backendResponse.value.segments) return null;
   
   const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
   
-  // --- 1. PROCESAR RUTA NORMAL ---
+  // --- A. PROCESAR RUTA NORMAL ---
   let totalBlockMiles = 0;
   let totalBlockDriveDuration = 0;
   let totalExtraStopTime = 0; 
@@ -591,8 +589,9 @@ const reportData = computed(() => {
     
     (seg.stops || []).forEach(addr => {
       const stopData = extractedAddresses.value.find(s => s.address === addr);
-      const isDowntown = stopData ? stopData.isDowntown : false;
-      const isApartment = stopData ? stopData.isApartment : false;
+      // Validación segura por si stopData no existe
+      const isDowntown = stopData?.isDowntown || false;
+      const isApartment = stopData?.isApartment || false;
       
       if (isDowntown) { downtownCount++; segmentExtraStopTime += 3; } 
       else if (isApartment) { aptCount++; segmentExtraStopTime += 0.75; }
@@ -617,19 +616,18 @@ const reportData = computed(() => {
   const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance || 0);
   const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration || 0);
   
-  // --- 2. GENERAR SECUENCIA NORMAL (Visualización) ---
-  
-  // 🔥🔥🔥 AQUÍ ESTABA EL ERROR DEL PANTALLAZO BLANCO 🔥🔥🔥
-  // El uso de [...extractedAddresses.value] crea una COPIA.
-  // Sin los [...], Vue entra en bucle infinito y crashea.
+  // --- B. SECUENCIA NORMAL (BLINDADA CONTRA CRASH) ---
+  // ⚠️ CRÍTICO: Usamos [... ] para copiar el array antes de ordenar.
+  // Si quitas los corchetes, la app volverá a ponerse blanca.
   const normalSequenceStr = [...extractedAddresses.value]
     .sort((a,b) => Number(a.number) - Number(b.number))
     .map(s => s.number)
     .join('-');
 
-  // --- 3. PROCESAR RUTA IA ---
+  // --- C. PROCESAR RUTA IA (Si existe) ---
   let aiData = null;
-  let aiMessage = "La IA no pudo encontrar una mejor ruta que la propuesta por Amazon.";
+  // Mensaje por defecto para cuando no hay IA o no mejora suficiente
+  let aiMessage = "La IA no encontró una mejora significativa (>5%)."; 
 
   if (isAiOptimized && aiRoute) {
       let aiBlockMiles = 0;
@@ -647,20 +645,17 @@ const reportData = computed(() => {
       const totalAiMiles = totalAiWorkMiles + parseFloat(aiRoute.toEnd.distance || 0);
       const totalAiDuration = totalAiWorkDuration + parseFloat(aiRoute.toEnd.duration || 0);
 
-      // --- ⚖️ EL JUEZ: CÁLCULO DEL 5% ---
+      // JUEZ DEL 5%
       const diffMiles = totalNormalMiles - totalAiMiles;
       const diffTime = totalNormalDuration - totalAiDuration;
-
       const pctMiles = totalNormalMiles > 0 ? (diffMiles / totalNormalMiles) : 0;
       const pctTime = totalNormalDuration > 0 ? (diffTime / totalNormalDuration) : 0;
-      
       const UMBRAL = 0.05; 
-      const isSignificant = (pctMiles >= UMBRAL) || (pctTime >= UMBRAL);
 
-      if (isSignificant) {
-          aiMessage = `La IA consiguió ahorrar ${diffMiles.toFixed(1)} millas y/o ${Math.round(diffTime)} minutos.`;
+      if ((pctMiles >= UMBRAL) || (pctTime >= UMBRAL)) {
+          aiMessage = `¡Ahorro detectado! ${diffMiles.toFixed(1)} mi / ${Math.round(diffTime)} min.`;
           
-          // 🔥🔥🔥 AQUÍ TAMBIÉN USAMOS LA COPIA CON [...] 🔥🔥🔥
+          // ⚠️ CRÍTICO: Copia segura también aquí
           const aiSequenceStr = [...extractedAddresses.value]
             .sort((a,b) => {
                 const valA = a.ia_suggestion ?? a.number;
@@ -686,6 +681,7 @@ const reportData = computed(() => {
       }
   }
 
+  // RETORNO FINAL
   return {
     savings: aiData ? (totalNormalMiles - aiData.totalMiles).toFixed(2) : '0.00',
     aiMessage: aiMessage,
@@ -707,7 +703,9 @@ const reportData = computed(() => {
       sequence: normalSequenceStr
     },
     
-    inverse: aiData // Será null si no superó el umbral o si eran iguales
+    // Si no hubo IA o no superó el 5%, esto será null.
+    // SlideContainer y SummarySlide deben estar preparados para recibir null aquí.
+    inverse: aiData 
   };
 });
 
