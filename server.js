@@ -334,6 +334,12 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
         currentDate
     } = req.body;
 
+    // 👇 AGREGA ESTO
+    console.log("------------------------------------------------");
+    console.log("📨 RECEPCIÓN DE DATOS EN BACKEND:");
+    console.log(`📦 Direcciones Normales: ${addresses ? addresses.length : 0}`);
+    console.log(`🤖 Direcciones IA: ${aiOptimizedAddresses ? aiOptimizedAddresses.length : 'NULL/UNDEFINED'}`);
+    console.log("------------------------------------------------");
     // Validación básica
     addresses = addresses.filter(addr => addr && addr.trim() !== '');
     if (!addresses || addresses.length < 3) {
