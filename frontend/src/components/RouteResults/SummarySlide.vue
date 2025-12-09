@@ -38,10 +38,15 @@ const getAriaFactor = (data) => {
       class="split-side normal-side" 
       :class="{ 
         'is-active': selectedScenario === 'normal',
-        'is-solo': !inverseData || !inverseData.eta_normal // 🛡️ Check de seguridad
+        'is-solo': !inverseData || !inverseData.eta_normal
       }"
       @click="emit('update:selectedScenario', 'normal')"
     >
+      <div class="aria-badge">
+        <span class="aria-icon">🤖</span>
+        <span class="aria-val">{{ getAriaFactor(normalData) }}</span>
+      </div>
+
       <div class="selection-indicator">
         <div class="radio-circle" v-if="inverseData && inverseData.eta_normal">
           <div v-if="selectedScenario === 'normal'" class="radio-dot"></div>
@@ -49,7 +54,42 @@ const getAriaFactor = (data) => {
         <span class="scenario-label">NORMAL</span>
       </div>
 
+      <div class="hero-score">
+        <span class="score-val">{{ normalData.route_score }}</span>
+        <span class="score-max">/100</span>
+        
+        <div class="stop-summary-pill" :class="{ 'has-apts': ((normalData.apartment_count || 0) + (normalData.downtown_count || 0)) > 0 }">
+          {{ getStopSummary(normalData) }}
+        </div>
+
+        <div class="calc-text" v-if="normalData.calculation_text">
+          {{ normalData.calculation_text }}
+        </div>
+        
+        <div class="seq-text" v-if="normalData.sequence" style="margin-top:5px; font-size:0.65rem; color:#666; max-width:90%; overflow-wrap:anywhere;">
+           {{ normalData.sequence }}
+        </div>
       </div>
+      
+      <div class="hero-metrics">
+        <div class="eta-group">
+          <div class="eta-row opt"><span>🟢 Opt:</span> <strong>{{ normalData.eta_optimista }}</strong></div>
+          <div class="eta-row norm"><span>🟡 Nor:</span> <strong>{{ normalData.eta_normal }}</strong></div>
+          <div class="eta-row pes"><span>🔴 Pes:</span> <strong>{{ normalData.eta_pesimista }}</strong></div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric">
+            <span class="icon">📏</span>
+            <span class="val">{{ normalData.millas_totales }} mi</span>
+          </div>
+          <div class="metric">
+            <span class="icon">💰</span>
+            <span class="val">${{ normalData.pago_real_por_hora }}/h</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div 
       v-if="inverseData && inverseData.eta_normal"
@@ -69,7 +109,42 @@ const getAriaFactor = (data) => {
         <span class="scenario-label">{{ inverseData.label || 'AI ROUTE' }}</span>
       </div>
 
+      <div class="hero-score">
+        <span class="score-val">{{ inverseData.route_score }}</span>
+        <span class="score-max">/100</span>
+        
+        <div class="stop-summary-pill" :class="{ 'has-apts': ((inverseData.apartment_count || 0) + (inverseData.downtown_count || 0)) > 0 }">
+          {{ getStopSummary(inverseData) }}
+        </div>
+
+        <div class="calc-text" v-if="inverseData.calculation_text">
+          {{ inverseData.calculation_text }}
+        </div>
+        
+        <div class="seq-text" v-if="inverseData.sequence" style="margin-top:5px; font-size:0.65rem; color:#666; max-width:90%; overflow-wrap:anywhere;">
+           {{ inverseData.sequence }}
+        </div>
       </div>
+
+      <div class="hero-metrics">
+        <div class="eta-group">
+          <div class="eta-row opt"><span>🟢 Opt:</span> <strong>{{ inverseData.eta_optimista }}</strong></div>
+          <div class="eta-row norm"><span>🟡 Nor:</span> <strong>{{ inverseData.eta_normal }}</strong></div>
+          <div class="eta-row pes"><span>🔴 Pes:</span> <strong>{{ inverseData.eta_pesimista }}</strong></div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric">
+            <span class="icon">📏</span>
+            <span class="val">{{ inverseData.millas_totales }} mi</span>
+          </div>
+          <div class="metric">
+            <span class="icon">💰</span>
+            <span class="val">${{ inverseData.pago_real_por_hora }}/h</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
   </div>
 </template>
@@ -114,11 +189,9 @@ const getAriaFactor = (data) => {
 
 /* Colores de Borde Activo */
 .normal-side.is-active { border-bottom-color: #4facfe; }
+.alt-side.is-active { border-bottom-color: #8b5cf6; }
 
-/* ✅ CAMBIO: Renombrado de .inverse-side a .alt-side para ser agnóstico */
-.alt-side.is-active { border-bottom-color: #8b5cf6; /* Violeta/Morado para IA */ }
-
-/* Resto de estilos (Badge, Score, etc) igual que antes... */
+/* Resto de estilos */
 .aria-badge {
   position: absolute;
   top: 10px;
