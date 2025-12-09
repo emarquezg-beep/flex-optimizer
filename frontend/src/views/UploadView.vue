@@ -1,6 +1,6 @@
 <script setup>
 // ============================================
-// IMPORTS
+// 1. IMPORTS
 // ============================================
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
@@ -17,12 +17,13 @@ import {
 } from '@/constants/mensajesConscientes';
 
 // ============================================
-// VARIABLES Y REFS
+// 2. VARIABLES Y ESTADO
 // ============================================
 const route = useRoute();
 const { userId } = useAuth();
 const { vehicles } = useVehicles();
 
+// Estado de UI y Datos
 const extractedAddresses = ref([]);
 const isProcessing = ref(false);
 const showInputForm = ref(true);
@@ -33,17 +34,18 @@ const fileInputRef = ref(null);
 const selectedFileNames = ref([]);
 const jsonInput = ref('');
 
-// Variables para detección de downtown
+// Modales y Configuración
 const showDowntownModal = ref(false);
 const orlandoApartments = ref([]);
 const downtownSelection = ref({});
 const showQuickSettingsModal = ref(false);
+const mostrarDetalles = ref(false);
 
-// 🤖 ARIA: Datos del sistema inteligente
-const ariaData = ref(null);
+// Datos del Backend
+const ariaData = ref(null); // ARIA multiplier
 
+// Constantes
 const DURACION_OPTIONS = [1, 1.5, 2, 3, 3.5, 4, 4.5, 5];
-
 const warehouses = ref([
   { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL', commuteMiles: 23 },
   { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL', commuteMiles: 28 },
@@ -60,10 +62,10 @@ const destinations = ref([
   { code: 'Otro (especificar abajo)', address: 'custom' }
 ]);
 
+// Formulario del Bloque
 const selectedWarehouseCode = ref(warehouses.value[0].code);
 const selectedDestination = ref(destinations.value[0].address);
 const customDestination = ref('');
-const mostrarDetalles = ref(false);
 
 const getLocalDateString = () => {
   const date = new Date();
@@ -85,9 +87,10 @@ const blockData = ref({
 });
 
 // ============================================
-// WATCHERS & HOOKS
+// 3. WATCHERS & LIFECYCLE
 // ============================================
 
+// Actualizar millas si cambia warehouse
 watch(selectedWarehouseCode, (newCode) => {
   const warehouse = warehouses.value.find(w => w.code === newCode);
   if (warehouse) {
@@ -95,7 +98,7 @@ watch(selectedWarehouseCode, (newCode) => {
   }
 });
 
-// 👁️ VIGILANTE: Activar modo foco si hay respuesta
+// Modo Foco: Ocultar form si llega respuesta válida
 watch(backendResponse, (newVal) => {
   if (newVal && !newVal.hasErrors && newVal.status !== 'loading') {
     console.log("✅ Resultados recibidos. Activando Modo Foco.");
@@ -108,6 +111,7 @@ watch(backendResponse, (newVal) => {
 
 onMounted(() => {
   console.log('🚀 UploadView montado');
+  // Pre-fill desde Scheduled Block si existe en URL
   if (route.query.blockId) {
     try {
       blockData.value = {
@@ -130,144 +134,16 @@ onMounted(() => {
 });
 
 // ============================================
-// FUNCIONES HELPER
+// 4. LOGIC CORE (COMPUTED PROPERTIES)
 // ============================================
 
-function getCommuteForWarehouse(warehouseCode) {
-  const warehouse = warehouses.value.find(w => w.code === warehouseCode);
-  return warehouse ? warehouse.commuteMiles : warehouses.value[0].commuteMiles;
-}
-
-function getVehicleNickname(vehicleId) {
-  if (!vehicleId) return 'No especificado';
-  const vehicle = vehicles.value.find(v => v.id === vehicleId);
-  return vehicle ? vehicle.nickname : 'Vehículo desconocido';
-}
-
-function sanitizeAddress(address) {
-    if (!address) return '';
-    return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
-}
-
-function calculateActualDelay() {
-  try {
-    const now = new Date();
-    if (!blockData.value.hora) {
-      alert("Please set the 'Start Time' first.");
-      return;
-    }
-    const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
-    const blockStartTime = new Date();
-    blockStartTime.setHours(startHours, startMinutes, 0, 0);
-    const diffMs = now.getTime() - blockStartTime.getTime();
-    const actualDelayMinutes = Math.max(0, Math.round(diffMs / 60000));
-    blockData.value.retraso_almacen = actualDelayMinutes;
-    alert(`Calculated delay: ${actualDelayMinutes} minutes.`);
-  } catch (e) {
-    console.error("Error calculating delay:", e);
-    alert(`Error: ${e.message}`);
-  }
-}
-
-// ============================================
-// LÓGICA DE DOWNTOWN & EVALUACIÓN
-// ============================================
-
-function isInOrlando(address) {
-  if (!address) return false;
-  return /\bORLANDO\b/i.test(address);
-}
-
-function detectOrlandoApartments() {
-  return extractedAddresses.value.filter(stop => 
-    stop.address && stop.isApartment && isInOrlando(stop.address)
-  );
-}
-
-function showDowntownDetection() {
-  const apartments = detectOrlandoApartments();
-  if (apartments.length === 0) return false;
-  
-  orlandoApartments.value = apartments;
-  downtownSelection.value = {};
-  apartments.forEach(apt => {
-    downtownSelection.value[apt.number] = false;
-  });
-  showDowntownModal.value = true;
-  return true;
-}
-
-function confirmDowntownSelection() {
-  Object.keys(downtownSelection.value).forEach(stopNumber => {
-    const stop = extractedAddresses.value.find(s => s.number === parseInt(stopNumber));
-    if (stop) stop.isDowntown = downtownSelection.value[stopNumber];
-  });
-  showDowntownModal.value = false;
-  proceedWithEvaluation();
-}
-
-function skipDowntownSelection() {
-  orlandoApartments.value.forEach(apt => {
-    const stop = extractedAddresses.value.find(s => s.number === apt.number);
-    if (stop) stop.isDowntown = false;
-  });
-  showDowntownModal.value = false;
-  proceedWithEvaluation();
-}
-
-async function evaluateRoute() {
-  if (extractedAddresses.value.length === 0) {
-    if (!jsonInput.value) {
-      alert('Please paste the JSON from the Gem first.');
-      return;
-    }
-    isProcessing.value = true;
-    await new Promise(resolve => setTimeout(resolve, 50)); // UI flush
-
-    try {
-      const parsedData = JSON.parse(jsonInput.value);
-      if (!Array.isArray(parsedData)) throw new Error('JSON must be an array.');
-
-      const mappedStops = parsedData.map(item => {
-        const fullAddress = [item.street_address, item.apartment, item.city].filter(Boolean).join(' ').trim();
-        return {
-          number: item.stop_number || 0,
-          address: fullAddress,
-          isDowntown: false,
-          isApartment: item.apartment != null,
-          ia_suggestion: item.ia_suggestion // Importante para la IA
-        };
-      });
-
-      extractedAddresses.value = mappedStops;
-      isProcessing.value = false;
-    } catch (error) {
-      alert(`Error processing JSON: ${error.message}`);
-      isProcessing.value = false;
-      return;
-    }
-  }
-
-  const needsDowntownCheck = showDowntownDetection();
-  if (needsDowntownCheck) return;
-  
-  await proceedWithEvaluation();
-}
-
-async function proceedWithEvaluation() {
-  await sendToBackend();
-}
-
-// ============================================
-// 🧠 COMPUTED PROPERTIES (LOGIC CORE)
-// ============================================
-
-// 1. REPORT DATA (Corregido y Unificado)
+// --- REPORT DATA: Procesa la respuesta de Google Maps ---
 const reportData = computed(() => {
   if (!backendResponse.value || !backendResponse.value.segments) return null;
   
   const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
   
+  // A. Contadores y Ruta Normal
   let totalBlockMiles = 0;
   let totalBlockDriveDuration = 0;
   let totalExtraStopTime = 0; 
@@ -310,13 +186,13 @@ const reportData = computed(() => {
   const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance || 0);
   const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration || 0);
   
-  // ✅ BLINDAJE: Usamos [...copia] para evitar Loop Infinito al ordenar
+  // ✅ BLINDAJE CRÍTICO: [...copia] para evitar Loop Infinito
   const normalSequenceStr = [...extractedAddresses.value]
     .sort((a,b) => Number(a.number) - Number(b.number))
     .map(s => s.number)
     .join('-');
 
-  // --- LÓGICA IA ---
+  // B. Ruta IA (Solo si existe)
   let aiData = null;
   let aiMessage = "La IA no encontró una mejora significativa.";
 
@@ -332,7 +208,6 @@ const reportData = computed(() => {
 
       const totalAiWorkMiles = parseFloat(aiRoute.toStart.distance || 0) + aiBlockMiles;
       const totalAiWorkDuration = parseFloat(aiRoute.toStart.duration || 0) + aiBlockDuration + totalExtraStopTime;
-      
       const totalAiMiles = totalAiWorkMiles + parseFloat(aiRoute.toEnd.distance || 0);
       const totalAiDuration = totalAiWorkDuration + parseFloat(aiRoute.toEnd.duration || 0);
 
@@ -346,7 +221,7 @@ const reportData = computed(() => {
       if ((pctMiles >= UMBRAL) || (pctTime >= UMBRAL)) {
           aiMessage = `¡Ahorro! ${diffMiles.toFixed(1)} mi / ${Math.round(diffTime)} min.`;
           
-          // ✅ BLINDAJE: Copia segura también aquí
+          // ✅ BLINDAJE CRÍTICO AQUÍ TAMBIÉN
           const aiSequenceStr = [...extractedAddresses.value]
             .sort((a,b) => {
                 const valA = (a.ia_suggestion !== undefined && a.ia_suggestion !== null) ? a.ia_suggestion : a.number;
@@ -390,11 +265,11 @@ const reportData = computed(() => {
       commuteDuration: toFinalDestDur,
       sequence: normalSequenceStr
     },
-    inverse: aiData // Será null si no hay IA
+    inverse: aiData // Puede ser null
   };
 });
 
-// 2. SCENARIO ETAS (Protegido contra null)
+// --- SCENARIO ETAS (Tiempos de reloj) ---
 const scenarioETAs = computed(() => {
   if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
     return null;
@@ -431,7 +306,7 @@ const scenarioETAs = computed(() => {
       pessimistic: calculateScenario(normalBaseDrive, normalCommute, pessimisticMultiplier)
   };
 
-  // IA (Opcional)
+  // IA (Opcional) - 🛡️ PROTEGIDO CONTRA NULL
   let inverseScenarios = null;
   if (reportData.value.inverse) {
       const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
@@ -446,11 +321,11 @@ const scenarioETAs = computed(() => {
   return { normal: normalScenarios, inverse: inverseScenarios };
 });
 
-// 3. GENERADOR DE PAYLOADS (Helper + Computed)
+// --- HELPER: CÁLCULO DE PAYLOADS FINALES ---
 function calculateLogData(scenarioKey) {
   if (!extractedAddresses.value || !reportData.value || !scenarioETAs.value) return null;
   
-  // 🛡️ Seguridad para IA: si scenarioKey es 'inverse' pero reportData.inverse es null, salimos
+  // 🛡️ Seguridad para IA: si piden inverse pero no existe, salimos
   if (scenarioKey === 'inverse' && !reportData.value.inverse) return null;
 
   const chosenReport = reportData.value[scenarioKey];
@@ -458,7 +333,6 @@ function calculateLogData(scenarioKey) {
   
   if (!chosenReport || !chosenETA) return null;
 
-  // ... (Tu lógica de cálculo financiero sigue igual) ...
   const data = blockData.value;
   const pago = Number(data.pago) || 0;
   const duracion_horas = Number(data.duracion_horas) || 0;
@@ -466,13 +340,37 @@ function calculateLogData(scenarioKey) {
 
   // Lógica Ciudad
   let primary_city = null;
-  // ... (Tu lógica de ciudad abreviada por espacio, funciona igual) ...
-  
+  if (extractedAddresses.value.length > 0) {
+    const cityCounts = {};
+    extractedAddresses.value.forEach(stop => {
+      if (!stop.address) return;
+      let addr = stop.address.toUpperCase().replace(/\b(APT|UNIT|#)\s*\d+[A-Z]?\b/gi, '').replace(/\b(FL|FLORIDA)\s*$/i, '');
+      const parts = addr.trim().split(/\s+/);
+      let potentialCity = null;
+      if (parts.length >= 3) {
+         const cityWords = [];
+         for (let i = parts.length - 1; i >= 0 && cityWords.length < 3; i--) {
+           const word = parts[i];
+           if (/^\d+$/.test(word) || /^(ST|RD|AVE|BLVD|DR|LN|CT|WAY|PL|TER|CIR|LOOP|PKWY)$/i.test(word)) break;
+           if (word.length > 2) cityWords.unshift(word);
+         }
+         if (cityWords.length > 0) potentialCity = cityWords.join(' ');
+      }
+      if (potentialCity && potentialCity.length > 2) cityCounts[potentialCity] = (cityCounts[potentialCity] || 0) + 1;
+    });
+    let maxCount = 0;
+    for (const city in cityCounts) {
+      if (cityCounts[city] > maxCount) { maxCount = cityCounts[city]; primary_city = city; }
+    }
+    if (primary_city) {
+      primary_city = primary_city.split(' ').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ');
+    }
+  }
+
   const first_stop_distance = Number(chosenReport.toStart.distance) || 0;
   const antes_del_bloque_hrs = (Number(data.antes_del_bloque) || 0) / 60;
   let despues_del_bloque_hrs = 0;
 
-  // Calc diffMs
   try {
     const [startHours, startMinutes] = data.hora.split(':').map(Number);
     const blockStart = new Date();
@@ -561,6 +459,7 @@ function calculateLogData(scenarioKey) {
   };
 }
 
+// 4. PAYLOADS PARA SLIDE CONTAINER
 const normalPayload = computed(() => {
   const baseData = calculateLogData('normal');
   if (!baseData) return {};
@@ -578,7 +477,7 @@ const normalPayload = computed(() => {
 });
 
 const inversePayload = computed(() => {
-  // 🛡️ BLINDAJE CRÍTICO
+  // 🛡️ BLINDAJE CRÍTICO: Si no hay IA, devolvemos null
   if (!reportData.value || !reportData.value.inverse) return null;
   
   const baseData = calculateLogData('inverse');
@@ -588,16 +487,16 @@ const inversePayload = computed(() => {
 
   return {
     ...baseData,
-    ...reportData.value.normal, // Contadores
-    ...reportData.value.inverse, // Millas, Duración, Secuencia
+    ...reportData.value.normal, // Copiar contadores base
+    ...reportData.value.inverse, // Sobreescribir con datos IA
     ...etas,
-    label: reportData.value.inverse.label || 'IA ROUTE',
-    route_score: reportData.value.inverse.route_score, 
+    label: reportData.value.inverse.label || 'AI ROUTE',
+    route_score: reportData.value.inverse.route_score, // El score debe calcularse después si varía, por ahora usa el mismo o recalcula si integras computeScoreV5 aquí
   };
 });
 
 // ============================================
-// COMMUNICATION
+// 5. FUNCIONES PRINCIPALES (SEND & SAVE)
 // ============================================
 
 async function sendToBackend() {
@@ -711,6 +610,17 @@ function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
 function addAddress() {
     const nextNumber = extractedAddresses.value.length > 0 ? Math.max(...extractedAddresses.value.map(s => s.number)) + 1 : 2; 
     extractedAddresses.value.push({ number: nextNumber, address: '', isDowntown: false }); 
+}
+
+function getVehicleNickname(vehicleId) {
+  if (!vehicleId) return 'No especificado';
+  const vehicle = vehicles.value.find(v => v.id === vehicleId);
+  return vehicle ? vehicle.nickname : 'Vehículo desconocido';
+}
+
+function getCommuteForWarehouse(warehouseCode) {
+  const warehouse = warehouses.value.find(w => w.code === warehouseCode);
+  return warehouse ? warehouse.commuteMiles : warehouses.value[0].commuteMiles;
 }
 </script>
 
