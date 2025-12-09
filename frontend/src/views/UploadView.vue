@@ -499,6 +499,80 @@ const inversePayload = computed(() => {
 // 5. FUNCIONES PRINCIPALES (SEND & SAVE)
 // ============================================
 
+// ============================================
+// FUNCIONES DE EVALUACIÓN (PEGA ESTO ANTES DE sendToBackend)
+// ============================================
+
+async function evaluateRoute() {
+  console.log("🚀 Botón presionado: Iniciando evaluación...");
+
+  // CASO 1: Si la lista está vacía, intentamos leer del JSON Input
+  if (extractedAddresses.value.length === 0) {
+    if (!jsonInput.value) {
+      alert('⚠️ Por favor pega el JSON o sube imágenes primero.');
+      return;
+    }
+
+    isProcessing.value = true;
+    // Pequeña pausa para que la UI se actualice antes de bloquearse procesando
+    await new Promise(resolve => setTimeout(resolve, 50)); 
+
+    try {
+      const parsedData = JSON.parse(jsonInput.value);
+
+      if (!Array.isArray(parsedData)) {
+        throw new Error('El JSON debe ser un array de paradas ([]).');
+      }
+
+      // Mapeamos los datos del JSON a nuestra estructura interna
+      const mappedStops = parsedData.map(item => {
+        const fullAddress = [
+          item.street_address, 
+          item.apartment, 
+          item.city
+        ].filter(Boolean).join(' ').trim();
+
+        return {
+          number: item.stop_number || 0,
+          address: fullAddress,
+          isDowntown: false,
+          isApartment: item.apartment != null, // Detectar si es apt
+          ia_suggestion: item.ia_suggestion // Importante: capturar la sugerencia IA
+        };
+      });
+
+      extractedAddresses.value = mappedStops;
+      console.log(`✅ JSON procesado: ${extractedAddresses.value.length} paradas.`);
+      
+      // Apagamos el spinner momentáneamente para mostrar el modal si hace falta
+      isProcessing.value = false; 
+      
+    } catch (error) {
+      console.error("❌ Error procesando JSON:", error);
+      alert(`Error en el formato JSON: ${error.message}`);
+      isProcessing.value = false;
+      return;
+    }
+  }
+
+  // CASO 2: Verificar Downtown (Apartamentos en Orlando)
+  // Esto abre el modal si es necesario y detiene el flujo
+  const needsDowntownCheck = showDowntownDetection();
+  
+  if (needsDowntownCheck) {
+    console.log("⏸️ Esperando verificación de Downtown...");
+    return; // Esperamos a que el usuario confirme en el modal
+  }
+  
+  // Si no hay que chequear nada, nos vamos directo al backend
+  await proceedWithEvaluation();
+}
+
+// Función puente que llama al backend (usada por evaluateRoute y por el Modal)
+async function proceedWithEvaluation() {
+  await sendToBackend();
+}
+
 // En UploadView.vue -> Reemplaza la función sendToBackend() completa
 
 async function sendToBackend() {
