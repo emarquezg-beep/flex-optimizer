@@ -711,13 +711,12 @@ const reportData = computed(() => {
 // En UploadView.vue
 
 const scenarioETAs = computed(() => {
-  // Validación inicial
+  // 1. Validaciones de seguridad básicas
   if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
     return null;
   }
   
   const stopCount = Number(reportData.value.stopCount) || 0;
-  // Los contadores de apts ya no se usan para tiempo base, pero los mantenemos por referencia
   
   const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
   const blockStartTime = new Date();
@@ -725,10 +724,10 @@ const scenarioETAs = computed(() => {
   const prepTimeMinutes = Number(blockData.value.retraso_almacen) || 0;
   const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000);
   
-  // Función helper interna
+  // Helper para calcular tiempos
   const calculateScenario = (baseDrive, commute, multiplier) => {
     const baseStopTime = stopCount * multiplier;
-    // drive + stop + commute
+    // La duración base ya incluye los extras de apartamentos/downtown
     const routeDurationMinutes = (Number(baseDrive) || 0) + baseStopTime + (Number(commute) || 0);
     
     if (isNaN(routeDurationMinutes)) return { totalDuration: 'N/A', eta: 'Error' };
@@ -740,7 +739,6 @@ const scenarioETAs = computed(() => {
     };
   };
   
-  // Multipliers ARIA
   const ariaMultiplier = ariaData.value?.multiplier || 0.9;
   const optimisticMultiplier = ariaMultiplier * 0.44; 
   const pessimisticMultiplier = ariaMultiplier * 1.39; 
@@ -755,8 +753,8 @@ const scenarioETAs = computed(() => {
       pessimistic: calculateScenario(normalBaseDrive, normalCommute, pessimisticMultiplier)
   };
 
-  // --- CÁLCULO INVERSO/IA (Opcional) ---
-  // 🛡️ AQUÍ ESTABA EL ERROR: Antes accedíamos directo, ahora preguntamos primero
+  // --- CÁLCULO INVERSO/IA (Protegido) ---
+  // 🔥 AQUÍ ESTABA EL ERROR: Antes intentaba leer .inverse directamente 🔥
   let inverseScenarios = null;
 
   if (reportData.value.inverse) {
@@ -772,7 +770,7 @@ const scenarioETAs = computed(() => {
 
   return {
     normal: normalScenarios,
-    inverse: inverseScenarios // Puede ser null, y eso está bien
+    inverse: inverseScenarios // Puede ser null y no pasa nada
   };
 });
 // ============================================
