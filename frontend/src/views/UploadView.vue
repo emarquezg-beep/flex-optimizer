@@ -499,71 +499,109 @@ const inversePayload = computed(() => {
 // 5. FUNCIONES PRINCIPALES (SEND & SAVE)
 // ============================================
 
+// En UploadView.vue -> Reemplaza la función sendToBackend() completa
+
 async function sendToBackend() {
-    const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => Number(a.number) - Number(b.number));
-    const addressesToSend = sortedByAmazon.map(stop => stop.address);
-    const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
-    if (sanitizedAddresses.length === 0) { alert('No valid addresses.'); return; }
-
-    const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
-    const fullRouteAmazon = [sanitizeAddress(warehouse.address), ...sanitizedAddresses, sanitizeAddress(selectedDestination.value)];
-
-    // 2. COMPARACIÓN INTELIGENTE (TEXTO VS NUMERO)
-    let aiOptimizedStops = null;
-    const hasDifference = extractedAddresses.value.some(stop => {
-        const currentNum = Number(stop.number);
-        const aiNum = (stop.ia_suggestion !== undefined && stop.ia_suggestion !== null) 
-             ? Number(stop.ia_suggestion) 
-             : currentNum;
-        return currentNum !== aiNum;
-    });
-
-    if (hasDifference) {
-        console.log("⚡ Diferencia detectada (IA activa)...");
-        const sortedByAI = [...extractedAddresses.value].sort((a, b) => {
-            const valA = (a.ia_suggestion !== undefined && a.ia_suggestion !== null) ? a.ia_suggestion : a.number;
-            const valB = (b.ia_suggestion !== undefined && b.ia_suggestion !== null) ? b.ia_suggestion : b.number;
-            return Number(valA) - Number(valB);
-        });
-        aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
-    } else {
-        console.log("💤 Rutas idénticas (IA inactiva).");
-    }
-
-    backendResponse.value = { status: 'loading' };
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    console.log("🚀 Iniciando sendToBackend...");
+    isProcessing.value = true; // Activar spinner inmediatamente
 
     try {
+        // 1. Validar direcciones extraídas
+        if (!extractedAddresses.value || extractedAddresses.value.length === 0) {
+            throw new Error("No hay direcciones cargadas para procesar.");
+        }
+
+        // 2. Preparar Ruta Normal
+        const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => Number(a.number) - Number(b.number));
+        const addressesToSend = sortedByAmazon.map(stop => stop.address);
+        const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
+        
+        if (sanitizedAddresses.length === 0) { 
+            throw new Error('No hay direcciones válidas después de limpiar.'); 
+        }
+
+        // 3. Validar Warehouse (Punto crítico de fallo silencioso)
+        const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+        if (!warehouse) {
+            throw new Error(`Almacén no encontrado para el código: ${selectedWarehouseCode.value}`);
+        }
+        
+        const originAddr = sanitizeAddress(warehouse.address);
+        const destAddr = sanitizeAddress(selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value);
+        
+        if (!originAddr || !destAddr) {
+            throw new Error("Falta la dirección de origen o destino.");
+        }
+
+        const fullRouteAmazon = [originAddr, ...sanitizedAddresses, destAddr];
+
+        // 4. Comparación IA (Texto vs Número)
+        let aiOptimizedStops = null;
+        
+        const hasDifference = extractedAddresses.value.some(stop => {
+            const currentNum = Number(stop.number);
+            // Si ia_suggestion es null/undefined, asumimos que es igual al actual
+            const aiNum = (stop.ia_suggestion !== undefined && stop.ia_suggestion !== null) 
+                 ? Number(stop.ia_suggestion) 
+                 : currentNum;
+                 
+            return currentNum !== aiNum;
+        });
+
+        if (hasDifference) {
+            console.log("⚡ Diferencia detectada (IA activa)...");
+            const sortedByAI = [...extractedAddresses.value].sort((a, b) => {
+                const valA = (a.ia_suggestion !== undefined && a.ia_suggestion !== null) ? a.ia_suggestion : a.number;
+                const valB = (b.ia_suggestion !== undefined && b.ia_suggestion !== null) ? b.ia_suggestion : b.number;
+                return Number(valA) - Number(valB);
+            });
+            aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
+        } else {
+            console.log("💤 Rutas idénticas (IA inactiva).");
+        }
+
+        // 5. Enviar al Backend
+        console.log("📡 Enviando datos al servidor...");
+        backendResponse.value = { status: 'loading' };
+        
+        const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
             method: 'POST',
             body: JSON.stringify({ 
                 addresses: fullRouteAmazon,
                 aiOptimizedAddresses: aiOptimizedStops, 
-                finalDestination: selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value,
+                finalDestination: destAddr,
                 startTime: blockData.value.hora,
                 warehouseDelay: blockData.value.retraso_almacen,
                 currentDate: blockData.value.fecha
             }),
         });
-        const result = await response.json();
-        backendResponse.value = result;
-        if (result.aria) ariaData.value = result.aria;
         
+        const result = await response.json();
+        console.log("✅ Respuesta recibida:", result);
+
         if (result.hasErrors) {
+            console.warn("⚠️ Errores en direcciones:", result.failedAddresses);
+            backendResponse.value = result; // Mostrar errores en UI
             setTimeout(() => {
                 const errorSection = document.querySelector('.address-errors');
                 if (errorSection) errorSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 100);
+            // No lanzamos error aquí para permitir que la UI muestre el bloque de errores
+        } else {
+            backendResponse.value = result;
+            if (result.aria) ariaData.value = result.aria;
         }
+
     } catch (error) {
-        console.error("Error:", error);
-        alert(`Ocurrió un error: ${error.message}`); 
+        console.error("❌ Error CRÍTICO en sendToBackend:", error);
+        alert(`Error: ${error.message}`); // Alerta visible para el usuario
         backendResponse.value = { error: error.message, hasErrors: true };
     } finally {
-        isProcessing.value = false;
+        isProcessing.value = false; // Asegurar que el spinner se apague siempre
     }
 }
-
 async function saveToLogbook(payloadDirecto) {
     const dataToSave = payloadDirecto || normalPayload.value; 
     if (backendResponse.value?.hasErrors) { alert("❌ Direcciones inválidas."); return; }
