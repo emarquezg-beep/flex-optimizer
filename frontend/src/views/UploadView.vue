@@ -960,23 +960,38 @@ const normalPayload = computed(() => {
 
 // 3. Payload para Escenario INVERSO (Incluye Score)
 const inversePayload = computed(() => {
-  const baseData = calculateLogData('inverse');
+  // 🛡️ BLINDAJE CRÍTICO: Si reportData.value.inverse es null, devuelve null inmediatamente.
+  // Esto evita que cualquier otra función o lógica se ejecute asumiendo que el objeto existe.
+  if (!reportData.value || !reportData.value.inverse) {
+    return null;
+  }
+  
+  // Si llegamos aquí, la data IA/Inversa existe.
+
+  // 1. Obtener datos base (Scoring). Si usa una función auxiliar:
+  const baseData = calculateLogData('inverse'); 
+  // *Si no usas calculateLogData o similar, puedes eliminar esta línea y la validación de abajo.*
+  
   if (!baseData) return null;
+  
+  // 2. Obtener datos de tiempos (ETAs)
+  const etas = scenarioETAs.value?.inverse; 
 
-  const scoreResult = computeScoreV5(baseData);
-  const mensaje = obtenerMensajeConsciente(scoreResult.total);
+  if (!etas) return null; // Si las ETAs fallaron por alguna razón, no podemos mostrar la tarjeta.
 
+  // 3. Fusionar datos y retornarlos
   return {
-    ...baseData,
-    route_score: scoreResult.total,
-    mensaje,
-    icon: getIconForScore(scoreResult.total),
-    color: getColorForScore(scoreResult.total),
-    categoria: mensaje.categoria,
-    redFlags: scoreResult.redFlags || []
+    ...baseData, // Score, cálculo de pagos, etc.
+    ...reportData.value.normal, // Copiamos contadores (stops, apts) que son iguales
+    ...reportData.value.inverse, // Millas, Duración, Secuencia IA
+    ...etas, // Tiempos ETA
+    
+    // Sobreescribir las propiedades con el valor correcto (IA)
+    // Aseguramos que la etiqueta y el score sean del escenario IA/Inverse
+    label: reportData.value.inverse.label || 'IA ROUTE',
+    route_score: reportData.value.inverse.route_score, 
   };
 });
-
 // ============================================
 // BACKEND COMMUNICATION & UI HELPERS (Restored)
 // ============================================
@@ -996,7 +1011,6 @@ function startManualEntry() {
   extractedAddresses.value = [{ number: 2, address: '', isDowntown: false }];
 }
 
-// En UploadView.vue
 
 // En UploadView.vue
 
