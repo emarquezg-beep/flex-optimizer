@@ -710,15 +710,16 @@ const reportData = computed(() => {
 });
 
 
+// En UploadView.vue
+
 const scenarioETAs = computed(() => {
+  // Validación inicial
   if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
     return null;
   }
   
   const stopCount = Number(reportData.value.stopCount) || 0;
-  const apartmentCount = Number(reportData.value.apartmentCount) || 0;
-  const downtownCount = Number(reportData.value.downtownCount) || 0;
-  const regularApartmentCount = apartmentCount - downtownCount;
+  // Los contadores de apts ya no se usan para tiempo base, pero los mantenemos por referencia
   
   const [startHours, startMinutes] = blockData.value.hora.split(':').map(Number);
   const blockStartTime = new Date();
@@ -726,23 +727,13 @@ const scenarioETAs = computed(() => {
   const prepTimeMinutes = Number(blockData.value.retraso_almacen) || 0;
   const estimatedDepartureTime = new Date(blockStartTime.getTime() + prepTimeMinutes * 60000);
   
+  // Función helper interna
   const calculateScenario = (baseDrive, commute, multiplier) => {
-    // ✅ NUEVA LÓGICA:
-    // - Tiempo base por parada: stopCount × multiplier minutos
-    // - Apartamentos regulares: ya sumados en totalExtraStopTime como +0.75 min c/u
-    // - Downtown: ya sumados en totalExtraStopTime como +3 min c/u
-    
     const baseStopTime = stopCount * multiplier;
+    // drive + stop + commute
+    const routeDurationMinutes = (Number(baseDrive) || 0) + baseStopTime + (Number(commute) || 0);
     
-    // totalExtraStopTime ya viene calculado del reportData con los nuevos valores
-    // (0.75 por apt regular, 3 por downtown)
-    const routeDurationMinutes = (Number(baseDrive) || 0) 
-                               + baseStopTime 
-                               + (Number(commute) || 0);
-    
-    if (isNaN(routeDurationMinutes)) {
-      return { totalDuration: 'N/A', eta: 'Error' };
-    }
+    if (isNaN(routeDurationMinutes)) return { totalDuration: 'N/A', eta: 'Error' };
     
     const eta = new Date(estimatedDepartureTime.getTime() + routeDurationMinutes * 60000);
     return {
@@ -751,30 +742,41 @@ const scenarioETAs = computed(() => {
     };
   };
   
+  // Multipliers ARIA
+  const ariaMultiplier = ariaData.value?.multiplier || 0.9;
+  const optimisticMultiplier = ariaMultiplier * 0.44; 
+  const pessimisticMultiplier = ariaMultiplier * 1.39; 
+  
+  // --- CÁLCULO NORMAL (Siempre existe) ---
   const normalBaseDrive = reportData.value.normal.baseDriveDuration;
   const normalCommute = reportData.value.normal.commuteDuration;
-  const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
-  const inverseCommute = reportData.value.inverse.commuteDuration;
-  
-  // 🤖 ARIA: Usar multiplier dinámico si está disponible, sino usar default
-  const ariaMultiplier = ariaData.value?.multiplier || 0.9;
-  const optimisticMultiplier = ariaMultiplier * 0.44; // ~45% del normal
-  const pessimisticMultiplier = ariaMultiplier * 1.39; // ~140% del normal
-  
-  return {
-    normal: {
+
+  const normalScenarios = {
       optimistic: calculateScenario(normalBaseDrive, normalCommute, optimisticMultiplier),
       normal: calculateScenario(normalBaseDrive, normalCommute, ariaMultiplier),
       pessimistic: calculateScenario(normalBaseDrive, normalCommute, pessimisticMultiplier)
-    },
-    inverse: {
-      optimistic: calculateScenario(inverseBaseDrive, inverseCommute, optimisticMultiplier),
-      normal: calculateScenario(inverseBaseDrive, inverseCommute, ariaMultiplier),
-      pessimistic: calculateScenario(inverseBaseDrive, inverseCommute, pessimisticMultiplier)
-    }
+  };
+
+  // --- CÁLCULO INVERSO/IA (Opcional) ---
+  // 🛡️ AQUÍ ESTABA EL ERROR: Antes accedíamos directo, ahora preguntamos primero
+  let inverseScenarios = null;
+
+  if (reportData.value.inverse) {
+      const inverseBaseDrive = reportData.value.inverse.baseDriveDuration;
+      const inverseCommute = reportData.value.inverse.commuteDuration;
+      
+      inverseScenarios = {
+          optimistic: calculateScenario(inverseBaseDrive, inverseCommute, optimisticMultiplier),
+          normal: calculateScenario(inverseBaseDrive, inverseCommute, ariaMultiplier),
+          pessimistic: calculateScenario(inverseBaseDrive, inverseCommute, pessimisticMultiplier)
+      };
+  }
+
+  return {
+    normal: normalScenarios,
+    inverse: inverseScenarios // Puede ser null, y eso está bien
   };
 });
-
 // ============================================
 // 🧠 NUEVA LÓGICA: GENERADOR DE PAYLOADS
 // ============================================
