@@ -3,7 +3,7 @@
 // 1. IMPORTS
 // ============================================
 import { ref, computed, watch, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import Tesseract from 'tesseract.js';
 import { computeScoreV5 } from '@/utils/scoring';
 import SlideContainer from '@/components/RouteResults/SlideContainer.vue';
@@ -20,6 +20,7 @@ import {
 // 2. VARIABLES Y ESTADO
 // ============================================
 const route = useRoute();
+const router = useRouter();
 const { userId } = useAuth();
 const { vehicles } = useVehicles();
 
@@ -235,8 +236,7 @@ const reportData = computed(() => {
             const diffTime = totalNormalDuration - totalAiDuration;
             const pctMiles = totalNormalMiles > 0 ? (diffMiles / totalNormalMiles) : 0;
             const pctTime = totalNormalDuration > 0 ? (diffTime / totalNormalDuration) : 0;
-            const UMBRAL = -1.0;
-            //const UMBRAL = 0.05; 
+            const UMBRAL = 0.05; 
 
             console.log("👨‍⚖️ EL JUEZ DICE:");
             console.log(`   - Ahorro Millas: ${diffMiles.toFixed(2)} mi (${(pctMiles*100).toFixed(1)}%)`);
@@ -608,7 +608,6 @@ function showDowntownDetection() {
 }
 
 async function evaluateRoute() {
-  alert("📍 PASO 1: Inicio");
 
   // A. PROCESAR JSON
   if (extractedAddresses.value.length === 0) {
@@ -628,7 +627,6 @@ async function evaluateRoute() {
         ia_suggestion: item.ia_suggestion 
       }));
       
-      alert("✅ JSON Procesado. Pasando al paso 2...");
       isProcessing.value = false;
     } catch (error) {
       alert(`❌ Error JSON: ${error.message}`);
@@ -638,17 +636,14 @@ async function evaluateRoute() {
   }
 
   // B. VERIFICAR DOWNTOWN (El punto de falla)
-  alert("🏢 PASO 2: Entrando a detección...");
-  
+   
   // Llamamos a la función blindada
   const needsCheck = showDowntownDetection(); 
   
   if (needsCheck) {
-    alert("🛑 STOP: Se abrió el modal de Downtown.");
     return;
   }
   
-  alert("✅ PASO 3: Detección superada. Enviando al Backend...");
   await proceedWithEvaluation();
 }
 
@@ -802,10 +797,20 @@ async function sendToBackend() {
 }
 
 
+// En UploadView.vue
+
 async function saveToLogbook(payloadDirecto) {
     const dataToSave = payloadDirecto || normalPayload.value; 
-    if (backendResponse.value?.hasErrors) { alert("❌ Direcciones inválidas."); return; }
-    if (!dataToSave || !dataToSave.pago) { alert("No hay datos."); return; }
+
+    if (backendResponse.value?.hasErrors) {
+        alert("❌ No puedes guardar la ruta porque hay direcciones inválidas.");
+        return;
+    }
+    
+    if (!dataToSave || !dataToSave.pago) { 
+        alert("No hay datos calculados para guardar.");
+        return; 
+    }
     
     isSaving.value = true; 
     saveStatus.value = null;
@@ -815,7 +820,9 @@ async function saveToLogbook(payloadDirecto) {
       ...dataToSave,
       stops_json: extractedAddresses.value,
       multiplier_usado: ariaData.value?.multiplier || 0.9,
-      destination_address: selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value
+      destination_address: selectedDestination.value === 'custom' 
+        ? customDestination.value 
+        : selectedDestination.value
     };
 
     try {
@@ -823,25 +830,48 @@ async function saveToLogbook(payloadDirecto) {
             method: 'POST',
             body: JSON.stringify(finalBody)
         });
+        
         const result = await response.json();
+        
         if (response.ok && result.success) {
+            console.log("✅ Ruta guardada:", result.data[0].id);
+            
             if (route.query.blockId) {
                 try {
-                    await fetchWithAuth(`${backendUrl}/api/scheduled-blocks/${route.query.blockId}/start`, {
-                        method: 'POST', body: JSON.stringify({ routeId: result.data[0].id })
-                    });
-                } catch (linkError) { console.error('❌ Error vinculando:', linkError); }
+                    await fetchWithAuth(
+                        `${backendUrl}/api/scheduled-blocks/${route.query.blockId}/start`,
+                        {
+                            method: 'POST',
+                            body: JSON.stringify({ routeId: result.data[0].id })
+                        }
+                    );
+                } catch (linkError) {
+                    console.error('❌ Error vinculando bloque:', linkError);
+                }
             }
-            saveStatus.value = { success: true, message: `Guardado! ID: ${result.data[0].id}` };
-            alert("✅ Ruta guardada!"); 
+            
+            saveStatus.value = { 
+                success: true, 
+                message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` 
+            };
+            
+            // 👇👇 AQUÍ ESTÁ LA REDIRECCIÓN QUE FALTABA 👇👇
+            alert("✅ ¡Ruta guardada exitosamente! Redirigiendo..."); 
+            
+            setTimeout(() => {
+                router.push('/'); // Regresa al Home
+            }, 1500); // Espera 1.5 segundos
+            
         } else { 
-            throw new Error(result.message || 'Error del servidor.');
+            throw new Error(result.message || 'Error desconocido del servidor.');
         }
     } catch (error) {
-        console.error("❌ Error guardar:", error);
-        saveStatus.value = { success: false, message: error.message };
-        alert(`Error: ${error.message}`);
-    } finally { isSaving.value = false; }
+        console.error("❌ Error al guardar:", error);
+        saveStatus.value = { success: false, message: `Error: ${error.message}` };
+        alert(`Error al guardar: ${error.message}`);
+    } finally { 
+        isSaving.value = false;
+    }
 }
 
 function removeAddress(index) { extractedAddresses.value.splice(index, 1); }
