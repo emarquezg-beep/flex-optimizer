@@ -235,7 +235,13 @@ const reportData = computed(() => {
             const diffTime = totalNormalDuration - totalAiDuration;
             const pctMiles = totalNormalMiles > 0 ? (diffMiles / totalNormalMiles) : 0;
             const pctTime = totalNormalDuration > 0 ? (diffTime / totalNormalDuration) : 0;
-            const UMBRAL = 0.05; 
+            const UMBRAL = -1.0;
+            //const UMBRAL = 0.05; 
+
+            console.log("👨‍⚖️ EL JUEZ DICE:");
+            console.log(`   - Ahorro Millas: ${diffMiles.toFixed(2)} mi (${(pctMiles*100).toFixed(1)}%)`);
+            console.log(`   - Ahorro Tiempo: ${diffTime.toFixed(1)} min (${(pctTime*100).toFixed(1)}%)`);
+            console.log(`   - ¿Pasa el filtro? ${(pctMiles >= UMBRAL) || (pctTime >= UMBRAL) ? 'SÍ ✅' : 'NO ❌'}`);
 
             if ((pctMiles >= UMBRAL) || (pctTime >= UMBRAL)) {
                 aiMessage = `¡Ahorro! ${diffMiles.toFixed(1)} mi / ${Math.round(diffTime)} min.`;
