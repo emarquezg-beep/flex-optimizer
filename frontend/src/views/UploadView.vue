@@ -561,65 +561,57 @@ function showDowntownDetection() {
 }
 
 async function evaluateRoute() {
-  alert("📍 PASO 1: Botón presionado. Entrando a evaluación...");
+  alert("📍 PASO 1: Inicio");
 
-  // CASO 1: Procesar JSON (Solo si la lista está vacía)
+  // A. PROCESAR JSON
   if (extractedAddresses.value.length === 0) {
-    alert("📝 Lista vacía. Intentando leer JSON Input...");
-    
-    if (!jsonInput.value) {
-      alert('⚠️ Por favor pega el JSON primero.');
-      return;
-    }
-
+    if (!jsonInput.value) { alert('⚠️ Pega el JSON primero.'); return; }
     isProcessing.value = true;
     await new Promise(resolve => setTimeout(resolve, 50)); 
 
     try {
       const parsedData = JSON.parse(jsonInput.value);
-      if (!Array.isArray(parsedData)) throw new Error('El JSON debe ser un array.');
+      if (!Array.isArray(parsedData)) throw new Error('JSON no es array.');
 
-      const mappedStops = parsedData.map(item => {
-        const fullAddress = [item.street_address, item.apartment, item.city].filter(Boolean).join(' ').trim();
-        return {
-          number: item.stop_number || 0,
-          address: fullAddress,
-          isDowntown: false,
-          isApartment: item.apartment != null,
-          ia_suggestion: item.ia_suggestion 
-        };
-      });
-
-      extractedAddresses.value = mappedStops;
-      isProcessing.value = false;
-      alert(`✅ JSON procesado: ${mappedStops.length} paradas. Continuamos...`);
+      extractedAddresses.value = parsedData.map(item => ({
+        number: item.stop_number || 0,
+        address: [item.street_address, item.apartment, item.city].filter(Boolean).join(' ').trim(),
+        isDowntown: false,
+        isApartment: item.apartment != null,
+        ia_suggestion: item.ia_suggestion 
+      }));
       
+      alert("✅ JSON Procesado. Pasando al paso 2...");
+      isProcessing.value = false;
     } catch (error) {
       alert(`❌ Error JSON: ${error.message}`);
       isProcessing.value = false;
       return;
     }
-  } else {
-    alert(`⏩ Lista ya tiene ${extractedAddresses.value.length} paradas. Saltando parser...`);
   }
 
-  // CASO 2: Verificar Downtown
-  alert("🏢 PASO 2: Verificando Apartamentos/Downtown...");
+  // B. VERIFICAR DOWNTOWN (El punto de falla)
+  alert("🏢 PASO 2: Entrando a detección...");
   
-  // Guardamos el resultado en una variable para depurar
+  // Llamamos a la función blindada
   const needsCheck = showDowntownDetection(); 
   
   if (needsCheck) {
-    alert("🛑 STOP: Se detectaron apartamentos. El código se detiene aquí para mostrar el Modal. ¿Ves el modal?");
-    return; // <--- AQUÍ ES DONDE CREO QUE SE QUEDA
+    alert("🛑 STOP: Se abrió el modal de Downtown.");
+    return;
   }
   
-  alert("✅ No hay apartamentos conflictivos. Pasando al Backend...");
-  
-  // Si no hay que chequear nada, nos vamos directo al backend
+  alert("✅ PASO 3: Detección superada. Enviando al Backend...");
   await proceedWithEvaluation();
 }
-// En UploadView.vue -> Reemplaza la función sendToBackend() completa
+
+async function proceedWithEvaluation() {
+  try {
+    await sendToBackend();
+  } catch (e) {
+    alert(`❌ Error al invocar sendToBackend: ${e.message}`);
+  }
+}// En UploadView.vue -> Reemplaza la función sendToBackend() completa
 
 async function sendToBackend() {
     console.log("🚀 Iniciando sendToBackend...");
