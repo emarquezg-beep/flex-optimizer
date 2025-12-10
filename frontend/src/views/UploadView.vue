@@ -652,12 +652,44 @@ async function evaluateRoute() {
   await proceedWithEvaluation();
 }
 
+// ============================================
+// FUNCIONES DEL MODAL DOWNTOWN (Faltaban estas)
+// ============================================
+
+function confirmDowntownSelection() {
+  console.log("🏢 Confirmando selección de Downtown...");
+  // Aplicar selección del usuario a la lista principal
+  Object.keys(downtownSelection.value).forEach(stopNumber => {
+    const stop = extractedAddresses.value.find(s => s.number === parseInt(stopNumber));
+    if (stop) {
+      stop.isDowntown = downtownSelection.value[stopNumber];
+    }
+  });
+  
+  // Cerrar modal y continuar
+  showDowntownModal.value = false;
+  proceedWithEvaluation();
+}
+
+function skipDowntownSelection() {
+  console.log("⏭️ Saltando selección de Downtown (Ninguno marcado)...");
+  // Marcar todos como NO downtown
+  orlandoApartments.value.forEach(apt => {
+    const stop = extractedAddresses.value.find(s => s.number === apt.number);
+    if (stop) {
+      stop.isDowntown = false;
+    }
+  });
+  
+  // Cerrar modal y continuar
+  showDowntownModal.value = false;
+  proceedWithEvaluation();
+}
+
+// Función puente con LOG para saber que el modal funcionó
 async function proceedWithEvaluation() {
-  try {
-    await sendToBackend();
-  } catch (e) {
-    alert(`❌ Error al invocar sendToBackend: ${e.message}`);
-  }
+  console.log("🚀 Continuando con la evaluación tras chequeo de Downtown...");
+  await sendToBackend();
 }
 
 // En UploadView.vue -> Reemplaza la función sendToBackend() completa
