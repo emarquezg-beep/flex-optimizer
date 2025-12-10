@@ -138,137 +138,162 @@ onMounted(() => {
 // ============================================
 
 // --- REPORT DATA: Procesa la respuesta de Google Maps ---
-const reportData = computed(() => {
-  if (!backendResponse.value || !backendResponse.value.segments) return null;
-  
-  const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
-  
-  // A. Contadores y Ruta Normal
-  let totalBlockMiles = 0;
-  let totalBlockDriveDuration = 0;
-  let totalExtraStopTime = 0; 
-  let totalStopCount = 0;
-  let totalApartmentCount = 0;
-  let totalDowntownCount = 0;
+// REEMPLAZA TU reportData ACTUAL CON ESTA VERSIÓN DE DEBUGGING
 
-  const processedSegments = segments.map(seg => {
-    let segmentExtraStopTime = 0;
-    let aptCount = 0;
-    let downtownCount = 0;
-    const currentStopCount = (seg.stops || []).length;
-    totalStopCount += currentStopCount;
+const reportData = computed(() => {
+  try {
+    // 1. Si no hay datos, retorno seguro
+    if (!backendResponse.value || !backendResponse.value.segments) return null;
     
-    (seg.stops || []).forEach(addr => {
-      const stopData = extractedAddresses.value.find(s => s.address === addr);
-      const isDowntown = stopData?.isDowntown || false;
-      const isApartment = stopData?.isApartment || false;
+    const { toFirstStop, segments, toFinalDestination, aiRoute, isAiOptimized } = backendResponse.value;
+    
+    // --- A. PROCESAR RUTA NORMAL ---
+    let totalBlockMiles = 0;
+    let totalBlockDriveDuration = 0;
+    let totalExtraStopTime = 0; 
+    let totalStopCount = 0;
+    let totalApartmentCount = 0;
+    let totalDowntownCount = 0;
+
+    const processedSegments = segments.map(seg => {
+      let segmentExtraStopTime = 0;
+      let aptCount = 0;
+      let downtownCount = 0;
+      const currentStopCount = (seg.stops || []).length;
+      totalStopCount += currentStopCount;
       
-      if (isDowntown) { downtownCount++; segmentExtraStopTime += 3; } 
-      else if (isApartment) { aptCount++; segmentExtraStopTime += 0.75; }
+      (seg.stops || []).forEach(addr => {
+        const stopData = extractedAddresses.value.find(s => s.address === addr);
+        const isDowntown = stopData?.isDowntown || false;
+        const isApartment = stopData?.isApartment || false;
+        
+        if (isDowntown) { downtownCount++; segmentExtraStopTime += 3; } 
+        else if (isApartment) { aptCount++; segmentExtraStopTime += 0.75; }
+      });
+      
+      totalExtraStopTime += segmentExtraStopTime;
+      totalApartmentCount += aptCount + downtownCount;
+      totalDowntownCount += downtownCount;
+      totalBlockMiles += parseFloat(seg.distance || 0);
+      totalBlockDriveDuration += parseFloat(seg.duration || 0);
+      
+      return {
+        distance: seg.distance,
+        duration: seg.duration,
+        stopsCount: currentStopCount,
+        aptCount, downtownCount
+      };
     });
     
-    totalExtraStopTime += segmentExtraStopTime;
-    totalApartmentCount += aptCount + downtownCount;
-    totalDowntownCount += downtownCount;
-    totalBlockMiles += parseFloat(seg.distance || 0);
-    totalBlockDriveDuration += parseFloat(seg.duration || 0);
+    // Validar que toFirstStop y toFinalDestination tengan datos
+    const startDist = parseFloat(toFirstStop?.distance || 0);
+    const startDur = parseFloat(toFirstStop?.duration || 0);
+    const endDist = parseFloat(toFinalDestination?.distance || 0);
+    const endDur = parseFloat(toFinalDestination?.duration || 0);
+
+    const totalWorkMiles = startDist + totalBlockMiles;
+    const totalWorkDuration = startDur + totalBlockDriveDuration + totalExtraStopTime;
+    const totalNormalMiles = totalWorkMiles + endDist;
+    const totalNormalDuration = totalWorkDuration + endDur;
     
+    // Generar secuencia (con copia segura)
+    const normalSequenceStr = [...extractedAddresses.value]
+      .sort((a,b) => Number(a.number) - Number(b.number))
+      .map(s => s.number)
+      .join('-');
+
+    // --- B. PROCESAR RUTA IA ---
+    let aiData = null;
+    let aiMessage = "La IA no encontró una mejora significativa.";
+
+    if (isAiOptimized && aiRoute) {
+        let aiBlockMiles = 0;
+        let aiBlockDuration = 0;
+
+        // Validar segmentos IA
+        if (aiRoute.segments) {
+            const aiProcessedSegments = aiRoute.segments.map(seg => {
+                aiBlockMiles += parseFloat(seg.distance || 0);
+                aiBlockDuration += parseFloat(seg.duration || 0);
+                return { distance: seg.distance, duration: seg.duration, stopsCount: (seg.stops || []).length };
+            });
+
+            // Validar inicio/fin IA
+            const aiStartDist = parseFloat(aiRoute.toStart?.distance || 0);
+            const aiStartDur = parseFloat(aiRoute.toStart?.duration || 0);
+            const aiEndDist = parseFloat(aiRoute.toEnd?.distance || 0);
+            const aiEndDur = parseFloat(aiRoute.toEnd?.duration || 0);
+
+            const totalAiWorkMiles = aiStartDist + aiBlockMiles;
+            const totalAiWorkDuration = aiStartDur + aiBlockDuration + totalExtraStopTime;
+            
+            const totalAiMiles = totalAiWorkMiles + aiEndDist;
+            const totalAiDuration = totalAiWorkDuration + aiEndDur;
+
+            // Juez del 5%
+            const diffMiles = totalNormalMiles - totalAiMiles;
+            const diffTime = totalNormalDuration - totalAiDuration;
+            const pctMiles = totalNormalMiles > 0 ? (diffMiles / totalNormalMiles) : 0;
+            const pctTime = totalNormalDuration > 0 ? (diffTime / totalNormalDuration) : 0;
+            const UMBRAL = 0.05; 
+
+            if ((pctMiles >= UMBRAL) || (pctTime >= UMBRAL)) {
+                aiMessage = `¡Ahorro! ${diffMiles.toFixed(1)} mi / ${Math.round(diffTime)} min.`;
+                
+                const aiSequenceStr = [...extractedAddresses.value]
+                  .sort((a,b) => {
+                      const valA = (a.ia_suggestion !== undefined && a.ia_suggestion !== null) ? a.ia_suggestion : a.number;
+                      const valB = (b.ia_suggestion !== undefined && b.ia_suggestion !== null) ? b.ia_suggestion : b.number;
+                      return Number(valA) - Number(valB);
+                  })
+                  .map(s => s.number)
+                  .join('-');
+
+                aiData = {
+                    toStart: { distance: aiStartDist.toFixed(2), duration: Math.round(aiStartDur) },
+                    segments: aiRoute.segments, // Pasar segmentos crudos si processed falla
+                    toEnd: { distance: aiEndDist.toFixed(2), duration: Math.round(aiEndDur) },
+                    totalWorkMiles: totalAiWorkMiles.toFixed(2),
+                    totalWorkDuration: Math.round(totalAiWorkDuration),
+                    totalMiles: totalAiMiles.toFixed(2),
+                    totalDuration: Math.round(totalAiDuration),
+                    baseDriveDuration: aiStartDur + aiBlockDuration + totalExtraStopTime,
+                    commuteDuration: aiEndDur,
+                    label: '🤖 AI ROUTE',
+                    sequence: aiSequenceStr
+                };
+            }
+        }
+    }
+
     return {
-      distance: seg.distance,
-      duration: seg.duration,
-      stopsCount: currentStopCount,
-      aptCount, downtownCount
+      savings: aiData ? (totalNormalMiles - aiData.totalMiles).toFixed(2) : '0.00',
+      aiMessage: aiMessage,
+      stopCount: totalStopCount,
+      apartmentCount: totalApartmentCount,
+      downtownCount: totalDowntownCount,
+      normal: {
+        toStart: { distance: startDist.toFixed(2), duration: Math.round(startDur) },
+        segments: processedSegments,
+        toEnd: { distance: endDist.toFixed(2), duration: Math.round(endDur) },
+        totalWorkMiles: totalWorkMiles.toFixed(2),
+        totalWorkDuration: Math.round(totalWorkDuration),
+        totalMiles: totalNormalMiles.toFixed(2),
+        totalDuration: Math.round(totalNormalDuration),
+        baseDriveDuration: startDur + totalBlockDriveDuration + totalExtraStopTime,
+        commuteDuration: endDur,
+        sequence: normalSequenceStr
+      },
+      inverse: aiData 
     };
-  });
-  
-  const totalWorkMiles = parseFloat(toFirstStop.distance || 0) + totalBlockMiles;
-  const totalWorkDuration = parseFloat(toFirstStop.duration || 0) + totalBlockDriveDuration + totalExtraStopTime;
-  const totalNormalMiles = totalWorkMiles + parseFloat(toFinalDestination.distance || 0);
-  const totalNormalDuration = totalWorkDuration + parseFloat(toFinalDestination.duration || 0);
-  
-  // ✅ BLINDAJE CRÍTICO: [...copia] para evitar Loop Infinito
-  const normalSequenceStr = [...extractedAddresses.value]
-    .sort((a,b) => Number(a.number) - Number(b.number))
-    .map(s => s.number)
-    .join('-');
 
-  // B. Ruta IA (Solo si existe)
-  let aiData = null;
-  let aiMessage = "La IA no encontró una mejora significativa.";
-
-  if (isAiOptimized && aiRoute) {
-      let aiBlockMiles = 0;
-      let aiBlockDuration = 0;
-
-      const aiProcessedSegments = aiRoute.segments.map(seg => {
-          aiBlockMiles += parseFloat(seg.distance || 0);
-          aiBlockDuration += parseFloat(seg.duration || 0);
-          return { distance: seg.distance, duration: seg.duration, stopsCount: (seg.stops || []).length };
-      });
-
-      const totalAiWorkMiles = parseFloat(aiRoute.toStart.distance || 0) + aiBlockMiles;
-      const totalAiWorkDuration = parseFloat(aiRoute.toStart.duration || 0) + aiBlockDuration + totalExtraStopTime;
-      const totalAiMiles = totalAiWorkMiles + parseFloat(aiRoute.toEnd.distance || 0);
-      const totalAiDuration = totalAiWorkDuration + parseFloat(aiRoute.toEnd.duration || 0);
-
-      // Juez del 5%
-      const diffMiles = totalNormalMiles - totalAiMiles;
-      const diffTime = totalNormalDuration - totalAiDuration;
-      const pctMiles = totalNormalMiles > 0 ? (diffMiles / totalNormalMiles) : 0;
-      const pctTime = totalNormalDuration > 0 ? (diffTime / totalNormalDuration) : 0;
-      const UMBRAL = 0.05; 
-
-      if ((pctMiles >= UMBRAL) || (pctTime >= UMBRAL)) {
-          aiMessage = `¡Ahorro! ${diffMiles.toFixed(1)} mi / ${Math.round(diffTime)} min.`;
-          
-          // ✅ BLINDAJE CRÍTICO AQUÍ TAMBIÉN
-          const aiSequenceStr = [...extractedAddresses.value]
-            .sort((a,b) => {
-                const valA = (a.ia_suggestion !== undefined && a.ia_suggestion !== null) ? a.ia_suggestion : a.number;
-                const valB = (b.ia_suggestion !== undefined && b.ia_suggestion !== null) ? b.ia_suggestion : b.number;
-                return Number(valA) - Number(valB);
-            })
-            .map(s => s.number)
-            .join('-');
-
-          aiData = {
-              toStart: { distance: parseFloat(aiRoute.toStart.distance).toFixed(2), duration: Math.round(parseFloat(aiRoute.toStart.duration)) },
-              segments: aiProcessedSegments,
-              toEnd: { distance: parseFloat(aiRoute.toEnd.distance).toFixed(2), duration: Math.round(parseFloat(aiRoute.toEnd.duration)) },
-              totalWorkMiles: totalAiWorkMiles.toFixed(2),
-              totalWorkDuration: Math.round(totalAiWorkDuration),
-              totalMiles: totalAiMiles.toFixed(2),
-              totalDuration: Math.round(totalAiDuration),
-              baseDriveDuration: parseFloat(aiRoute.toStart.duration) + aiBlockDuration + totalExtraStopTime,
-              commuteDuration: parseFloat(aiRoute.toEnd.duration),
-              label: '🤖 AI ROUTE',
-              sequence: aiSequenceStr
-          };
-      }
+  } catch (error) {
+    // 🚨 ESTA ALERTA TE DIRÁ DÓNDE ESTÁ EL ERROR EXACTAMENTE
+    alert(`💥 Error calculando ReportData: ${error.message}`);
+    console.error("Crash reportData:", error);
+    return null;
   }
-
-  return {
-    savings: aiData ? (totalNormalMiles - aiData.totalMiles).toFixed(2) : '0.00',
-    aiMessage: aiMessage,
-    stopCount: totalStopCount,
-    apartmentCount: totalApartmentCount,
-    downtownCount: totalDowntownCount,
-    normal: {
-      toStart: { distance: toFirstStopDist.toFixed(2), duration: Math.round(toFirstStopDur) },
-      segments: processedSegments,
-      toEnd: { distance: toFinalDestDist.toFixed(2), duration: Math.round(toFinalDestDur) },
-      totalWorkMiles: totalWorkMiles.toFixed(2),
-      totalWorkDuration: Math.round(totalWorkDuration),
-      totalMiles: totalNormalMiles.toFixed(2),
-      totalDuration: Math.round(totalNormalDuration),
-      baseDriveDuration: parseFloat(toFirstStop.duration) + totalBlockDriveDuration + totalExtraStopTime,
-      commuteDuration: toFinalDestDur,
-      sequence: normalSequenceStr
-    },
-    inverse: aiData // Puede ser null
-  };
 });
-
 // --- SCENARIO ETAS (Tiempos de reloj) ---
 const scenarioETAs = computed(() => {
   if (!reportData.value?.normal || !blockData.value?.hora || blockData.value.retraso_almacen === undefined) {
