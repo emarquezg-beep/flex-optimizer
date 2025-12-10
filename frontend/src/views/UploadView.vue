@@ -772,6 +772,12 @@ function getCommuteForWarehouse(warehouseCode) {
   const warehouse = warehouses.value.find(w => w.code === warehouseCode);
   return warehouse ? warehouse.commuteMiles : warehouses.value[0].commuteMiles;
 }
+
+function sanitizeAddress(address) {
+    if (!address) return '';
+    // Elimina caracteres especiales raros, deja letras, números, espacios y #
+    return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
+}
 </script>
 
 <template>
