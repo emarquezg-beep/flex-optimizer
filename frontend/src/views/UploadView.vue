@@ -503,6 +503,63 @@ const inversePayload = computed(() => {
 // FUNCIONES DE EVALUACIÓN (PEGA ESTO ANTES DE sendToBackend)
 // ============================================
 
+// ============================================
+// 🕵️‍♂️ SUPER DEBUGGER: DETECCIÓN Y EVALUACIÓN
+// ============================================
+
+function isInOrlando(address) {
+  if (!address) return false;
+  return /\bORLANDO\b/i.test(address);
+}
+
+function detectOrlandoApartments() {
+  console.log("🕵️‍♂️ Ejecutando detectOrlandoApartments...");
+  if (!extractedAddresses.value) throw new Error("extractedAddresses es undefined");
+  
+  return extractedAddresses.value.filter((stop, index) => {
+    // Debug por parada para encontrar datos corruptos
+    try {
+      return stop.address && stop.isApartment && isInOrlando(stop.address);
+    } catch (e) {
+      console.error(`Error en parada ${index}:`, e);
+      return false;
+    }
+  });
+}
+
+function showDowntownDetection() {
+  console.log("🕵️‍♂️ Ejecutando showDowntownDetection...");
+  try {
+    // 1. Probar detección
+    const apartments = detectOrlandoApartments();
+    console.log(`🏢 Apartamentos detectados: ${apartments.length}`);
+
+    if (apartments.length === 0) {
+      return false; // Todo limpio
+    }
+    
+    // 2. Probar asignación de variables reactivas (Posible punto de falla)
+    if (!orlandoApartments) throw new Error("Variable 'orlandoApartments' no existe");
+    if (!downtownSelection) throw new Error("Variable 'downtownSelection' no existe");
+    if (!showDowntownModal) throw new Error("Variable 'showDowntownModal' no existe");
+
+    orlandoApartments.value = apartments;
+    downtownSelection.value = {};
+    apartments.forEach(apt => {
+      downtownSelection.value[apt.number] = false;
+    });
+    
+    showDowntownModal.value = true;
+    return true; // Se requiere modal
+
+  } catch (error) {
+    // 🚨 AQUÍ CAPTURAMOS EL ERROR SILENCIOSO
+    alert(`💥 CRASH EN DETECCIÓN: ${error.message}`);
+    console.error("Crash Detection:", error);
+    return false; // Asumimos que no hay downtown para no bloquear
+  }
+}
+
 async function evaluateRoute() {
   alert("📍 PASO 1: Botón presionado. Entrando a evaluación...");
 
