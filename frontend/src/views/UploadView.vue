@@ -658,52 +658,54 @@ async function proceedWithEvaluation() {
   } catch (e) {
     alert(`❌ Error al invocar sendToBackend: ${e.message}`);
   }
-}// En UploadView.vue -> Reemplaza la función sendToBackend() completa
+}
+
+// En UploadView.vue -> Reemplaza la función sendToBackend() completa
 
 async function sendToBackend() {
     console.log("🚀 Iniciando sendToBackend...");
-    isProcessing.value = true; // Activar spinner inmediatamente
+    // 1. Activar Spinner visualmente para que sepas que algo está pasando
+    isProcessing.value = true; 
 
     try {
-        // 1. Validar direcciones extraídas
+        // --- VALIDACIONES PREVIAS (Ahora dentro del try/catch) ---
+        
+        // A. Validar Direcciones
         if (!extractedAddresses.value || extractedAddresses.value.length === 0) {
-            throw new Error("No hay direcciones cargadas para procesar.");
+            throw new Error("No hay direcciones cargadas en la lista.");
         }
 
-        // 2. Preparar Ruta Normal
+        // B. Validar Warehouse
+        const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+        if (!warehouse) {
+            throw new Error(`Error crítico: No se encontró el almacén con código '${selectedWarehouseCode.value}'. Revisa la configuración.`);
+        }
+
+        // C. Preparar Ruta Normal
         const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => Number(a.number) - Number(b.number));
         const addressesToSend = sortedByAmazon.map(stop => stop.address);
+        
+        // Usamos la función sanitizeAddress (asegúrate de que exista al final del archivo)
         const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
         
         if (sanitizedAddresses.length === 0) { 
-            throw new Error('No hay direcciones válidas después de limpiar.'); 
+            throw new Error('Las direcciones extraídas no son válidas o están vacías.'); 
         }
 
-        // 3. Validar Warehouse (Punto crítico de fallo silencioso)
-        const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
-        if (!warehouse) {
-            throw new Error(`Almacén no encontrado para el código: ${selectedWarehouseCode.value}`);
-        }
-        
-        const originAddr = sanitizeAddress(warehouse.address);
-        const destAddr = sanitizeAddress(selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value);
-        
-        if (!originAddr || !destAddr) {
-            throw new Error("Falta la dirección de origen o destino.");
-        }
+        const fullRouteAmazon = [
+            sanitizeAddress(warehouse.address), 
+            ...sanitizedAddresses, 
+            sanitizeAddress(selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value)
+        ];
 
-        const fullRouteAmazon = [originAddr, ...sanitizedAddresses, destAddr];
-
-        // 4. Comparación IA (Texto vs Número)
+        // D. Comparación IA (Texto vs Número)
         let aiOptimizedStops = null;
         
         const hasDifference = extractedAddresses.value.some(stop => {
             const currentNum = Number(stop.number);
-            // Si ia_suggestion es null/undefined, asumimos que es igual al actual
             const aiNum = (stop.ia_suggestion !== undefined && stop.ia_suggestion !== null) 
                  ? Number(stop.ia_suggestion) 
                  : currentNum;
-                 
             return currentNum !== aiNum;
         });
 
@@ -719,9 +721,9 @@ async function sendToBackend() {
             console.log("💤 Rutas idénticas (IA inactiva).");
         }
 
-        // 5. Enviar al Backend
-        console.log("📡 Enviando datos al servidor...");
-        backendResponse.value = { status: 'loading' };
+        // --- ENVIAR AL SERVIDOR ---
+        console.log("📡 Enviando datos...");
+        backendResponse.value = { status: 'loading' }; // Esto activa el mensaje "Evaluating scenarios..."
         
         const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -730,7 +732,7 @@ async function sendToBackend() {
             body: JSON.stringify({ 
                 addresses: fullRouteAmazon,
                 aiOptimizedAddresses: aiOptimizedStops, 
-                finalDestination: destAddr,
+                finalDestination: selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value,
                 startTime: blockData.value.hora,
                 warehouseDelay: blockData.value.retraso_almacen,
                 currentDate: blockData.value.fecha
@@ -740,27 +742,34 @@ async function sendToBackend() {
         const result = await response.json();
         console.log("✅ Respuesta recibida:", result);
 
+        // Manejo de respuesta
         if (result.hasErrors) {
-            console.warn("⚠️ Errores en direcciones:", result.failedAddresses);
-            backendResponse.value = result; // Mostrar errores en UI
+            console.warn("⚠️ Errores reportados por el backend:", result.failedAddresses);
+            // No lanzamos error aquí para permitir que la UI muestre el bloque de errores
+            backendResponse.value = result; 
+            
+            // Scroll automático a los errores
             setTimeout(() => {
                 const errorSection = document.querySelector('.address-errors');
                 if (errorSection) errorSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 100);
-            // No lanzamos error aquí para permitir que la UI muestre el bloque de errores
         } else {
+            // ÉXITO
             backendResponse.value = result;
             if (result.aria) ariaData.value = result.aria;
         }
 
     } catch (error) {
         console.error("❌ Error CRÍTICO en sendToBackend:", error);
-        alert(`Error: ${error.message}`); // Alerta visible para el usuario
+        // Esta alerta es la que te dirá qué pasó si vuelve a fallar
+        alert(`💥 Ocurrió un error inesperado: ${error.message}`); 
         backendResponse.value = { error: error.message, hasErrors: true };
     } finally {
-        isProcessing.value = false; // Asegurar que el spinner se apague siempre
+        isProcessing.value = false; // Apagar spinner
     }
 }
+
+
 async function saveToLogbook(payloadDirecto) {
     const dataToSave = payloadDirecto || normalPayload.value; 
     if (backendResponse.value?.hasErrors) { alert("❌ Direcciones inválidas."); return; }
