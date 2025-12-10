@@ -507,25 +507,41 @@ const normalPayload = computed(() => {
   };
 });
 
+// En UploadView.vue
+
 const inversePayload = computed(() => {
-  // 🛡️ BLINDAJE CRÍTICO: Si no hay IA, devolvemos null
+  // 1. Validaciones de seguridad
   if (!reportData.value || !reportData.value.inverse) return null;
   
   const baseData = calculateLogData('inverse');
   if (!baseData) return null;
+  
   const etas = scenarioETAs.value?.inverse;
   if (!etas) return null;
 
+  // 2. 🧠 CALCULAR SCORE PARA LA IA (Esto es lo que faltaba)
+  const scoreResult = computeScoreV5(baseData);
+  const mensaje = obtenerMensajeConsciente(scoreResult.total);
+
+  // 3. Retorno completo
   return {
-    ...baseData,
-    ...reportData.value.normal, // Copiar contadores base
-    ...reportData.value.inverse, // Sobreescribir con datos IA
-    ...etas,
+    ...baseData,                // Datos base (incluye aria_multiplier)
+    ...reportData.value.normal, // Contadores de paradas (son los mismos)
+    ...reportData.value.inverse,// Millas y Tiempos de la IA
+    ...etas,                    // ETAs de reloj
+    
+    // Datos de Puntuación Calculados
+    route_score: scoreResult.total,
+    mensaje: mensaje,
+    icon: getIconForScore(scoreResult.total),
+    color: getColorForScore(scoreResult.total),
+    categoria: mensaje.categoria,
+    redFlags: scoreResult.redFlags || [],
+
+    // Etiqueta visual
     label: reportData.value.inverse.label || 'AI ROUTE',
-    route_score: reportData.value.inverse.route_score, // El score debe calcularse después si varía, por ahora usa el mismo o recalcula si integras computeScoreV5 aquí
   };
 });
-
 // ============================================
 // 5. FUNCIONES PRINCIPALES (SEND & SAVE)
 // ============================================
