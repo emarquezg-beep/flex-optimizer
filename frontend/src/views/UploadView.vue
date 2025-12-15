@@ -817,10 +817,10 @@ async function saveToLogbook(payloadDirecto) {
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
     
     const finalBody = { 
-      ...dataToSave,
-      stops_json: extractedAddresses.value,
-      multiplier_usado: ariaData.value?.multiplier || 0.9,
-      destination_address: selectedDestination.value === 'custom' 
+        ...dataToSave,
+        stops_json: extractedAddresses.value,
+        multiplier_usado: ariaData.value?.multiplier || 0.9,
+        destination_address: selectedDestination.value === 'custom' 
         ? customDestination.value 
         : selectedDestination.value
     };
@@ -855,12 +855,10 @@ async function saveToLogbook(payloadDirecto) {
                 message: `¡Guardado con Éxito! (ID: ${result.data[0].id})` 
             };
             
-            // 👇👇 AQUÍ ESTÁ LA REDIRECCIÓN QUE FALTABA 👇👇
-            alert("✅ ¡Ruta guardada exitosamente! Redirigiendo..."); 
+            // 👇 CAMBIO REALIZADO: Solo mostramos mensaje, sin redirección
+            alert("✅ ¡Ruta guardada exitosamente! Maneja con cuidado."); 
             
-            setTimeout(() => {
-                router.push('/'); // Regresa al Home
-            }, 1500); // Espera 1.5 segundos
+            // Eliminamos el setTimeout y el router.push para que te quedes en esta pantalla
             
         } else { 
             throw new Error(result.message || 'Error desconocido del servidor.');
@@ -895,6 +893,31 @@ function sanitizeAddress(address) {
     if (!address) return '';
     // Elimina caracteres especiales raros, deja letras, números, espacios y #
     return address.replace(/[^a-zA-Z0-9\s#]/g, '').replace(/\s+/g, ' ').trim();
+}
+// Función para calcular el retraso en el almacén (Botón "Now")
+function calculateActualDelay() {
+  // 1. Validamos que tengamos una hora de inicio definida
+  if (!blockData.value.start_time) {
+    alert("⚠️ Primero ingresa la 'Hora de Inicio' del bloque.");
+    return;
+  }
+
+  const now = new Date();
+  const startTime = new Date(); // Fecha de hoy base
+
+  // 2. Parseamos la hora del input (asumiendo formato HH:MM de un input type="time")
+  // Si tu input de hora usa AM/PM manual, avísame para ajustar esto.
+  const [hours, minutes] = blockData.value.start_time.split(':');
+  
+  startTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+  // 3. Calculamos la diferencia
+  const diffMs = now - startTime; // Diferencia en milisegundos
+  const diffMins = Math.round(diffMs / 60000); // Convertir a minutos
+
+  // 4. Asignamos el valor
+  // Si es negativo (estás calculando antes de que empiece el bloque), lo ponemos en 0
+  blockData.value.retraso_almacen = diffMins > 0 ? diffMins : 0;
 }
 </script>
 
