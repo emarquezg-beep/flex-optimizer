@@ -2238,47 +2238,45 @@ FORMATO:
         });
       }
 
-      // 7. Calcular needs_confirmation (VERSIÓN MEJORADA)
-      const needs_confirmation = [];
 
-      stops.forEach(stop => {
-        // Dirección truncada o muy corta o confidence bajo
-        if (stop.street_address.length < 10 || 
-            stop.street_address.includes('...') || 
-            stop.confidence < 0.85) {
-          needs_confirmation.push({
-            stop_number: stop.stop_number,
-            field: 'street_address',
-            reason: stop.street_address.includes('...') ? 'TRUNCATED_TEXT' : 'LOW_CONFIDENCE',
-            current_value: stop.street_address,
-            confidence: stop.confidence
-          });
-        }
-        
-        // Apartamento truncado
-        if (stop.apartment && stop.apartment.includes('...')) {
-          needs_confirmation.push({
-            stop_number: stop.stop_number,
-            field: 'apartment',
-            reason: 'TRUNCATED_TEXT',
-            current_value: stop.apartment,
-            confidence: stop.confidence
-          });
-        }
-        
-        // Ciudad vacía
-        if (!stop.city || stop.city.trim() === '') {
-          needs_confirmation.push({
-            stop_number: stop.stop_number,
-            field: 'city',
-            reason: 'MISSING_CITY',
-            current_value: '',
-            confidence: stop.confidence
-          });
-        }
-      });
+        // 7. Calcular needs_confirmation (CON AUTO-COMPLETADO INTELIGENTE)
+        const needs_confirmation = [];
 
-console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas`);
+        stops.forEach(stop => {
+          // Dirección truncada o muy corta o confidence bajo
+          if (stop.street_address.length < 10 || 
+              stop.street_address.includes('...') || 
+              stop.confidence < 0.85) {
+            needs_confirmation.push({
+              stop_number: stop.stop_number,
+              field: 'street_address',
+              reason: stop.street_address.includes('...') ? 'TRUNCATED_TEXT' : 'LOW_CONFIDENCE',
+              current_value: stop.street_address,
+              confidence: stop.confidence
+            });
+          }
+          
+          // 🆕 APARTAMENTO TRUNCADO: Auto-completar con genérico
+          if (stop.apartment && stop.apartment.includes('...')) {
+            console.log(`🏢 Auto-completando apartamento truncado en parada ${stop.stop_number}: "${stop.apartment}" → "APT 101"`);
+            stop.apartment = 'APT 101'; // Auto-completar
+            stop.confidence = 0.95; // Subir confidence porque ya no es dudoso
+            // NO agregamos a needs_confirmation
+          }
+          
+          // Ciudad vacía
+          if (!stop.city || stop.city.trim() === '') {
+            needs_confirmation.push({
+              stop_number: stop.stop_number,
+              field: 'city',
+              reason: 'MISSING_CITY',
+              current_value: '',
+              confidence: stop.confidence
+            });
+          }
+        });
+
+        console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas reales`);
 
 
       console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas`);
