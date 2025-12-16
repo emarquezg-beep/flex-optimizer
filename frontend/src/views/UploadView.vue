@@ -617,10 +617,27 @@ function showDowntownDetection() {
 }
 
 async function evaluateRoute() {
-
+  // ============================================
+  // 🆕 DECISIÓN: ¿OCR o JSON Manual?
+  // ============================================
+  
+  // CASO A: Si hay imágenes seleccionadas, usar OCR
+  if (selectedImages.value.length > 0) {
+    console.log('📸 Modo OCR activado');
+    await processImagesWithOCR();
+    return;
+  }
+  
+  // CASO B: Si no hay imágenes, flujo JSON manual (ACTUAL)
+  console.log('📋 Modo JSON manual activado');
+  
   // A. PROCESAR JSON
   if (extractedAddresses.value.length === 0) {
-    if (!jsonInput.value) { alert('⚠️ Pega el JSON primero.'); return; }
+    if (!jsonInput.value) { 
+      alert('⚠️ Debes subir capturas O pegar el JSON.'); 
+      return; 
+    }
+    
     isProcessing.value = true;
     await new Promise(resolve => setTimeout(resolve, 50)); 
 
@@ -644,9 +661,7 @@ async function evaluateRoute() {
     }
   }
 
-  // B. VERIFICAR DOWNTOWN (El punto de falla)
-   
-  // Llamamos a la función blindada
+  // B. VERIFICAR DOWNTOWN
   const needsCheck = showDowntownDetection(); 
   
   if (needsCheck) {
@@ -966,6 +981,98 @@ function clearImages() {
   }
 }
 
+// ============================================
+// 🆕 OCR: LLAMADA AL ENDPOINT
+// ============================================
+async function processImagesWithOCR() {
+  console.log('🤖 Iniciando proceso OCR...');
+  isUploadingImages.value = true;
+  
+  try {
+    // 1. Preparar FormData
+    const formData = new FormData();
+    selectedImages.value.forEach(file => {
+      formData.append('images', file);
+    });
+    
+    // 2. Llamar al endpoint OCR
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    console.log('📡 Enviando imágenes a:', `${backendUrl}/api/v1/ocr/amazon-stops`);
+    
+    const response = await fetchWithAuth(`${backendUrl}/api/v1/ocr/amazon-stops`, {
+      method: 'POST',
+      body: formData,
+      // No incluir Content-Type, fetch lo configurará automáticamente para FormData
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Error en OCR');
+    }
+    
+    const result = await response.json();
+    console.log('✅ Respuesta OCR:', result);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'OCR falló');
+    }
+    
+    // 3. Procesar resultado
+    const { stops, needs_confirmation } = result;
+    
+    // 4. Convertir stops a formato de extractedAddresses
+    extractedAddresses.value = stops.map(stop => ({
+      number: stop.stop_number,
+      address: [stop.street_address, stop.apartment, stop.city]
+        .filter(Boolean)
+        .join(' ')
+        .trim(),
+      isDowntown: false,
+      isApartment: stop.apartment && stop.apartment.trim() !== '',
+      ia_suggestion: stop.ia_suggestion
+    }));
+    
+    console.log(`📦 ${extractedAddresses.value.length} paradas cargadas desde OCR`);
+    
+    // 5. Verificar si hay dudas
+    if (needs_confirmation && needs_confirmation.length > 0) {
+      console.log(`⚠️ ${needs_confirmation.length} campo(s) necesitan confirmación`);
+      needsConfirmation.value = needs_confirmation;
+      
+      // Preparar inputs para el modal
+      correctionInputs.value = {};
+      needs_confirmation.forEach(item => {
+        const key = `${item.stop_number}_${item.field}`;
+        correctionInputs.value[key] = item.current_value || '';
+      });
+      
+      // Mostrar modal de correcciones
+      showCorrectionModal.value = true;
+      isUploadingImages.value = false;
+      return; // Detener flujo hasta que usuario corrija
+    }
+    
+    // 6. Si no hay dudas, continuar con flujo normal
+    console.log('✅ No hay dudas, continuando con evaluación...');
+    isUploadingImages.value = false;
+    
+    // Continuar con detección de downtown
+    const needsDowntownCheck = showDowntownDetection();
+    if (needsDowntownCheck) {
+      return; // Modal de downtown se mostrará
+    }
+    
+    // Si no hay downtown, proceder con evaluación
+    await proceedWithEvaluation();
+    
+  } catch (error) {
+    console.error('❌ Error en OCR:', error);
+    alert(`❌ Error procesando imágenes: ${error.message}`);
+    isUploadingImages.value = false;
+  }
+}
+
+
 </script>
 
 <template>
@@ -1220,7 +1327,11 @@ function clearImages() {
         </div>
       </transition>
 
-      <div v-if="isProcessing" class="status"><h3>Evaluating route scenarios...</h3></div>
+      <div v-if="isProcessing || isUploadingImages" class="status">
+        <h3 v-if="isUploadingImages">🤖 Procesando imágenes con IA...</h3>
+        <h3 v-else>Evaluating route scenarios...</h3>
+      </div>
+
       <div v-if="backendResponse && backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
 
       <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing && reportData && normalPayload.pago">
