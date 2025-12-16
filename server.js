@@ -2093,7 +2093,7 @@ app.post('/api/scheduled-blocks/:id/start', authenticateUser, async (req, res) =
 // 🔍 ENDPOINT 1: OCR INICIAL (Imágenes → JSON + Dudas)
 // ═══════════════════════════════════════════════════════════════
 app.post('/api/v1/ocr/amazon-stops', 
-   authenticateUser, 
+  authenticateUser, 
   upload.array('images', 7), 
   async (req, res) => {
     try {
@@ -2192,43 +2192,59 @@ FORMATO:
 - No incluyas la parada 1 (warehouse) en el JSON.
 - El JSON debe ser un array de objetos sin texto antes ni después.`;
 
-        // 5. Llamar a Gemini con retry logic
-        console.log('🤖 Enviando a Gemini...');
-        let result;
-        let attempts = 0;
-        const maxAttempts = 3;
+      // 5. Llamar a Gemini con retry logic
+      console.log('🤖 Enviando a Gemini...');
+      let result;
+      let attempts = 0;
+      const maxAttempts = 3;
 
-        while (attempts < maxAttempts) {
-          try {
-            attempts++;
-            console.log(`🔄 Intento ${attempts}/${maxAttempts}...`);
-            result = await model.generateContent([promptV3, ...imageParts]);
-            break; // Éxito, salir del loop
-          } catch (error) {
-            console.error(`❌ Intento ${attempts} falló:`, error.message);
-            
-            // Si es el último intento, lanzar el error
-            if (attempts >= maxAttempts) {
-              throw new Error(`Gemini falló después de ${maxAttempts} intentos: ${error.message}`);
-            }
-            
-            // Esperar antes de reintentar (backoff exponencial)
-            const waitTime = attempts * 2000; // 2s, 4s, 6s
-            console.log(`⏳ Esperando ${waitTime/1000}s antes de reintentar...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+      while (attempts < maxAttempts) {
+        try {
+          attempts++;
+          console.log(`🔄 Intento ${attempts}/${maxAttempts}...`);
+          result = await model.generateContent([promptV3, ...imageParts]);
+          break; // Éxito, salir del loop
+        } catch (error) {
+          console.error(`❌ Intento ${attempts} falló:`, error.message);
+          
+          if (attempts >= maxAttempts) {
+            throw new Error(`Gemini falló después de ${maxAttempts} intentos: ${error.message}`);
           }
+          
+          const waitTime = attempts * 2000;
+          console.log(`⏳ Esperando ${waitTime/1000}s antes de reintentar...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
         }
+      }
 
-        const response = await result.response;
-        const text = response.text();
-
+      const response = await result.response;
+      const text = response.text();
 
       console.log('✅ Respuesta de Gemini recibida');
+
+      // 🔍 DEBUG: Ver JSON crudo de Gemini
+      console.log('\n🔍 ===== JSON CRUDO DE GEMINI (primeros 1000 chars) =====');
+      console.log(text.substring(0, 1000));
+      console.log('...\n');
 
       // 6. Parsear JSON
       let stops;
       try {
         stops = JSON.parse(text);
+        
+        // 🔍 DEBUG: Mostrar paradas 10-13 tal como las devolvió Gemini
+        console.log('🔍 ===== PARADAS 10-13 (GEMINI ORIGINAL) =====');
+        if (stops.length >= 13) {
+          stops.slice(9, 13).forEach(stop => {
+            console.log(`Parada ${stop.stop_number}:`);
+            console.log(`  street_address: "${stop.street_address}"`);
+            console.log(`  apartment: "${stop.apartment || ''}"`);
+            console.log(`  city: "${stop.city}"`);
+            console.log(`  confidence: ${stop.confidence}`);
+          });
+        }
+        console.log('');
+        
       } catch (parseError) {
         console.error('❌ Error parseando respuesta de Gemini:', text);
         return res.status(500).json({
@@ -2246,14 +2262,14 @@ FORMATO:
         if (stop.apartment && stop.apartment.includes('...')) {
           console.log(`🏢 Auto-completando apartamento truncado en parada ${stop.stop_number}: "${stop.apartment}" → "APT 101"`);
           stop.apartment = 'APT 101';
-          stop.confidence = 0.95; // ⬅️ Subir confidence
+          stop.confidence = 0.95;
         }
 
         // Auto-completar apartamentos truncados en street_address
         if (stop.street_address.includes(' APT ...')) {
           console.log(`🏢 Auto-completando apartamento en dirección (parada ${stop.stop_number}): "${stop.street_address}"`);
           stop.street_address = stop.street_address.replace(/ APT \.\.\./, ' APT 101');
-          stop.confidence = 0.95; // ⬅️ Subir confidence
+          stop.confidence = 0.95;
           console.log(`   → Corregido: "${stop.street_address}"`);
         }
 
@@ -2261,21 +2277,21 @@ FORMATO:
         if (stop.street_address.includes(' UNIT ...')) {
           console.log(`🏢 Auto-completando unidad en dirección (parada ${stop.stop_number})`);
           stop.street_address = stop.street_address.replace(/ UNIT \.\.\./, ' UNIT 101');
-          stop.confidence = 0.95; // ⬅️ Subir confidence
+          stop.confidence = 0.95;
         }
 
         // Auto-completar edificios truncados
         if (stop.street_address.includes(' BLDG ...')) {
           console.log(`🏢 Auto-completando edificio en dirección (parada ${stop.stop_number})`);
           stop.street_address = stop.street_address.replace(/ BLDG \.\.\./, ' BLDG 1');
-          stop.confidence = 0.95; // ⬅️ Subir confidence
+          stop.confidence = 0.95;
         }
 
         // Auto-completar # truncados
         if (stop.street_address.includes(' # ...')) {
           console.log(`🏢 Auto-completando # en dirección (parada ${stop.stop_number})`);
           stop.street_address = stop.street_address.replace(/ # \.\.\./, ' #101');
-          stop.confidence = 0.95; // ⬅️ Subir confidence
+          stop.confidence = 0.95;
         }
       });
 
@@ -2286,74 +2302,89 @@ FORMATO:
           stop.street_address.includes('...') || 
           (stop.apartment && stop.apartment.includes('...'));
         
-        // Si ya no hay "..." pero el confidence sigue bajo, corregirlo
         if (!hasEllipsis && stop.confidence < 0.90) {
           console.log(`✨ Subiendo confidence de parada ${stop.stop_number}: ${stop.confidence} → 0.95`);
           stop.confidence = 0.95;
         }
       });
 
+      // 🔍 DEBUG: Mostrar paradas 10-13 DESPUÉS del auto-completado
+      console.log('🔍 ===== PARADAS 10-13 (POST AUTO-COMPLETADO) =====');
+      if (stops.length >= 13) {
+        stops.slice(9, 13).forEach(stop => {
+          console.log(`Parada ${stop.stop_number}:`);
+          console.log(`  street_address: "${stop.street_address}"`);
+          console.log(`  apartment: "${stop.apartment || ''}"`);
+          console.log(`  city: "${stop.city}"`);
+          console.log(`  confidence: ${stop.confidence}`);
+        });
+      }
+      console.log('');
+
       // ═══════════════════════════════════════════════════════════════
-// 8. CALCULAR NEEDS_CONFIRMATION (DESPUÉS)
-// ═══════════════════════════════════════════════════════════════
-const needs_confirmation = [];
+      // 8. CALCULAR NEEDS_CONFIRMATION (DESPUÉS)
+      // ═══════════════════════════════════════════════════════════════
+      const needs_confirmation = [];
 
-stops.forEach(stop => {
-  // Dirección truncada o muy corta o confidence bajo
-  if (stop.street_address.length < 10 || 
-      stop.street_address.includes('...') || 
-      stop.confidence < 0.85) {
-    needs_confirmation.push({
-      stop_number: stop.stop_number,
-      field: 'street_address',
-      reason: stop.street_address.includes('...') ? 'TRUNCATED_TEXT' : 'LOW_CONFIDENCE',
-      current_value: stop.street_address,
-      confidence: stop.confidence
-    });
+      stops.forEach(stop => {
+        // Dirección truncada o muy corta o confidence bajo
+        if (stop.street_address.length < 10 || 
+            stop.street_address.includes('...') || 
+            stop.confidence < 0.85) {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'street_address',
+            reason: stop.street_address.includes('...') ? 'TRUNCATED_TEXT' : 'LOW_CONFIDENCE',
+            current_value: stop.street_address,
+            confidence: stop.confidence
+          });
+        }
+        
+        // Apartamento truncado
+        if (stop.apartment && stop.apartment.includes('...')) {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'apartment',
+            reason: 'TRUNCATED_TEXT',
+            current_value: stop.apartment,
+            confidence: stop.confidence
+          });
+        }
+        
+        // Ciudad vacía
+        if (!stop.city || stop.city.trim() === '') {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'city',
+            reason: 'MISSING_CITY',
+            current_value: '',
+            confidence: stop.confidence
+          });
+        }
+      });
+
+      console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas reales\n`);
+
+      // 9. Responder
+      res.json({
+        success: true,
+        stops,
+        needs_confirmation
+      });
+
+    } catch (error) {
+      console.error('❌ Error en OCR:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
   }
-  
-  // Apartamento truncado (después del auto-completado, no debería haber)
-  if (stop.apartment && stop.apartment.includes('...')) {
-    needs_confirmation.push({
-      stop_number: stop.stop_number,
-      field: 'apartment',
-      reason: 'TRUNCATED_TEXT',
-      current_value: stop.apartment,
-      confidence: stop.confidence
-    });
-  }
-  
-  // Ciudad vacía
-  if (!stop.city || stop.city.trim() === '') {
-    needs_confirmation.push({
-      stop_number: stop.stop_number,
-      field: 'city',
-      reason: 'MISSING_CITY',
-      current_value: '',
-      confidence: stop.confidence
-    });
-  }
-});
-
-console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas reales\n`);
-
-// 9. Responder
-res.json({
-  success: true,
-  stops,
-  needs_confirmation
-});
-
-} catch (error) {
-  console.error('❌ Error en OCR:', error);
-  res.status(500).json({
-    success: false,
-    error: error.message
-  });
-}
+);
 
 console.log('🔍 Endpoint OCR (Primera Pasada) configurado');
-});
+
+
 // ═══════════════════════════════════════════════════════════════
 // ✏️ ENDPOINT 2: RESOLVER DUDAS (Correcciones → JSON Final)
 // ═══════════════════════════════════════════════════════════════
