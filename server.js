@@ -2259,6 +2259,164 @@ FORMATO:
 
 console.log('🔍 Endpoint OCR (Primera Pasada) configurado');
 
+// ═══════════════════════════════════════════════════════════════
+// ✏️ ENDPOINT 2: RESOLVER DUDAS (Correcciones → JSON Final)
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/v1/ocr/amazon-stops/resolve-missing', 
+  authenticateUser, 
+  async (req, res) => {
+    try {
+      console.log('✏️ Recibiendo correcciones del usuario...');
+      
+      const { stops, corrections } = req.body;
+
+      // 1. Validaciones
+      if (!stops || !Array.isArray(stops)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Falta el array de "stops"'
+        });
+      }
+
+      if (!corrections || !Array.isArray(corrections)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Falta el array de "corrections"'
+        });
+      }
+
+      console.log(`📝 ${corrections.length} corrección(es) recibida(s)`);
+
+      // 2. Preparar contexto para Gemini
+      const contextData = {
+        stops: stops,
+        corrections: corrections
+      };
+
+      // 3. Preparar modelo con JSON Schema
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                stop_number: { type: 'integer' },
+                street_address: { type: 'string' },
+                apartment: { type: 'string' },
+                city: { type: 'string' },
+                ia_suggestion: { type: 'integer' },
+                confidence: { type: 'number' }
+              },
+              required: ['stop_number', 'street_address', 'apartment', 'city', 'ia_suggestion', 'confidence']
+            }
+          }
+        }
+      });
+
+      // 4. Prompt v3 (Segunda Pasada)
+      const promptV3Corrections = `Eres FlexPilot Core, una IA experta en logística de última milla y normalización de direcciones.
+
+CONTEXTO:
+- Ya se ejecutó una primera extracción OCR sobre capturas de Amazon Flex.
+- Ahora recibes:
+  - una lista de paradas parcialmente procesadas (con posibles campos incompletos),
+  - y una lista de correcciones textuales proporcionadas por el usuario.
+- Tu tarea es aplicar esas correcciones para generar una versión FINAL y CONSISTENTE de todas las paradas.
+
+OBJETIVO:
+- Corregir y completar las paradas usando SOLO la información que realmente tengas:
+  - El JSON parcial de paradas.
+  - Las correcciones textuales del usuario (por ejemplo, direcciones completas copiadas desde la app de Flex).
+- Producir un JSON final listo para uso en producción, manteniendo el mismo contrato de salida.
+- No hacer preguntas ni abrir interacción.
+
+REGLAS DE COMPORTAMIENTO:
+1. NO INVENTES DATOS:
+   - Si a pesar de las correcciones algún campo sigue siendo ambiguo, deja lo que tenías y ajusta "confidence" acorde.
+2. MAYÚSCULAS:
+   - Convierte todos los textos de salida ("street_address", "apartment", "city") a MAYÚSCULAS.
+3. LÓGICA DE CAMPO "ia_suggestion":
+   - En esta fase TODO sigue en MODO PASIVO.
+   - "ia_suggestion" debe ser SIEMPRE igual a "stop_number".
+4. PRESERVA LA ESTRUCTURA Y EL ORDEN:
+   - Debes mantener la misma cantidad de paradas.
+   - Los "stop_number" deben seguir siendo los mismos (2, 3, 4, ...) que venían en la entrada.
+5. USO DE CORRECCIONES:
+   - Las correcciones del usuario suelen ser direcciones completas, por ejemplo:
+     "1234 FULL ADDRESS AVE APT 202, KISSIMMEE".
+   - Debes:
+     - actualizar "street_address" usando la parte de calle y número,
+     - extraer "apartment" si ves unidad (APT, UNIT, #, etc.),
+     - actualizar "city" si es visible,
+     - ajustar "confidence" hacia arriba si la información se vuelve clara.
+
+ENTRADA:
+${JSON.stringify(contextData, null, 2)}
+
+SALIDA OBLIGATORIA:
+- Devuelve ÚNICAMENTE un JSON válido con el siguiente contrato (array de objetos).
+
+DEFINICIÓN DE CAMPOS:
+- "stop_number": entero, igual al original.
+- "street_address": texto de calle + número ya corregido.
+- "apartment": unidad de apartamento si aplica, o "".
+- "city": ciudad inferida a partir de los datos visibles y las correcciones.
+- "ia_suggestion": SIEMPRE igual a "stop_number".
+- "confidence": 0.0 a 1.0 según tu seguridad tras aplicar las correcciones.
+
+FORMATO:
+- No incluyas texto, explicación ni comentarios antes o después del JSON.
+- Devuelve solo el array JSON.`;
+
+      // 5. Llamar a Gemini
+      console.log('🤖 Enviando correcciones a Gemini...');
+      const result = await model.generateContent(promptV3Corrections);
+      const response = await result.response;
+      const text = response.text();
+
+      console.log('✅ Respuesta de correcciones recibida');
+
+      // 6. Parsear JSON
+      let finalStops;
+      try {
+        finalStops = JSON.parse(text);
+      } catch (parseError) {
+        console.error('❌ Error parseando respuesta de correcciones:', text);
+        return res.status(500).json({
+          success: false,
+          error: 'Gemini devolvió una respuesta inválida',
+          raw: text
+        });
+      }
+
+      // 7. Validar que mantiene la misma cantidad de paradas
+      if (finalStops.length !== stops.length) {
+        console.warn(`⚠️ Advertencia: Cantidad de paradas cambió (${stops.length} → ${finalStops.length})`);
+      }
+
+      console.log(`✅ ${finalStops.length} paradas finalizadas con correcciones aplicadas`);
+
+      // 8. Responder
+      res.json({
+        success: true,
+        stops: finalStops
+      });
+
+    } catch (error) {
+      console.error('❌ Error en correcciones:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+});
+
+console.log('✏️ Endpoint OCR (Correcciones) configurado');
+
+
 // --- 🆕 FASE 5: Cleanup Automático ---
 // (Ejecutar ANTES de app.listen)
 
