@@ -2257,12 +2257,35 @@ FORMATO:
           }
           
           // 🆕 APARTAMENTO TRUNCADO: Auto-completar con genérico
+          // Detectar en apartment (campo separado)
           if (stop.apartment && stop.apartment.includes('...')) {
             console.log(`🏢 Auto-completando apartamento truncado en parada ${stop.stop_number}: "${stop.apartment}" → "APT 101"`);
-            stop.apartment = 'APT 101'; // Auto-completar
-            stop.confidence = 0.95; // Subir confidence porque ya no es dudoso
-            // NO agregamos a needs_confirmation
+            stop.apartment = 'APT 101';
+            stop.confidence = 0.95;
           }
+
+          // 🆕 APARTAMENTO TRUNCADO EN STREET_ADDRESS: Extraer y auto-completar
+          if (stop.street_address.includes(' APT ...')) {
+            console.log(`🏢 Auto-completando apartamento en dirección (parada ${stop.stop_number}): "${stop.street_address}"`);
+            // Reemplazar " APT ..." por " APT 101"
+            stop.street_address = stop.street_address.replace(/ APT \.\.\./, ' APT 101');
+            stop.confidence = 0.95;
+            console.log(`   → Corregido: "${stop.street_address}"`);
+          }
+
+          // También manejar variaciones comunes
+          if (stop.street_address.includes(' UNIT ...')) {
+            console.log(`🏢 Auto-completando unidad en dirección (parada ${stop.stop_number})`);
+            stop.street_address = stop.street_address.replace(/ UNIT \.\.\./, ' UNIT 101');
+            stop.confidence = 0.95;
+          }
+
+          if (stop.street_address.includes(' # ...')) {
+            console.log(`🏢 Auto-completando # en dirección (parada ${stop.stop_number})`);
+            stop.street_address = stop.street_address.replace(/ # \.\.\./, ' #101');
+            stop.confidence = 0.95;
+          }
+
           
           // Ciudad vacía
           if (!stop.city || stop.city.trim() === '') {
