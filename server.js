@@ -2361,7 +2361,7 @@ app.post('/api/v1/ocr/amazon-stops',
       console.log('');
 
       // ═══════════════════════════════════════════════════════════════
-      // 8. CALCULAR NEEDS_CONFIRMATION (DESPUÉS)
+      // 8. CALCULAR NEEDS_CONFIRMATION (DESPUÉS) ///
       // ═══════════════════════════════════════════════════════════════
       const needs_confirmation = [];
 
