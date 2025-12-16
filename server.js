@@ -9,6 +9,34 @@ import { Client } from '@googlemaps/google-maps-services-js';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
+// ═══════════════════════════════════════════════════════════════
+// 🤖 GEMINI OCR SETUP
+// ═══════════════════════════════════════════════════════════════
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import multer from 'multer';
+import fs from 'fs/promises';
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Configurar multer para recibir imágenes en memoria
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 8 * 1024 * 1024, // 8MB por archivo
+    files: 7 // Máximo 7 archivos
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'image/png' || file.mimetype === 'image/jpeg') {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten imágenes PNG o JPEG'));
+    }
+  }
+});
+
+console.log('🤖 Gemini OCR System activado');
+
+
 // IMPORTANTE: Asegúrate que STOPS_ENCRYPTION_KEY esté en tu .env
 const ENCRYPTION_KEY = process.env.STOPS_ENCRYPTION_KEY; // Debe ser 32 bytes (64 hex)
 const IV_LENGTH = 16;
@@ -2059,6 +2087,177 @@ app.post('/api/scheduled-blocks/:id/start', authenticateUser, async (req, res) =
 
 // --- Fin FASE 6 ---
 
+
+// ═══════════════════════════════════════════════════════════════
+// 🔍 ENDPOINT 1: OCR INICIAL (Imágenes → JSON + Dudas)
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/v1/ocr/amazon-stops', 
+  authenticateUser, 
+  upload.array('images', 7), 
+  async (req, res) => {
+    try {
+      console.log('📸 Recibiendo imágenes para OCR...');
+      
+      // 1. Validar que hay imágenes
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No se recibieron imágenes. Debes subir entre 1 y 7 archivos.'
+        });
+      }
+
+      console.log(`📦 ${req.files.length} imagen(es) recibida(s)`);
+
+      // 2. Preparar imágenes para Gemini
+      const imageParts = req.files.map(file => ({
+        inlineData: {
+          data: file.buffer.toString('base64'),
+          mimeType: file.mimetype
+        }
+      }));
+
+      // 3. Preparar el modelo con JSON Schema
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                stop_number: { type: 'integer' },
+                street_address: { type: 'string' },
+                apartment: { type: 'string' },
+                city: { type: 'string' },
+                ia_suggestion: { type: 'integer' },
+                confidence: { type: 'number' }
+              },
+              required: ['stop_number', 'street_address', 'apartment', 'city', 'ia_suggestion', 'confidence']
+            }
+          }
+        }
+      });
+
+      // 4. Prompt v3 (Primera Pasada)
+      const promptV3 = `Eres FlexPilot Core, una IA experta en logística de última milla y OCR de alta precisión.
+
+CONTEXTO:
+- Recibirás capturas de pantalla de la app Amazon Flex que muestran una lista de paradas numeradas.
+- La parada 1 siempre es el warehouse y debe ignorarse.
+- El objetivo es extraer una lista estructurada de paradas a partir de esas imágenes.
+
+OBJETIVO:
+- Extraer TODAS las paradas a partir de la parada 2, con la máxima precisión posible.
+- No interactúas directamente con el usuario. Solo devuelves datos estructurados.
+- Las dudas o posibles problemas se indicarán a través de un campo de "confidence" bajo, nunca con preguntas de texto.
+
+REGLAS DE COMPORTAMIENTO (CRÍTICAS):
+1. IGNORA SIEMPRE LA PARADA 1 (WAREHOUSE). El primer elemento de la salida debe ser la parada 2.
+2. TODO el texto de salida debe ir en MAYÚSCULAS (direcciones, ciudad, apartamento).
+3. TOLERANCIA CERO A ADIVINAR DIRECCIONES:
+   - Si una dirección tiene "..." o se ve cortada en la captura, NO completes lo que no se ve.
+   - Incluye solo el texto visible y baja el "confidence" para esa parada.
+4. DEDUCCIÓN INTELIGENTE DE "stop_number" CUANDO EL OCR FALLA:
+   - El número de la parada aparece dentro de un círculo oscuro y a veces el OCR lo convierte en un "garabato" ilegible.
+   - En esos casos, DEBES usar el contexto y la secuencia para inferir el número de parada:
+     - Si acabas de procesar la parada 4 con su dirección y a continuación ves un nuevo bloque de dirección/apartamento/ciudad para la siguiente parada, pero el número aparece ilegible, debes tratar esa nueva parada como la número 5.
+     - En general, si tienes una secuencia clara de "bloques" de dirección, asume que los números de parada siguen aumentando de 1 en 1 (2, 3, 4, 5, 6, ...), aunque la parte visual del número esté dañada.
+   - Esta inferencia SOLO aplica al "stop_number". No la uses para inventar texto de direcciones.
+5. NO HAGAS PREGUNTAS ni asumas conversación. Esta llamada es de una sola pasada.
+6. El campo "ia_suggestion" SIEMPRE debe ser igual a "stop_number" en esta fase (MODO PASIVO).
+7. Si no puedes ver claramente un campo:
+   - "street_address": incluye solo lo que ves en la pantalla y ajusta "confidence".
+   - "apartment": si no se ve nada, usar cadena vacía "".
+   - "city": si no es visible, usar cadena vacía "" y baja "confidence".
+
+MODO DE OPERACIÓN:
+- MODO PASIVO: Asume SIEMPRE modo pasivo en esta fase. No optimices ni reordenes la ruta.
+- La lista de salida debe respetar el orden original de Amazon Flex (2, 3, 4, ...).
+
+SALIDA OBLIGATORIA:
+- Debes devolver ÚNICAMENTE un JSON válido que cumpla este contrato para cada parada.
+
+DEFINICIÓN DE CAMPOS:
+- "stop_number": número entero de la parada (2, 3, 4, ...). Si el número visual está ilegible, dedúcelo a partir de la secuencia de paradas y del orden en la lista.
+- "street_address": calle + número, solo con texto que realmente se vea en la captura.
+- "apartment": unidad de apartamento si se ve (ej: "APT 4-416"), o "" si no aparece.
+- "city": ciudad visible en la captura; si no se ve, usar "".
+- "ia_suggestion": en esta fase SIEMPRE igual a "stop_number".
+- "confidence": número de 0.0 a 1.0 indicando tu seguridad en esa parada.
+
+FORMATO:
+- No incluyas comentarios, textos adicionales ni explicación fuera del JSON.
+- No incluyas la parada 1 (warehouse) en el JSON.
+- El JSON debe ser un array de objetos sin texto antes ni después.`;
+
+      // 5. Llamar a Gemini
+      console.log('🤖 Enviando a Gemini...');
+      const result = await model.generateContent([promptV3, ...imageParts]);
+      const response = await result.response;
+      const text = response.text();
+
+      console.log('✅ Respuesta de Gemini recibida');
+
+      // 6. Parsear JSON
+      let stops;
+      try {
+        stops = JSON.parse(text);
+      } catch (parseError) {
+        console.error('❌ Error parseando respuesta de Gemini:', text);
+        return res.status(500).json({
+          success: false,
+          error: 'Gemini devolvió una respuesta inválida',
+          raw: text
+        });
+      }
+
+      // 7. Calcular needs_confirmation
+      const needs_confirmation = [];
+      
+      stops.forEach(stop => {
+        // Dirección truncada o muy corta
+        if (stop.street_address.length < 10 || stop.confidence < 0.8) {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'street_address',
+            reason: stop.street_address.includes('...') ? 'TRUNCATED_TEXT' : 'LOW_CONFIDENCE',
+            current_value: stop.street_address,
+            confidence: stop.confidence
+          });
+        }
+        
+        // Ciudad vacía
+        if (!stop.city || stop.city.trim() === '') {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'city',
+            reason: 'MISSING_CITY',
+            current_value: '',
+            confidence: stop.confidence
+          });
+        }
+      });
+
+      console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas`);
+
+      // 8. Responder
+      res.json({
+        success: true,
+        stops,
+        needs_confirmation
+      });
+
+    } catch (error) {
+      console.error('❌ Error en OCR:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+});
+
+console.log('🔍 Endpoint OCR (Primera Pasada) configurado');
 
 // --- 🆕 FASE 5: Cleanup Automático ---
 // (Ejecutar ANTES de app.listen)
