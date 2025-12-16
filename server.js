@@ -2213,17 +2213,30 @@ FORMATO:
         });
       }
 
-      // 7. Calcular needs_confirmation
+      // 7. Calcular needs_confirmation (VERSIÓN MEJORADA)
       const needs_confirmation = [];
-      
+
       stops.forEach(stop => {
-        // Dirección truncada o muy corta
-        if (stop.street_address.length < 10 || stop.confidence < 0.8) {
+        // Dirección truncada o muy corta o confidence bajo
+        if (stop.street_address.length < 10 || 
+            stop.street_address.includes('...') || 
+            stop.confidence < 0.85) {
           needs_confirmation.push({
             stop_number: stop.stop_number,
             field: 'street_address',
             reason: stop.street_address.includes('...') ? 'TRUNCATED_TEXT' : 'LOW_CONFIDENCE',
             current_value: stop.street_address,
+            confidence: stop.confidence
+          });
+        }
+        
+        // Apartamento truncado
+        if (stop.apartment && stop.apartment.includes('...')) {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'apartment',
+            reason: 'TRUNCATED_TEXT',
+            current_value: stop.apartment,
             confidence: stop.confidence
           });
         }
@@ -2239,6 +2252,9 @@ FORMATO:
           });
         }
       });
+
+console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas`);
+
 
       console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas`);
 
