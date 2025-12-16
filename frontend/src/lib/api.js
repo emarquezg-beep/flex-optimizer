@@ -24,13 +24,29 @@ export async function getAuthHeaders() {
  * @returns {Promise<Response>} Response del fetch
  */
 export async function fetchWithAuth(url, options = {}) {
-  const headers = await getAuthHeaders()
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  if (!session?.access_token) {
+    throw new Error('No hay sesión activa')
+  }
+  
+  // 🔧 DETECTAR SI ES FORMDATA
+  const isFormData = options.body instanceof FormData
+  
+  // Headers base (solo Authorization)
+  const headers = {
+    'Authorization': `Bearer ${session.access_token}`,
+    ...options.headers
+  }
+  
+  // ⚠️ NO agregar Content-Type si es FormData
+  // El navegador lo hará automáticamente con el boundary correcto
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json'
+  }
   
   return fetch(url, {
     ...options,
-    headers: {
-      ...headers,
-      ...options.headers
-    }
+    headers
   })
 }
