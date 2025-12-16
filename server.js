@@ -2119,7 +2119,7 @@ app.post('/api/v1/ocr/amazon-stops',
 
       // 3. Preparar el modelo con JSON Schema
       const model = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -2337,7 +2337,7 @@ app.post('/api/v1/ocr/amazon-stops/resolve-missing',
 
       // 3. Preparar modelo con JSON Schema
       const model = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: {
