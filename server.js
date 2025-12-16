@@ -52,6 +52,7 @@ const allowedOrigins = [
   'https://flex-optimizer.vercel.app',
   'https://flex-optimizer-git-feature-sl-7cb1e8-ernestos-projects-d9e7c95d.vercel.app',
   'https://flex-optimizer-git-feature-ai-ad3680-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-feature-oc-8d3859-ernestos-projects-d9e7c95d.vercel.app',
 ];
 const corsOptions = {
   origin: function (origin, callback) {
