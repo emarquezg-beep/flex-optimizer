@@ -2093,7 +2093,7 @@ app.post('/api/scheduled-blocks/:id/start', authenticateUser, async (req, res) =
 // 🔍 ENDPOINT 1: OCR INICIAL (Imágenes → JSON + Dudas)
 // ═══════════════════════════════════════════════════════════════
 app.post('/api/v1/ocr/amazon-stops', 
-  authenticateUser, 
+  // authenticateUser, 
   upload.array('images', 7), 
   async (req, res) => {
     try {
@@ -2264,7 +2264,7 @@ console.log('🔍 Endpoint OCR (Primera Pasada) configurado');
 // ✏️ ENDPOINT 2: RESOLVER DUDAS (Correcciones → JSON Final)
 // ═══════════════════════════════════════════════════════════════
 app.post('/api/v1/ocr/amazon-stops/resolve-missing', 
-  authenticateUser, 
+  //authenticateUser, 
   async (req, res) => {
     try {
       console.log('✏️ Recibiendo correcciones del usuario...');
