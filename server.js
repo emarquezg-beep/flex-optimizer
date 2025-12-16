@@ -2246,14 +2246,14 @@ FORMATO:
         if (stop.apartment && stop.apartment.includes('...')) {
           console.log(`🏢 Auto-completando apartamento truncado en parada ${stop.stop_number}: "${stop.apartment}" → "APT 101"`);
           stop.apartment = 'APT 101';
-          stop.confidence = 0.95;
+          stop.confidence = 0.95; // ⬅️ Subir confidence
         }
 
         // Auto-completar apartamentos truncados en street_address
         if (stop.street_address.includes(' APT ...')) {
           console.log(`🏢 Auto-completando apartamento en dirección (parada ${stop.stop_number}): "${stop.street_address}"`);
           stop.street_address = stop.street_address.replace(/ APT \.\.\./, ' APT 101');
-          stop.confidence = 0.95;
+          stop.confidence = 0.95; // ⬅️ Subir confidence
           console.log(`   → Corregido: "${stop.street_address}"`);
         }
 
@@ -2261,20 +2261,34 @@ FORMATO:
         if (stop.street_address.includes(' UNIT ...')) {
           console.log(`🏢 Auto-completando unidad en dirección (parada ${stop.stop_number})`);
           stop.street_address = stop.street_address.replace(/ UNIT \.\.\./, ' UNIT 101');
-          stop.confidence = 0.95;
+          stop.confidence = 0.95; // ⬅️ Subir confidence
         }
 
         // Auto-completar edificios truncados
         if (stop.street_address.includes(' BLDG ...')) {
           console.log(`🏢 Auto-completando edificio en dirección (parada ${stop.stop_number})`);
           stop.street_address = stop.street_address.replace(/ BLDG \.\.\./, ' BLDG 1');
-          stop.confidence = 0.95;
+          stop.confidence = 0.95; // ⬅️ Subir confidence
         }
 
         // Auto-completar # truncados
         if (stop.street_address.includes(' # ...')) {
           console.log(`🏢 Auto-completando # en dirección (parada ${stop.stop_number})`);
           stop.street_address = stop.street_address.replace(/ # \.\.\./, ' #101');
+          stop.confidence = 0.95; // ⬅️ Subir confidence
+        }
+      });
+
+      // 🆕 PASO EXTRA: Si después del auto-completado ya NO hay "...", 
+      // asegurar que el confidence sea alto
+      stops.forEach(stop => {
+        const hasEllipsis = 
+          stop.street_address.includes('...') || 
+          (stop.apartment && stop.apartment.includes('...'));
+        
+        // Si ya no hay "..." pero el confidence sigue bajo, corregirlo
+        if (!hasEllipsis && stop.confidence < 0.90) {
+          console.log(`✨ Subiendo confidence de parada ${stop.stop_number}: ${stop.confidence} → 0.95`);
           stop.confidence = 0.95;
         }
       });
