@@ -88,6 +88,15 @@ const blockData = ref({
 });
 
 // ============================================
+// 🆕 OCR: VARIABLES DE ESTADO
+// ============================================
+const selectedImages = ref([]); // Array de archivos seleccionados
+const showCorrectionModal = ref(false); // Modal de correcciones
+const needsConfirmation = ref([]); // Dudas de Gemini
+const correctionInputs = ref({}); // Inputs del usuario en modal
+const isUploadingImages = ref(false); // Spinner al subir imágenes
+
+// ============================================
 // 3. WATCHERS & LIFECYCLE
 // ============================================
 
@@ -919,6 +928,44 @@ function calculateActualDelay() {
   // Si es negativo (estás calculando antes de que empiece el bloque), lo ponemos en 0
   blockData.value.retraso_almacen = diffMins > 0 ? diffMins : 0;
 }
+
+// ============================================
+// 🆕 OCR: MANEJO DE IMÁGENES
+// ============================================
+function handleImageSelection(event) {
+  const files = Array.from(event.target.files);
+  
+  // Validar cantidad (1-10 imágenes)
+  if (files.length === 0) {
+    alert('⚠️ Debes seleccionar al menos 1 imagen');
+    return;
+  }
+  
+  if (files.length > 10) {
+    alert('⚠️ Máximo 10 imágenes permitidas');
+    return;
+  }
+  
+  // Validar tipos
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+  const invalidFiles = files.filter(f => !validTypes.includes(f.type));
+  
+  if (invalidFiles.length > 0) {
+    alert('⚠️ Solo se permiten imágenes PNG o JPEG');
+    return;
+  }
+  
+  selectedImages.value = files;
+  console.log(`📸 ${files.length} imagen(es) seleccionada(s)`);
+}
+
+function clearImages() {
+  selectedImages.value = [];
+  if (fileInputRef.value) {
+    fileInputRef.value.value = '';
+  }
+}
+
 </script>
 
 <template>
@@ -991,6 +1038,52 @@ function calculateActualDelay() {
               🤖 Open Gem to Process Screenshots
             </a>
             <p class="gem-hint">Upload your route screenshots to the Gem, then paste the JSON below</p>
+          </div>
+
+          <div class="ocr-upload-section">
+            <h3>📸 Opción 1: Subir Capturas (OCR Automático)</h3>
+            <p class="ocr-description">
+              Sube 1-10 capturas de pantalla de Amazon Flex y FlexPilot extraerá las direcciones automáticamente.
+            </p>
+            
+            <div class="file-input-container">
+              <input 
+                type="file" 
+                ref="fileInputRef"
+                accept="image/png,image/jpeg,image/jpg"
+                multiple
+                @change="handleImageSelection"
+                style="display: none"
+              />
+              
+              <button 
+                type="button"
+                class="upload-button"
+                @click="fileInputRef?.click()"
+              >
+                📷 Seleccionar Capturas (1-7)
+              </button>
+              
+              <div v-if="selectedImages.length > 0" class="selected-files">
+                <p class="files-count">✅ {{ selectedImages.length }} imagen(es) seleccionada(s)</p>
+                <ul class="file-list">
+                  <li v-for="(file, index) in selectedImages" :key="index">
+                    {{ file.name }} ({{ (file.size / 1024).toFixed(1) }} KB)
+                  </li>
+                </ul>
+                <button 
+                  type="button"
+                  class="clear-button"
+                  @click="clearImages"
+                >
+                  ❌ Limpiar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider">
+            <span>O</span>
           </div>
 
           <div class="json-input-card">
@@ -2736,4 +2829,131 @@ function calculateActualDelay() {
   color: #64748b; 
   margin-top: 6px; 
 }
+
+/* ============================================
+   🆕 OCR: ESTILOS
+   ============================================ */
+.ocr-upload-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  color: white;
+}
+
+.ocr-upload-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ocr-description {
+  margin: 0 0 16px 0;
+  opacity: 0.9;
+  font-size: 14px;
+}
+
+.file-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.upload-button {
+  background: white;
+  color: #667eea;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 15px;
+}
+
+.upload-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.selected-files {
+  background: rgba(255,255,255,0.15);
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.files-count {
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+.file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px 0;
+}
+
+.file-list li {
+  padding: 6px 0;
+  font-size: 13px;
+  opacity: 0.9;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.file-list li:last-child {
+  border-bottom: none;
+}
+
+.clear-button {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.clear-button:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.divider {
+  text-align: center;
+  margin: 24px 0;
+  position: relative;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: #ddd;
+}
+
+.divider span {
+  background: white;
+  padding: 0 16px;
+  position: relative;
+  color: #666;
+  font-weight: 600;
+}
+
+.json-input-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.json-description {
+  margin: 0 0 12px 0;
+  color: #666;
+  font-size: 14px;
+}
+
 </style>
