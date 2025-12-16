@@ -1241,10 +1241,11 @@ async function processImagesWithOCR() {
             <button 
               @click="evaluateRoute" 
               class="button-primary button-evaluate"
-              :disabled="isProcessing || (!jsonInput.trim() && extractedAddresses.length === 0)"
+              :disabled="(isProcessing || isUploadingImages) || (!jsonInput.trim() && extractedAddresses.length === 0 && selectedImages.length === 0)"
             >
-              {{ isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios' }}
+              {{ isUploadingImages ? '🤖 Processing Images...' : (isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios') }}
             </button>
+
           </div>
 
           <div class="additional-settings">
