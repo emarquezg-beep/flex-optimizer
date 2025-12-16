@@ -2192,11 +2192,36 @@ FORMATO:
 - No incluyas la parada 1 (warehouse) en el JSON.
 - El JSON debe ser un array de objetos sin texto antes ni después.`;
 
-      // 5. Llamar a Gemini
-      console.log('🤖 Enviando a Gemini...');
-      const result = await model.generateContent([promptV3, ...imageParts]);
-      const response = await result.response;
-      const text = response.text();
+        // 5. Llamar a Gemini con retry logic
+        console.log('🤖 Enviando a Gemini...');
+        let result;
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        while (attempts < maxAttempts) {
+          try {
+            attempts++;
+            console.log(`🔄 Intento ${attempts}/${maxAttempts}...`);
+            result = await model.generateContent([promptV3, ...imageParts]);
+            break; // Éxito, salir del loop
+          } catch (error) {
+            console.error(`❌ Intento ${attempts} falló:`, error.message);
+            
+            // Si es el último intento, lanzar el error
+            if (attempts >= maxAttempts) {
+              throw new Error(`Gemini falló después de ${maxAttempts} intentos: ${error.message}`);
+            }
+            
+            // Esperar antes de reintentar (backoff exponencial)
+            const waitTime = attempts * 2000; // 2s, 4s, 6s
+            console.log(`⏳ Esperando ${waitTime/1000}s antes de reintentar...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+        }
+
+        const response = await result.response;
+        const text = response.text();
+
 
       console.log('✅ Respuesta de Gemini recibida');
 
