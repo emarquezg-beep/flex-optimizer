@@ -1072,6 +1072,90 @@ async function processImagesWithOCR() {
   }
 }
 
+// ============================================
+// 🆕 OCR: ENVIAR CORRECCIONES
+// ============================================
+async function submitCorrections() {
+  console.log('✏️ Enviando correcciones al backend...');
+  isProcessing.value = true;
+  
+  try {
+    // 1. Construir array de correcciones
+    const corrections = needsConfirmation.value.map(item => {
+      const key = `${item.stop_number}_${item.field}`;
+      const userValue = correctionInputs.value[key];
+      
+      return {
+        stop_number: item.stop_number,
+        field: item.field,
+        value: userValue || item.current_value // Si usuario no puso nada, usar el valor actual
+      };
+    });
+    
+    console.log('📝 Correcciones:', corrections);
+    
+    // 2. Llamar al endpoint de correcciones
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const response = await fetchWithAuth(`${backendUrl}/api/v1/ocr/amazon-stops/resolve-missing`, {
+      method: 'POST',
+      body: JSON.stringify({
+        stops: extractedAddresses.value.map(addr => ({
+          stop_number: addr.number,
+          street_address: addr.address.split(' ').slice(0, -1).join(' ') || addr.address,
+          apartment: '',
+          city: addr.address.split(' ').pop() || '',
+          ia_suggestion: addr.ia_suggestion,
+          confidence: 0.8
+        })),
+        corrections: corrections
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Error aplicando correcciones');
+    }
+    
+    const result = await response.json();
+    console.log('✅ Correcciones aplicadas:', result);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Falló la aplicación de correcciones');
+    }
+    
+    // 3. Actualizar extractedAddresses con el JSON corregido
+    extractedAddresses.value = result.stops.map(stop => ({
+      number: stop.stop_number,
+      address: [stop.street_address, stop.apartment, stop.city]
+        .filter(Boolean)
+        .join(' ')
+        .trim(),
+      isDowntown: false,
+      isApartment: stop.apartment && stop.apartment.trim() !== '',
+      ia_suggestion: stop.ia_suggestion
+    }));
+    
+    console.log('✅ Direcciones actualizadas con correcciones');
+    
+    // 4. Cerrar modal
+    showCorrectionModal.value = false;
+    isProcessing.value = false;
+    
+    // 5. Continuar con flujo normal (downtown check)
+    const needsDowntownCheck = showDowntownDetection();
+    if (needsDowntownCheck) {
+      return;
+    }
+    
+    // Si no hay downtown, proceder con evaluación
+    await proceedWithEvaluation();
+    
+  } catch (error) {
+    console.error('❌ Error aplicando correcciones:', error);
+    alert(`❌ Error: ${error.message}`);
+    isProcessing.value = false;
+  }
+}
 
 </script>
 
@@ -1381,6 +1465,78 @@ async function processImagesWithOCR() {
       </div>
       
     </div>
+
+    <!-- ============================================
+     🆕 MODAL DE CORRECCIONES OCR
+     ============================================ -->
+    <div v-if="showCorrectionModal" class="modal-overlay" @click.self="showCorrectionModal = false">
+      <div class="modal-content correction-modal">
+        <div class="modal-header">
+          <h2>✏️ Completar Información</h2>
+          <p class="modal-subtitle">
+            Gemini necesita que completes algunos datos que no pudo leer claramente en las capturas.
+          </p>
+        </div>
+
+        <div class="modal-body">
+          <div 
+            v-for="item in needsConfirmation" 
+            :key="`${item.stop_number}_${item.field}`"
+            class="correction-item"
+          >
+            <div class="correction-header">
+              <span class="stop-badge">Parada {{ item.stop_number }}</span>
+              <span class="field-badge">{{ item.field === 'street_address' ? 'Dirección' : (item.field === 'apartment' ? 'Apartamento' : 'Ciudad') }}</span>
+            </div>
+
+            <div class="correction-reason">
+              <span v-if="item.reason === 'TRUNCATED_TEXT'">📋 Texto truncado detectado</span>
+              <span v-else-if="item.reason === 'LOW_CONFIDENCE'">⚠️ Baja confianza ({{ Math.round(item.confidence * 100) }}%)</span>
+              <span v-else-if="item.reason === 'MISSING_CITY'">🏙️ Ciudad no detectada</span>
+            </div>
+
+            <div class="correction-current">
+              <strong>Valor actual:</strong> 
+              <code>{{ item.current_value || '(vacío)' }}</code>
+            </div>
+
+            <div class="correction-input">
+              <label :for="`correction_${item.stop_number}_${item.field}`">
+                Valor correcto:
+              </label>
+              <input 
+                :id="`correction_${item.stop_number}_${item.field}`"
+                type="text"
+                v-model="correctionInputs[`${item.stop_number}_${item.field}`]"
+                :placeholder="`Ej: ${item.field === 'street_address' ? '1234 MAIN ST APT 202' : (item.field === 'apartment' ? 'APT 101' : 'KISSIMMEE')}`"
+              />
+              <small class="input-hint">
+                💡 Tip: Copia la dirección completa desde la app de Amazon Flex
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button 
+            type="button"
+            class="button-secondary"
+            @click="showCorrectionModal = false"
+          >
+            ❌ Cancelar
+          </button>
+          <button 
+            type="button"
+            class="button-primary"
+            @click="submitCorrections"
+            :disabled="isProcessing"
+          >
+            {{ isProcessing ? '⏳ Procesando...' : '✅ Confirmar y Continuar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 <style scoped>
@@ -3067,5 +3223,171 @@ async function processImagesWithOCR() {
   color: #666;
   font-size: 14px;
 }
+
+/* ============================================
+   🆕 MODAL DE CORRECCIONES
+   ============================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+  padding: 24px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.modal-header h2 {
+  margin: 0 0 8px 0;
+  color: #333;
+  font-size: 24px;
+}
+
+.modal-subtitle {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.correction-item {
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.correction-item:last-child {
+  margin-bottom: 0;
+}
+
+.correction-header {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stop-badge {
+  background: #667eea;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field-badge {
+  background: #764ba2;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.correction-reason {
+  font-size: 13px;
+  color: #856404;
+  background: #fff3cd;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.correction-current {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.correction-current code {
+  background: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  color: #d73a49;
+}
+
+.correction-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.correction-input label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+
+.correction-input input {
+  padding: 10px 12px;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.correction-input input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.input-hint {
+  font-size: 12px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 2px solid #f0f0f0;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.button-secondary {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.button-secondary:hover {
+  background: #5a6268;
+}
+
 
 </style>
