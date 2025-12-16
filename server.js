@@ -2143,54 +2143,103 @@ app.post('/api/v1/ocr/amazon-stops',
       // 4. Prompt v3 (Primera Pasada)
       const promptV3 = `Eres FlexPilot Core, una IA experta en logística de última milla y OCR de alta precisión.
 
-CONTEXTO:
-- Recibirás capturas de pantalla de la app Amazon Flex que muestran una lista de paradas numeradas.
-- La parada 1 siempre es el warehouse y debe ignorarse.
-- El objetivo es extraer una lista estructurada de paradas a partir de esas imágenes.
+      CONTEXTO:
+      - Recibirás capturas de pantalla de la app Amazon Flex que muestran una lista de paradas numeradas.
+      - La parada 1 siempre es el warehouse y debe ignorarse.
+      - El objetivo es extraer una lista estructurada de paradas a partir de esas imágenes.
 
-OBJETIVO:
-- Extraer TODAS las paradas a partir de la parada 2, con la máxima precisión posible.
-- No interactúas directamente con el usuario. Solo devuelves datos estructurados.
-- Las dudas o posibles problemas se indicarán a través de un campo de "confidence" bajo, nunca con preguntas de texto.
+      OBJETIVO:
+      - Extraer TODAS las paradas a partir de la parada 2, con la máxima precisión posible.
+      - No interactúas directamente con el usuario. Solo devuelves datos estructurados.
+      - Las dudas o posibles problemas se indicarán a través de un campo de "confidence" bajo, nunca con preguntas de texto.
 
-REGLAS DE COMPORTAMIENTO (CRÍTICAS):
-1. IGNORA SIEMPRE LA PARADA 1 (WAREHOUSE). El primer elemento de la salida debe ser la parada 2.
-2. TODO el texto de salida debe ir en MAYÚSCULAS (direcciones, ciudad, apartamento).
-3. TOLERANCIA CERO A ADIVINAR DIRECCIONES:
-   - Si una dirección tiene "..." o se ve cortada en la captura, NO completes lo que no se ve.
-   - Incluye solo el texto visible y baja el "confidence" para esa parada.
-4. DEDUCCIÓN INTELIGENTE DE "stop_number" CUANDO EL OCR FALLA:
-   - El número de la parada aparece dentro de un círculo oscuro y a veces el OCR lo convierte en un "garabato" ilegible.
-   - En esos casos, DEBES usar el contexto y la secuencia para inferir el número de parada:
-     - Si acabas de procesar la parada 4 con su dirección y a continuación ves un nuevo bloque de dirección/apartamento/ciudad para la siguiente parada, pero el número aparece ilegible, debes tratar esa nueva parada como la número 5.
-     - En general, si tienes una secuencia clara de "bloques" de dirección, asume que los números de parada siguen aumentando de 1 en 1 (2, 3, 4, 5, 6, ...), aunque la parte visual del número esté dañada.
-   - Esta inferencia SOLO aplica al "stop_number". No la uses para inventar texto de direcciones.
-5. NO HAGAS PREGUNTAS ni asumas conversación. Esta llamada es de una sola pasada.
-6. El campo "ia_suggestion" SIEMPRE debe ser igual a "stop_number" en esta fase (MODO PASIVO).
-7. Si no puedes ver claramente un campo:
-   - "street_address": incluye solo lo que ves en la pantalla y ajusta "confidence".
-   - "apartment": si no se ve nada, usar cadena vacía "".
-   - "city": si no es visible, usar cadena vacía "" y baja "confidence".
+      REGLAS DE COMPORTAMIENTO (CRÍTICAS):
+      1. IGNORA SIEMPRE LA PARADA 1 (WAREHOUSE). El primer elemento de la salida debe ser la parada 2.
 
-MODO DE OPERACIÓN:
-- MODO PASIVO: Asume SIEMPRE modo pasivo en esta fase. No optimices ni reordenes la ruta.
-- La lista de salida debe respetar el orden original de Amazon Flex (2, 3, 4, ...).
+      2. TODO el texto de salida debe ir en MAYÚSCULAS (direcciones, ciudad, apartamento).
 
-SALIDA OBLIGATORIA:
-- Debes devolver ÚNICAMENTE un JSON válido que cumpla este contrato para cada parada.
+      3. SEPARACIÓN CORRECTA DE CAMPOS (MUY IMPORTANTE):
+        - "street_address": SOLO el número y nombre de la calle (ej: "1652 CELEBRATION BLVD")
+        - "apartment": CUALQUIER indicador de apartamento/unidad que veas, INCLUSO SI ESTÁ TRUNCADO O VIENE SIN DESIGNADOR.
 
-DEFINICIÓN DE CAMPOS:
-- "stop_number": número entero de la parada (2, 3, 4, ...). Si el número visual está ilegible, dedúcelo a partir de la secuencia de paradas y del orden en la lista.
-- "street_address": calle + número, solo con texto que realmente se vea en la captura.
-- "apartment": unidad de apartamento si se ve (ej: "APT 4-416"), o "" si no aparece.
-- "city": ciudad visible en la captura; si no se ve, usar "".
-- "ia_suggestion": en esta fase SIEMPRE igual a "stop_number".
-- "confidence": número de 0.0 a 1.0 indicando tu seguridad en esa parada.
+        3.1 REGLA DE CORTE POR DESIGNADOR (OBLIGATORIA):
+        - Si en el texto visible aparece cualquier token de unidad/apartamento (APT, UNIT, STE, SUITE, #, BLDG, BUILDING, APARTMENT),
+          entonces:
+          - TODO lo que siga a ese token pertenece a "apartment" (aunque venga en la misma línea).
+          - "street_address" debe quedarse únicamente con número + calle.
+        - NUNCA pongas apartamentos/unidades en el campo "street_address", aunque estén truncados o pegados en la misma línea.
 
-FORMATO:
-- No incluyas comentarios, textos adicionales ni explicación fuera del JSON.
-- No incluyas la parada 1 (warehouse) en el JSON.
-- El JSON debe ser un array de objetos sin texto antes ni después.`;
+        Ejemplos:
+        - Texto: "1652 CELEBRATION BLVD UNIT 4-416"
+          street_address: "1652 CELEBRATION BLVD"
+          apartment: "UNIT 4-416"
+        - Texto: "1652 CELEBRATION BLVD UNIT ..."
+          street_address: "1652 CELEBRATION BLVD"
+          apartment: "UNIT ..."
+        - Texto: "3005 PRADO TER #305"
+          street_address: "3005 PRADO TER"
+          apartment: "#305"
+        - Nada visible
+          apartment: ""
+
+        3.2 REGLA DE APARTAMENTO SIN DESIGNADOR (CASO REAL):
+        - A veces la dirección aparece como:
+          "1652 CELEBRATION BLVD B CELEBRATION"
+          o
+          "1652 CELEBRATION BLVD 1013 CELEBRATION"
+        - En estos casos, si hay un token adicional ENTRE la calle y la ciudad:
+          - Si ese token es un número (ej: "1013", "1310"), colócalo en "apartment".
+          - Si ese token es una sola letra (ej: "B"), colócalo en "apartment".
+        - No inventes designadores: devuelve "B" como "B" (NO "UNIT B", NO "APT B").
+
+        EXCEPCIÓN DE SEGURIDAD (NO ADIVINAR):
+        - Si el token suelto parece un direccional de calle: N, S, E, W, NE, NW, SE, SW
+          entonces NO lo trates como apartment; mantenlo como parte de "street_address".
+          Si no estás seguro, baja el "confidence".
+
+      4. TOLERANCIA CERO A ADIVINAR DIRECCIONES:
+        - Si una dirección tiene "..." o se ve cortada en la captura, NO completes lo que no se ve.
+        - Incluye solo el texto visible y baja el "confidence" para esa parada.
+
+      5. DEDUCCIÓN INTELIGENTE DE "stop_number" CUANDO EL OCR FALLA:
+        - El número de la parada aparece dentro de un círculo oscuro y a veces el OCR lo convierte en un "garabato" ilegible.
+        - En esos casos, DEBES usar el contexto y la secuencia para inferir el número de parada:
+          - Si acabas de procesar la parada 4 y luego hay un nuevo bloque de dirección/apartamento/ciudad para la siguiente parada,
+            pero el número aparece ilegible, esa nueva parada es la número 5.
+          - Asume que las paradas aumentan 1 en 1 (2,3,4,5,...) si los bloques son claros.
+        - Esta inferencia SOLO aplica al "stop_number". No la uses para inventar texto de direcciones.
+
+      6. NO HAGAS PREGUNTAS ni asumas conversación. Esta llamada es de una sola pasada.
+
+      7. El campo "ia_suggestion" SIEMPRE debe ser igual a "stop_number" en esta fase (MODO PASIVO).
+
+      8. Si no puedes ver claramente un campo:
+        - "street_address": incluye solo número + calle visible.
+        - "apartment": incluye lo que veas (aunque sea truncado "APT ...", "UNIT ...") o "" si no hay nada.
+        - "city": si no es visible, usar cadena vacía "" y baja "confidence".
+
+      MODO DE OPERACIÓN:
+      - MODO PASIVO: Asume SIEMPRE modo pasivo en esta fase. No optimices ni reordenes la ruta.
+      - La lista de salida debe respetar el orden original de Amazon Flex (2, 3, 4, ...).
+
+      SALIDA OBLIGATORIA:
+      - Devuelve ÚNICAMENTE un JSON válido (sin texto extra) con objetos de esta forma:
+      [
+        {
+          "stop_number": 2,
+          "street_address": "1652 CELEBRATION BLVD",
+          "apartment": "UNIT ...",
+          "city": "CELEBRATION",
+          "ia_suggestion": 2,
+          "confidence": 0.8
+        }
+      ]
+
+      FORMATO:
+      - No incluyas comentarios, textos adicionales ni explicación fuera del JSON.
+      - No incluyas la parada 1 (warehouse) en el JSON.
+      - El JSON debe ser un array de objetos sin texto antes ni después.`;
+
 
       // 5. Llamar a Gemini con retry logic
       console.log('🤖 Enviando a Gemini...');
@@ -2255,48 +2304,37 @@ FORMATO:
       }
 
       // ═══════════════════════════════════════════════════════════════
-      // 7. AUTO-COMPLETADO INTELIGENTE (PRIMERO)
+      // 7. AUTO-COMPLETADO INTELIGENTE
       // ═══════════════════════════════════════════════════════════════
+
+      // Auto-completar apartamentos truncados (ya vienen en el campo correcto gracias al prompt)
       stops.forEach(stop => {
-        // Auto-completar apartamentos truncados en campo apartment
         if (stop.apartment && stop.apartment.includes('...')) {
-          console.log(`🏢 Auto-completando apartamento truncado en parada ${stop.stop_number}: "${stop.apartment}" → "APT 101"`);
-          stop.apartment = 'APT 101';
-          stop.confidence = 0.95;
-        }
-
-        // Auto-completar apartamentos truncados en street_address
-        if (stop.street_address.includes(' APT ...')) {
-          console.log(`🏢 Auto-completando apartamento en dirección (parada ${stop.stop_number}): "${stop.street_address}"`);
-          stop.street_address = stop.street_address.replace(/ APT \.\.\./, ' APT 101');
-          stop.confidence = 0.95;
-          console.log(`   → Corregido: "${stop.street_address}"`);
-        }
-
-        // Auto-completar unidades truncadas
-        if (stop.street_address.includes(' UNIT ...')) {
-          console.log(`🏢 Auto-completando unidad en dirección (parada ${stop.stop_number})`);
-          stop.street_address = stop.street_address.replace(/ UNIT \.\.\./, ' UNIT 101');
-          stop.confidence = 0.95;
-        }
-
-        // Auto-completar edificios truncados
-        if (stop.street_address.includes(' BLDG ...')) {
-          console.log(`🏢 Auto-completando edificio en dirección (parada ${stop.stop_number})`);
-          stop.street_address = stop.street_address.replace(/ BLDG \.\.\./, ' BLDG 1');
-          stop.confidence = 0.95;
-        }
-
-        // Auto-completar # truncados
-        if (stop.street_address.includes(' # ...')) {
-          console.log(`🏢 Auto-completando # en dirección (parada ${stop.stop_number})`);
-          stop.street_address = stop.street_address.replace(/ # \.\.\./, ' #101');
+          let autoCompleted = '';
+          
+          // Detectar el tipo y auto-completar
+          if (stop.apartment.toUpperCase().includes('APT')) {
+            autoCompleted = 'APT 101';
+          } else if (stop.apartment.toUpperCase().includes('UNIT')) {
+            autoCompleted = 'UNIT 101';
+          } else if (stop.apartment.toUpperCase().includes('BLDG') || stop.apartment.toUpperCase().includes('BUILDING')) {
+            autoCompleted = 'BLDG 1';
+          } else if (stop.apartment.includes('#')) {
+            autoCompleted = '#101';
+          } else if (stop.apartment.toUpperCase().includes('STE') || stop.apartment.toUpperCase().includes('SUITE')) {
+            autoCompleted = 'STE 101';
+          } else {
+            // Fallback genérico
+            autoCompleted = 'APT 101';
+          }
+          
+          console.log(`🏢 Auto-completando apartamento en parada ${stop.stop_number}: "${stop.apartment}" → "${autoCompleted}"`);
+          stop.apartment = autoCompleted;
           stop.confidence = 0.95;
         }
       });
 
-      // 🆕 PASO EXTRA: Si después del auto-completado ya NO hay "...", 
-      // asegurar que el confidence sea alto
+      // Subir confidence si ya no hay truncados
       stops.forEach(stop => {
         const hasEllipsis = 
           stop.street_address.includes('...') || 
@@ -2307,6 +2345,7 @@ FORMATO:
           stop.confidence = 0.95;
         }
       });
+
 
       // 🔍 DEBUG: Mostrar paradas 10-13 DESPUÉS del auto-completado
       console.log('🔍 ===== PARADAS 10-13 (POST AUTO-COMPLETADO) =====');
