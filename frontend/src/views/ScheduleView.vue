@@ -18,7 +18,7 @@ const { userId } = useAuth()
 const { vehicles, fetchActiveVehicles, getPrimaryVehicle } = useVehicles()
 
 // Opciones
-const DURACION_OPTIONS = [2.5, 3, 3.5, 4, 4.5, 5]
+const DURACION_OPTIONS = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
 const warehouses = [
   { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL' },
   { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL' },
