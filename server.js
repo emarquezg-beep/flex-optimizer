@@ -395,6 +395,195 @@ async function calculateLeg(origin, destination, waypoints = [], departureTime =
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 🕵️ OUTLIER DETECTION & IMPUTATION SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Detecta legs sospechosas (outliers) basado en:
+ * - distanceMiles === 0 o durationMinutes === 0
+ * - distanceMiles > 7.5 (rutas locales no deberían tener legs tan largas)
+ * - partial_match en geocodedWaypoints
+ */
+function detectOutlierLegs(legsDetailed, geocodedWaypoints = []) {
+  const outliers = [];
+  
+  legsDetailed.forEach((leg, index) => {
+    const reasons = [];
+    
+    // Regla 1: Distancia o duración en cero
+    if (leg.distanceMiles === 0 || leg.durationMinutes === 0) {
+      reasons.push('ZERO_VALUE');
+    }
+    
+    // Regla 2: Leg anormalmente larga (>7.5 millas)
+    if (leg.distanceMiles > 7.5) {
+      reasons.push('EXCESSIVE_DISTANCE');
+    }
+    
+    // Regla 3: Partial match en geocoding
+    // geocodedWaypoints[0] = origin, [1] = first waypoint, etc.
+    // Para leg N: checkear waypoint N y N+1
+    const waypointIndex = index + 1; // +1 porque [0] es origin
+    if (geocodedWaypoints[waypointIndex]) {
+      if (geocodedWaypoints[waypointIndex].partial_match === true) {
+        reasons.push('PARTIAL_GEOCODE_MATCH');
+      }
+    }
+    
+    // Si hay razones, marcar como outlier
+    if (reasons.length > 0) {
+      outliers.push({
+        legIndex: index,
+        distanceMiles: leg.distanceMiles,
+        durationMinutes: leg.durationMinutes,
+        startAddress: leg.startAddress,
+        endAddress: leg.endAddress,
+        reasons,
+        isOutlier: true
+      });
+    }
+  });
+  
+  return outliers;
+}
+
+/**
+ * Calcula promedio de legs "sanas" (no outliers)
+ * Retorna: { avgDistanceMiles, avgDurationMinutes, healthyCount }
+ */
+function calculateHealthyAverage(legsDetailed) {
+  const healthyLegs = legsDetailed.filter(leg =>
+    leg.distanceMiles > 0 &&
+    leg.distanceMiles <= 7.5 &&
+    leg.durationMinutes > 0
+  );
+  
+  if (healthyLegs.length === 0) {
+    return {
+      avgDistanceMiles: 0,
+      avgDurationMinutes: 0,
+      healthyCount: 0
+    };
+  }
+  
+  const totalDistance = healthyLegs.reduce((sum, leg) => sum + leg.distanceMiles, 0);
+  const totalDuration = healthyLegs.reduce((sum, leg) => sum + leg.durationMinutes, 0);
+  
+  return {
+    avgDistanceMiles: Number((totalDistance / healthyLegs.length).toFixed(2)),
+    avgDurationMinutes: Math.round(totalDuration / healthyLegs.length),
+    healthyCount: healthyLegs.length
+  };
+}
+
+/**
+ * Imputa valores razonables a legs outliers usando promedio de legs sanas
+ * Retorna: { legsImputed (array corregido), imputedCount, qualityFlag }
+ */
+function imputeOutlierLegs(legsDetailed, outliers, geocodedWaypoints = []) {
+  // Calcular promedio de legs sanas
+  const { avgDistanceMiles, avgDurationMinutes, healthyCount } = calculateHealthyAverage(legsDetailed);
+  
+  // Si no hay legs sanas suficientes, marcar como LOW_QUALITY
+  const outlierPercentage = (outliers.length / legsDetailed.length) * 100;
+  
+  if (healthyCount < 3 || outlierPercentage > 15) {
+    return {
+      legsImputed: legsDetailed,
+      imputedCount: 0,
+      qualityFlag: 'LOW_QUALITY',
+      message: `Too many outliers (${outliers.length}/${legsDetailed.length}). Cannot reliably impute.`
+    };
+  }
+  
+  // Crear copia de legs para imputation
+  const legsImputed = legsDetailed.map(leg => ({ ...leg }));
+  let imputedCount = 0;
+  
+  // Imputar cada outlier
+  outliers.forEach(outlier => {
+    const legIndex = outlier.legIndex;
+    legsImputed[legIndex].distanceMiles = avgDistanceMiles;
+    legsImputed[legIndex].durationMinutes = avgDurationMinutes;
+    legsImputed[legIndex].isImputed = true;
+    legsImputed[legIndex].originalDistance = outlier.distanceMiles;
+    legsImputed[legIndex].originalDuration = outlier.durationMinutes;
+    legsImputed[legIndex].imputationReasons = outlier.reasons;
+    imputedCount++;
+  });
+  
+  return {
+    legsImputed,
+    imputedCount,
+    qualityFlag: imputedCount > 0 ? 'IMPUTED' : null,
+    avgUsed: { avgDistanceMiles, avgDurationMinutes }
+  };
+}
+
+/**
+ * Recalcula totales de distancia/duración usando legs imputadas
+ */
+function recalculateTotalsFromLegs(legsArray) {
+  const totalDistance = legsArray.reduce((sum, leg) => sum + leg.distanceMiles, 0);
+  const totalDuration = legsArray.reduce((sum, leg) => sum + leg.durationMinutes, 0);
+  
+  return {
+    distance: Number(totalDistance.toFixed(2)),
+    duration: Math.round(totalDuration),
+    durationValue: totalDuration * 60 // convertir a segundos
+  };
+}
+
+/**
+ * Registra dirección problemática en Supabase
+ */
+async function registerProblematicAddress(address, reasons) {
+  try {
+    // Verificar si ya existe
+    const { data: existing } = await supabase
+      .from('problematic_addresses')
+      .select('id, times_flagged')
+      .eq('raw_address', address)
+      .single();
+    
+    if (existing) {
+      // Incrementar contador
+      await supabase
+        .from('problematic_addresses')
+        .update({
+          times_flagged: existing.times_flagged + 1,
+          last_flagged_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id);
+      
+      console.log(`🔄 Dirección problemática actualizada: ${address} (${existing.times_flagged + 1} veces)`);
+    } else {
+      // Crear nueva entrada
+      await supabase
+        .from('problematic_addresses')
+        .insert([{
+          raw_address: address,
+          notes: `Detected reasons: ${reasons.join(', ')}`,
+          source: 'SYSTEM_DETECTED'
+        }]);
+      
+      console.log(`🆕 Nueva dirección problemática registrada: ${address}`);
+    }
+  } catch (error) {
+    console.error('⚠️ Error registrando dirección problemática:', error.message);
+    // No throw - esto no debe romper la ruta
+  }
+}
+
+console.log('🕵️ Outlier Detection System activado');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN OUTLIER DETECTION SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+
 // server.js - Endpoint '/api/optimize-route' REFACTORIZADO
 
 app.post('/api/optimize-route', authenticateUser, async (req, res) => {
