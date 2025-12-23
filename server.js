@@ -293,13 +293,19 @@ async function validateAddress(address) {
     
     const result = response.data.results[0];
     
-    // Verificar si es partial match (dirección aproximada)
+    // 🆕 Aceptar partial_match pero registrarlo como warning
     if (result.partial_match === true) {
+      console.log(`⚠️ Partial match: ${address} → ${result.formatted_address}`);
+      
+      // Registrar pero NO invalidar
+      registerProblematicAddress(address, ['PARTIAL_GEOCODE_MATCH']);
+      
       return {
-        isValid: false,
+        isValid: true, // 👈 CAMBIO: Aceptamos partial match
         address,
-        reason: 'PARTIAL_GEOCODE_MATCH',
-        geocoded: result.formatted_address
+        geocoded: result.formatted_address,
+        location: result.geometry.location,
+        isPartialMatch: true // 👈 Flag para tracking
       };
     }
     
@@ -307,7 +313,8 @@ async function validateAddress(address) {
       isValid: true,
       address,
       geocoded: result.formatted_address,
-      location: result.geometry.location
+      location: result.geometry.location,
+      isPartialMatch: false
     };
     
   } catch (error) {
