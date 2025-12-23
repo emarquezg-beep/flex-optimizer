@@ -429,11 +429,17 @@ function detectOutlierLegs(legsDetailed, geocodedWaypoints = []) {
       if (geocodedWaypoints[waypointIndex].partial_match === true) {
         reasons.push('PARTIAL_GEOCODE_MATCH');
       }
+
+      // 🆕 REGLA 4: Geocoder status con error
+      const geocoderStatus = geocodedWaypoints[waypointIndex].geocoder_status;
+      if (geocoderStatus && geocoderStatus !== 'OK') {
+        reasons.push(`GEOCODE_ERROR_${geocoderStatus}`);
+      }
     }
     
     // Si hay razones, marcar como outlier
     if (reasons.length > 0) {
-      outliers.push({
+        outliers.push({
         legIndex: index,
         distanceMiles: leg.distanceMiles,
         durationMinutes: leg.durationMinutes,
@@ -585,7 +591,8 @@ console.log('🕵️ Outlier Detection System activado');
 
 
 // ═══════════════════════════════════════════════════════════════
-// 🛣️ ENDPOINT: OPTIMIZE ROUTE - Extended with Outlier Detection
+// ═══════════════════════════════════════════════════════════════
+// 🛣️ ENDPOINT: OPTIMIZE ROUTE - Extended with Outlier Detection v2
 // ═══════════════════════════════════════════════════════════════
 app.post('/api/optimize-route', authenticateUser, async (req, res) => {
   let {
@@ -663,17 +670,30 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
       const seg = normalSegments[index];
       const stops = [seg.origin, ...seg.waypoints, seg.destination];
 
-      // Si el segmento tiene error, devolver como está
+      // 🆕 CASO 1: Si el segmento tiene error (404, ZERO_RESULTS, etc)
       if (result.error) {
+        console.log(`❌ Segmento ${index} con error: ${result.errorType}`);
+        
+        // Registrar TODAS las direcciones de este segmento como problemáticas
+        stops.forEach(address => {
+          registerProblematicAddress(address, [`SEGMENT_ERROR_${result.errorType}`]);
+        });
+        
         return {
           ...result,
           stops,
-          hasOutliers: false,
-          qualityFlag: 'ERROR'
+          hasOutliers: true,
+          outlierCount: stops.length, // Todas las direcciones son sospechosas
+          qualityFlag: 'ERROR',
+          errorDetails: {
+            errorType: result.errorType,
+            errorMessage: result.errorMessage || 'Google Maps API error',
+            affectedAddresses: stops
+          }
         };
       }
 
-      // Detectar outliers en este segmento
+      // 🆕 CASO 2: Segmento OK, detectar outliers en legs individuales
       const outliers = detectOutlierLegs(result.legsDetailed, result.geocodedWaypoints);
       
       let processedResult = { ...result };
@@ -757,10 +777,21 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
             ? [seg.origin, ...seg.waypoints, seg.destination]
             : [seg.origin, seg.destination];
 
+          // Error en segmento IA
           if (result.error) {
-            return { ...result, stops: segStops, hasOutliers: false };
+            segStops.forEach(address => {
+              registerProblematicAddress(address, [`AI_SEGMENT_ERROR_${result.errorType}`]);
+            });
+            
+            return {
+              ...result,
+              stops: segStops,
+              hasOutliers: true,
+              qualityFlag: 'ERROR'
+            };
           }
 
+          // Detección normal de outliers
           const outliers = detectOutlierLegs(result.legsDetailed, result.geocodedWaypoints);
           
           if (outliers.length > 0) {
@@ -805,10 +836,13 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     const totalOutliers = segmentsWithStops.reduce((sum, seg) => sum + (seg.outlierCount || 0), 0);
     const totalImputed = segmentsWithStops.reduce((sum, seg) => sum + (seg.imputedCount || 0), 0);
     const totalLegs = segmentsWithStops.reduce((sum, seg) => sum + (seg.legsDetailed?.length || 0), 0);
+    const hasErrors = segmentsWithStops.some(seg => seg.qualityFlag === 'ERROR');
     const hasLowQuality = segmentsWithStops.some(seg => seg.qualityFlag === 'LOW_QUALITY');
 
     let globalQualityFlag = null;
-    if (hasLowQuality) {
+    if (hasErrors) {
+      globalQualityFlag = 'HAS_ERRORS';
+    } else if (hasLowQuality) {
       globalQualityFlag = 'LOW_QUALITY';
     } else if (totalImputed > 0) {
       globalQualityFlag = 'IMPUTED';
@@ -841,8 +875,9 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
         totalLegs,
         totalOutliers,
         totalImputed,
+        segmentsWithErrors: segmentsWithStops.filter(s => s.qualityFlag === 'ERROR').length,
         globalQualityFlag,
-        hasSeriousIssues: hasLowQuality
+        hasSeriousIssues: hasErrors || hasLowQuality
       }
     });
 
