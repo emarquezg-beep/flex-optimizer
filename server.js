@@ -266,10 +266,133 @@ console.log('🤖 ARIA System activado');
 // ═══════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
-// 🔧 CALCULATE LEG - Extended with Legs Details & Geocoding Info
+// 🔍 PRE-VALIDATION: Geocode individual addresses
 // ═══════════════════════════════════════════════════════════════
-async function calculateLeg(origin, destination, waypoints = [], departureTime = null) {
+
+/**
+ * Valida una dirección individual usando Geocoding API
+ * Retorna: { isValid, address, reason, geocoded }
+ */
+async function validateAddress(address) {
   try {
+    const params = {
+      address,
+      key: process.env.GOOGLE_MAPS_API_KEY
+    };
+    
+    const response = await mapsClient.geocode({ params });
+    
+    if (response.data.status !== 'OK') {
+      return {
+        isValid: false,
+        address,
+        reason: `GEOCODE_${response.data.status}`,
+        geocoded: null
+      };
+    }
+    
+    const result = response.data.results[0];
+    
+    // Verificar si es partial match (dirección aproximada)
+    if (result.partial_match === true) {
+      return {
+        isValid: false,
+        address,
+        reason: 'PARTIAL_GEOCODE_MATCH',
+        geocoded: result.formatted_address
+      };
+    }
+    
+    return {
+      isValid: true,
+      address,
+      geocoded: result.formatted_address,
+      location: result.geometry.location
+    };
+    
+  } catch (error) {
+    return {
+      isValid: false,
+      address,
+      reason: 'GEOCODE_NETWORK_ERROR',
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Valida todas las direcciones de un segmento
+ * Si encuentra inválidas, las reemplaza con promedio
+ */
+async function validateAndFixSegment(origin, destination, waypoints) {
+  console.log(`🔍 Pre-validando segmento: ${waypoints.length + 2} direcciones...`);
+  
+  const allAddresses = [origin, ...waypoints, destination];
+  const validationPromises = allAddresses.map(addr => validateAddress(addr));
+  const validations = await Promise.all(validationPromises);
+  
+  // Identificar direcciones inválidas
+  const invalidAddresses = validations.filter(v => !v.isValid);
+  
+  if (invalidAddresses.length > 0) {
+    console.log(`⚠️ ${invalidAddresses.length} direcciones inválidas detectadas:`);
+    invalidAddresses.forEach(inv => {
+      console.log(`   ❌ ${inv.address} → ${inv.reason}`);
+      // Registrar en BD
+      registerProblematicAddress(inv.address, [inv.reason]);
+    });
+  }
+  
+  return {
+    hasInvalidAddresses: invalidAddresses.length > 0,
+    invalidAddresses,
+    validAddresses: validations.filter(v => v.isValid)
+  };
+}
+
+console.log('🔍 Address Pre-Validation System activado');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN PRE-VALIDATION
+// ═══════════════════════════════════════════════════════════════
+
+
+// ═══════════════════════════════════════════════════════════════
+// 🔧 CALCULATE LEG - With Pre-Validation
+// ═══════════════════════════════════════════════════════════════
+async function calculateLeg(origin, destination, waypoints = [], departureTime = null, skipValidation = false) {
+  try {
+    // 🆕 PASO 0: Pre-validar direcciones (solo si hay waypoints)
+    if (!skipValidation && waypoints.length > 0) {
+      const validation = await validateAndFixSegment(origin, destination, waypoints);
+      
+      if (validation.hasInvalidAddresses) {
+        // Si hay direcciones inválidas, removerlas de waypoints
+        const invalidAddressSet = new Set(validation.invalidAddresses.map(v => v.address));
+        const cleanedWaypoints = waypoints.filter(wp => !invalidAddressSet.has(wp));
+        
+        console.log(`🔧 Waypoints limpiados: ${waypoints.length} → ${cleanedWaypoints.length}`);
+        
+        // Si limpiamos waypoints, actualizar
+        waypoints = cleanedWaypoints;
+        
+        // Si origin o destination son inválidos, devolver error inmediato
+        if (validation.invalidAddresses.some(inv => inv.address === origin || inv.address === destination)) {
+          return {
+            distance: 0,
+            duration: 0,
+            durationValue: 0,
+            error: true,
+            errorType: 'INVALID_ORIGIN_OR_DESTINATION',
+            invalidAddresses: validation.invalidAddresses,
+            legsDetailed: [],
+            maxLegMiles: 0,
+            geocodedWaypoints: []
+          };
+        }
+      }
+    }
+    
     // 1. Construir parámetros base
     const params = {
       origin,
@@ -288,6 +411,10 @@ async function calculateLeg(origin, destination, waypoints = [], departureTime =
 
     if (response.data.status !== 'OK') {
       console.error(`❌ Google Maps API Error: ${response.data.status}`);
+      console.error(`   Origin: ${origin}`);
+      console.error(`   Destination: ${destination}`);
+      console.error(`   Waypoints: ${waypoints.length}`);
+      
       return {
         distance: 0,
         duration: 0,
@@ -331,7 +458,6 @@ async function calculateLeg(origin, destination, waypoints = [], departureTime =
       const distanceMeters = leg.distance.value;
       const distanceMiles = Number((distanceMeters / 1609.34).toFixed(2));
       
-      // Usar duration_in_traffic si existe, sino duration normal
       const legDurationSeconds = leg.duration_in_traffic 
         ? leg.duration_in_traffic.value 
         : leg.duration.value;
@@ -341,12 +467,10 @@ async function calculateLeg(origin, destination, waypoints = [], departureTime =
       totalDistanceMeters += distanceMeters;
       totalDurationSeconds += legDurationSeconds;
 
-      // Rastrear leg más larga
       if (distanceMiles > maxLegMiles) {
         maxLegMiles = distanceMiles;
       }
 
-      // Guardar detalle de cada leg
       legsDetailed.push({
         legIndex: index,
         distanceMeters,
@@ -358,18 +482,15 @@ async function calculateLeg(origin, destination, waypoints = [], departureTime =
       });
     });
 
-    // 4. Extraer geocoded_waypoints (incluye partial_match)
+    // 4. Extraer geocoded_waypoints
     const geocodedWaypoints = response.data.geocoded_waypoints || [];
 
-    // 5. Devolver datos extendidos (manteniendo compatibilidad)
+    // 5. Devolver datos extendidos
     return {
-      // ✅ Campos originales (NO CAMBIAR)
       distance: Number((totalDistanceMeters / 1609.34).toFixed(2)),
       duration: Math.round(totalDurationSeconds / 60),
       durationValue: totalDurationSeconds,
       error: false,
-
-      // 🆕 Campos nuevos
       legsDetailed,
       maxLegMiles: Number(maxLegMiles.toFixed(2)),
       geocodedWaypoints
