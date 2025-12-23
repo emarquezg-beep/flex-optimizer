@@ -264,91 +264,134 @@ console.log('🤖 ARIA System activado');
 // FIN ARIA SYSTEM
 // ═══════════════════════════════════════════════════════════════
 
-// --- Tu función `calculateLeg` (sin cambios) ---
+// ═══════════════════════════════════════════════════════════════
+// 🔧 CALCULATE LEG - Extended with Legs Details & Geocoding Info
+// ═══════════════════════════════════════════════════════════════
 async function calculateLeg(origin, destination, waypoints = [], departureTime = null) {
-    try {
-        // 1. Construimos los parámetros base
-        const params = {
-            origin,
-            destination,
-            waypoints,
-            avoid: ['tolls'],
-            key: process.env.GOOGLE_MAPS_API_KEY,
-        };
+  try {
+    // 1. Construir parámetros base
+    const params = {
+      origin,
+      destination,
+      waypoints,
+      avoid: ['tolls'],
+      key: process.env.GOOGLE_MAPS_API_KEY,
+    };
 
-        // 2. Si recibimos departureTime, lo agregamos a la petición
-        // Google espera esto en segundos (Unix Timestamp)
-        if (departureTime) {
-            params.departure_time = departureTime;
-        }
-
-        const response = await mapsClient.directions({ params });
-
-        if (response.data.status !== 'OK') {
-            console.error(`❌ Google Maps API Error: ${response.data.status}`);
-            return { 
-                distance: 0, 
-                duration: 0, 
-                error: true,
-                errorType: response.data.status,
-                origin,
-                destination,
-                waypoints
-            };
-        }
-
-        const route = response.data.routes[0];
-        if (!route || !route.legs || route.legs.length === 0) {
-            console.error(`❌ No route found between ${origin} and ${destination}`);
-            return { 
-                distance: 0, 
-                duration: 0, 
-                error: true,
-                errorType: 'NO_ROUTE',
-                origin,
-                destination,
-                waypoints
-            };
-        }
-        
-        let totalDistance = 0;
-        let totalDuration = 0;
-
-        route.legs.forEach(leg => {
-            totalDistance += leg.distance.value;
-            
-            // 3. Lógica Inteligente de Duración:
-            // Si Google nos da 'duration_in_traffic' (porque pedimos futuro), usamos ese.
-            // Si no, usamos la duración estándar 'duration'.
-            const legDuration = leg.duration_in_traffic 
-                ? leg.duration_in_traffic.value 
-                : leg.duration.value;
-
-            totalDuration += legDuration;
-        });
-
-        return {
-            distance: (totalDistance / 1609.34).toFixed(2), // Metros a Millas
-            duration: Math.round(totalDuration / 60),       // Segundos a Minutos
-            // Opcional: Devolver raw seconds si lo necesitas para cálculos precisos
-            durationValue: totalDuration, 
-            error: false
-        };
-
-    } catch (error) {
-        console.error(`❌ Error calculando tramo de ${origin} a ${destination}:`, 
-                      error.response?.data?.error_message || error.message);
-        return { 
-            distance: 0, 
-            duration: 0, 
-            error: true,
-            errorType: 'NETWORK_ERROR',
-            errorMessage: error.response?.data?.error_message || error.message,
-            origin,
-            destination,
-            waypoints
-        };
+    // 2. Agregar departure time si existe (para tráfico futuro)
+    if (departureTime) {
+      params.departure_time = departureTime;
     }
+
+    const response = await mapsClient.directions({ params });
+
+    if (response.data.status !== 'OK') {
+      console.error(`❌ Google Maps API Error: ${response.data.status}`);
+      return {
+        distance: 0,
+        duration: 0,
+        durationValue: 0,
+        error: true,
+        errorType: response.data.status,
+        origin,
+        destination,
+        waypoints,
+        legsDetailed: [],
+        maxLegMiles: 0,
+        geocodedWaypoints: []
+      };
+    }
+
+    const route = response.data.routes[0];
+    if (!route || !route.legs || route.legs.length === 0) {
+      console.error(`❌ No route found between ${origin} and ${destination}`);
+      return {
+        distance: 0,
+        duration: 0,
+        durationValue: 0,
+        error: true,
+        errorType: 'NO_ROUTE',
+        origin,
+        destination,
+        waypoints,
+        legsDetailed: [],
+        maxLegMiles: 0,
+        geocodedWaypoints: []
+      };
+    }
+
+    // 3. Procesar legs con detalles extendidos
+    let totalDistanceMeters = 0;
+    let totalDurationSeconds = 0;
+    const legsDetailed = [];
+    let maxLegMiles = 0;
+
+    route.legs.forEach((leg, index) => {
+      const distanceMeters = leg.distance.value;
+      const distanceMiles = Number((distanceMeters / 1609.34).toFixed(2));
+      
+      // Usar duration_in_traffic si existe, sino duration normal
+      const legDurationSeconds = leg.duration_in_traffic 
+        ? leg.duration_in_traffic.value 
+        : leg.duration.value;
+      
+      const durationMinutes = Math.round(legDurationSeconds / 60);
+
+      totalDistanceMeters += distanceMeters;
+      totalDurationSeconds += legDurationSeconds;
+
+      // Rastrear leg más larga
+      if (distanceMiles > maxLegMiles) {
+        maxLegMiles = distanceMiles;
+      }
+
+      // Guardar detalle de cada leg
+      legsDetailed.push({
+        legIndex: index,
+        distanceMeters,
+        distanceMiles,
+        durationSeconds: legDurationSeconds,
+        durationMinutes,
+        startAddress: leg.start_address,
+        endAddress: leg.end_address
+      });
+    });
+
+    // 4. Extraer geocoded_waypoints (incluye partial_match)
+    const geocodedWaypoints = response.data.geocoded_waypoints || [];
+
+    // 5. Devolver datos extendidos (manteniendo compatibilidad)
+    return {
+      // ✅ Campos originales (NO CAMBIAR)
+      distance: Number((totalDistanceMeters / 1609.34).toFixed(2)),
+      duration: Math.round(totalDurationSeconds / 60),
+      durationValue: totalDurationSeconds,
+      error: false,
+
+      // 🆕 Campos nuevos
+      legsDetailed,
+      maxLegMiles: Number(maxLegMiles.toFixed(2)),
+      geocodedWaypoints
+    };
+
+  } catch (error) {
+    console.error(`❌ Error calculando tramo de ${origin} a ${destination}:`,
+      error.response?.data?.error_message || error.message);
+    return {
+      distance: 0,
+      duration: 0,
+      durationValue: 0,
+      error: true,
+      errorType: 'NETWORK_ERROR',
+      errorMessage: error.response?.data?.error_message || error.message,
+      origin,
+      destination,
+      waypoints,
+      legsDetailed: [],
+      maxLegMiles: 0,
+      geocodedWaypoints: []
+    };
+  }
 }
 
 // server.js - Endpoint '/api/optimize-route' REFACTORIZADO
