@@ -584,170 +584,276 @@ console.log('🕵️ Outlier Detection System activado');
 // ═══════════════════════════════════════════════════════════════
 
 
-// server.js - Endpoint '/api/optimize-route' REFACTORIZADO
-
+// ═══════════════════════════════════════════════════════════════
+// 🛣️ ENDPOINT: OPTIMIZE ROUTE - Extended with Outlier Detection
+// ═══════════════════════════════════════════════════════════════
 app.post('/api/optimize-route', authenticateUser, async (req, res) => {
-    let { 
-        addresses,              // Ruta A (Normal)
-        aiOptimizedAddresses,   // Ruta B (IA)
-        finalDestination: customFinalDestination,
-        startTime,
-        warehouseDelay,
-        currentDate
-    } = req.body;
+  let {
+    addresses,
+    aiOptimizedAddresses,
+    finalDestination: customFinalDestination,
+    startTime,
+    warehouseDelay,
+    currentDate
+  } = req.body;
 
-    // 👇 AGREGA ESTO
-    console.log("------------------------------------------------");
-    console.log("📨 RECEPCIÓN DE DATOS EN BACKEND:");
-    console.log(`📦 Direcciones Normales: ${addresses ? addresses.length : 0}`);
-    console.log(`🤖 Direcciones IA: ${aiOptimizedAddresses ? aiOptimizedAddresses.length : 'NULL/UNDEFINED'}`);
-    console.log("------------------------------------------------");
-    // Validación básica
-    addresses = addresses.filter(addr => addr && addr.trim() !== '');
-    if (!addresses || addresses.length < 3) {
-        return res.status(400).json({ message: 'Datos insuficientes (faltan paradas).', hasErrors: true });
-    }
+  console.log("------------------------------------------------");
+  console.log("📨 RECEPCIÓN DE DATOS EN BACKEND:");
+  console.log(`📦 Direcciones Normales: ${addresses ? addresses.length : 0}`);
+  console.log(`🤖 Direcciones IA: ${aiOptimizedAddresses ? aiOptimizedAddresses.length : 'NULL/UNDEFINED'}`);
+  console.log("------------------------------------------------");
 
-    try {
-        const ariaResult = await calcularMultiplierARIA(req.userId);
-        
-        // ==========================================
-        // 1. PREPARACIÓN COMÚN
-        // ==========================================
-        const origin = addresses[0]; 
-        const finalDestination = customFinalDestination || addresses[addresses.length - 1];
-        
-        // Helper para segmentos
-        const generateSegments = (stops) => {
-            const segs = [];
-            for (let i = 0; i < stops.length; i += 9) { 
-                const chunk = stops.slice(i, i + 10); 
-                if (chunk.length > 0) {
-                    segs.push({
-                        origin: chunk[0], 
-                        destination: chunk[chunk.length - 1], 
-                        waypoints: chunk.slice(1, -1) 
-                    });
-                }
-            }
-            return segs;
+  // Validación básica
+  addresses = addresses.filter(addr => addr && addr.trim() !== '');
+  if (!addresses || addresses.length < 3) {
+    return res.status(400).json({ message: 'Datos insuficientes (faltan paradas).', hasErrors: true });
+  }
+
+  try {
+    const ariaResult = await calcularMultiplierARIA(req.userId);
+
+    // ==========================================
+    // 1. PREPARACIÓN COMÚN
+    // ==========================================
+    const origin = addresses[0];
+    const finalDestination = customFinalDestination || addresses[addresses.length - 1];
+
+    // Helper para segmentos
+    const generateSegments = (stops) => {
+      const segs = [];
+      for (let i = 0; i < stops.length; i += 9) {
+        const chunk = stops.slice(i, i + 10);
+        if (chunk.length > 0) {
+          segs.push({
+            origin: chunk[0],
+            destination: chunk[chunk.length - 1],
+            waypoints: chunk.slice(1, -1)
+          });
+        }
+      }
+      return segs;
+    };
+
+    // ==========================================
+    // 2. CÁLCULO RUTA NORMAL (CON DETECCIÓN)
+    // ==========================================
+    const workStops = addresses.slice(1, -1);
+    const normalSegments = generateSegments(workStops);
+    const firstStop = workStops[0];
+    const lastStop = workStops[workStops.length - 1];
+
+    console.log(`🛣️ Calculando Ruta Normal (${workStops.length} paradas)...`);
+
+    // Ejecutar cálculos
+    const normalPromises = [
+      calculateLeg(origin, firstStop),
+      calculateLeg(lastStop, finalDestination),
+      ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints))
+    ];
+
+    const normalResults = await Promise.all(normalPromises);
+
+    // Procesar resultados
+    const toFirstStop = normalResults[0];
+    const toFinalDestination = normalResults[1];
+    const normalSegmentResults = normalResults.slice(2);
+
+    // 🕵️ NUEVO: Procesar cada segmento con detección de outliers
+    const segmentsWithStops = normalSegmentResults.map((result, index) => {
+      const seg = normalSegments[index];
+      const stops = [seg.origin, ...seg.waypoints, seg.destination];
+
+      // Si el segmento tiene error, devolver como está
+      if (result.error) {
+        return {
+          ...result,
+          stops,
+          hasOutliers: false,
+          qualityFlag: 'ERROR'
         };
+      }
 
-        // ==========================================
-        // 2. CÁLCULO RUTA NORMAL (OBLIGATORIO)
-        // ==========================================
-        const workStops = addresses.slice(1, -1);
-        const normalSegments = generateSegments(workStops);
-        const firstStop = workStops[0];
-        const lastStop = workStops[workStops.length - 1];
+      // Detectar outliers en este segmento
+      const outliers = detectOutlierLegs(result.legsDetailed, result.geocodedWaypoints);
+      
+      let processedResult = { ...result };
+      let qualityFlag = null;
+      let imputedCount = 0;
 
-        console.log(`🛣️ Calculando Ruta Normal (${workStops.length} paradas)...`);
+      // Si hay outliers, intentar imputar
+      if (outliers.length > 0) {
+        console.log(`🕵️ Segmento ${index}: ${outliers.length} outliers detectados`);
+        
+        const imputation = imputeOutlierLegs(
+          result.legsDetailed, 
+          outliers, 
+          result.geocodedWaypoints
+        );
 
-        // Ejecución Normal
-        const normalPromises = [
-            calculateLeg(origin, firstStop),                // 0: Ida
-            calculateLeg(lastStop, finalDestination),       // 1: Vuelta
-            ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints)) // 2+: Segmentos
-        ];
+        // Si la imputación fue exitosa, recalcular totales
+        if (imputation.qualityFlag !== 'LOW_QUALITY') {
+          const recalculated = recalculateTotalsFromLegs(imputation.legsImputed);
+          processedResult.distance = recalculated.distance;
+          processedResult.duration = recalculated.duration;
+          processedResult.durationValue = recalculated.durationValue;
+          processedResult.legsDetailed = imputation.legsImputed;
+          imputedCount = imputation.imputedCount;
+          qualityFlag = imputation.qualityFlag;
 
-        const normalResults = await Promise.all(normalPromises);
-
-        // Procesar Resultados Normales
-        const toFirstStop = normalResults[0];
-        const toFinalDestination = normalResults[1];
-        const normalSegmentResults = normalResults.slice(2);
-
-        const segmentsWithStops = normalSegmentResults.map((result, index) => {
-            const seg = normalSegments[index];
-            return { ...result, stops: [seg.origin, ...seg.waypoints, seg.destination] };
-        });
-
-        // ==========================================
-        // 3. CÁLCULO RUTA IA (OPCIONAL Y SEGURO)
-        // ==========================================
-        let aiRouteData = null;
-        let isAiOptimized = false;
-
-        // Validación fuerte: debe ser array y tener contenido
-        if (aiOptimizedAddresses && Array.isArray(aiOptimizedAddresses) && aiOptimizedAddresses.length > 0) {
-            console.log(`🤖 Intentando calcular Ruta IA (${aiOptimizedAddresses.length} paradas)...`);
-            
-            try {
-                const altWorkStops = aiOptimizedAddresses;
-                const altFirstStop = altWorkStops[0];
-                const altLastStop = altWorkStops[altWorkStops.length - 1];
-                const altSegments = generateSegments(altWorkStops);
-
-                // Ejecución IA (Independiente)
-                const aiPromises = [
-                    calculateLeg(origin, altFirstStop),          // 0: Ida IA
-                    calculateLeg(altLastStop, finalDestination), // 1: Vuelta IA
-                    ...altSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints))
-                ];
-
-                const aiResults = await Promise.all(aiPromises);
-
-                // Procesar Resultados IA
-                const toAltFirstStop = aiResults[0];
-                const fromAltLastStop = aiResults[1];
-                const altSegmentResults = aiResults.slice(2);
-
-                const altSegmentsWithStops = altSegmentResults.map((result, idx) => {
-                    const seg = altSegments[idx];
-                    const segStops = seg.waypoints.length > 0 
-                        ? [seg.origin, ...seg.waypoints, seg.destination]
-                        : [seg.origin, seg.destination];
-                    return { ...result, stops: segStops };
-                });
-
-                aiRouteData = {
-                    toStart: toAltFirstStop,
-                    toEnd: fromAltLastStop,
-                    segments: altSegmentsWithStops
-                };
-                
-                isAiOptimized = true;
-                console.log("✅ Ruta IA calculada exitosamente.");
-
-            } catch (aiError) {
-                console.error("⚠️ Error calculando Ruta IA (Se omite):", aiError.message);
-                // No hacemos 'throw', simplemente isAiOptimized se queda en false
-                // y la app no se rompe.
-            }
+          console.log(`✅ Segmento ${index}: ${imputedCount} legs imputadas (avg: ${imputation.avgUsed.avgDistanceMiles} mi)`);
         } else {
-            console.log("ℹ️ Sin sugerencia válida de IA.");
+          qualityFlag = 'LOW_QUALITY';
+          console.log(`⚠️ Segmento ${index}: Demasiados outliers, marcado como LOW_QUALITY`);
         }
 
-        // ==========================================
-        // 4. RESPUESTA FINAL
-        // ==========================================
-        res.json({
-            hasErrors: false,
-            isAiOptimized, // Será true solo si el bloque try funcionó
+        // Registrar direcciones problemáticas
+        outliers.forEach(outlier => {
+          registerProblematicAddress(outlier.endAddress, outlier.reasons);
+        });
+      }
+
+      return {
+        ...processedResult,
+        stops,
+        hasOutliers: outliers.length > 0,
+        outlierCount: outliers.length,
+        imputedCount,
+        qualityFlag,
+        outlierLegs: outliers.length > 0 ? outliers : undefined
+      };
+    });
+
+    // ==========================================
+    // 3. CÁLCULO RUTA IA (OPCIONAL)
+    // ==========================================
+    let aiRouteData = null;
+    let isAiOptimized = false;
+
+    if (aiOptimizedAddresses && Array.isArray(aiOptimizedAddresses) && aiOptimizedAddresses.length > 0) {
+      console.log(`🤖 Intentando calcular Ruta IA (${aiOptimizedAddresses.length} paradas)...`);
+      
+      try {
+        const altWorkStops = aiOptimizedAddresses;
+        const altFirstStop = altWorkStops[0];
+        const altLastStop = altWorkStops[altWorkStops.length - 1];
+        const altSegments = generateSegments(altWorkStops);
+
+        const aiPromises = [
+          calculateLeg(origin, altFirstStop),
+          calculateLeg(altLastStop, finalDestination),
+          ...altSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints))
+        ];
+
+        const aiResults = await Promise.all(aiPromises);
+
+        const toAltFirstStop = aiResults[0];
+        const fromAltLastStop = aiResults[1];
+        const altSegmentResults = aiResults.slice(2);
+
+        // Procesar segmentos IA con detección de outliers (igual que normal)
+        const altSegmentsWithStops = altSegmentResults.map((result, idx) => {
+          const seg = altSegments[idx];
+          const segStops = seg.waypoints.length > 0
+            ? [seg.origin, ...seg.waypoints, seg.destination]
+            : [seg.origin, seg.destination];
+
+          if (result.error) {
+            return { ...result, stops: segStops, hasOutliers: false };
+          }
+
+          const outliers = detectOutlierLegs(result.legsDetailed, result.geocodedWaypoints);
+          
+          if (outliers.length > 0) {
+            const imputation = imputeOutlierLegs(result.legsDetailed, outliers, result.geocodedWaypoints);
             
-            // Datos Normales
-            toFirstStop,
-            segments: segmentsWithStops,
-            toFinalDestination,
-            
-            // Datos IA
-            aiRoute: aiRouteData, // null o el objeto completo
-            
-            aria: {
-                multiplier: ariaResult.multiplier,
-                rutasAnalizadas: ariaResult.rutasAnalizadas
+            if (imputation.qualityFlag !== 'LOW_QUALITY') {
+              const recalculated = recalculateTotalsFromLegs(imputation.legsImputed);
+              return {
+                ...result,
+                ...recalculated,
+                stops: segStops,
+                legsDetailed: imputation.legsImputed,
+                hasOutliers: true,
+                outlierCount: outliers.length,
+                imputedCount: imputation.imputedCount,
+                qualityFlag: imputation.qualityFlag
+              };
             }
+          }
+
+          return { ...result, stops: segStops, hasOutliers: false };
         });
 
-    } catch (error) {
-        console.error("❌ Error CRÍTICO en endpoint:", error);
-        // Devolver JSON incluso en error crítico para que el frontend no reciba HTML (pantalla blanca)
-        res.status(500).json({ 
-            hasErrors: true, 
-            message: 'Error interno del servidor al procesar la ruta.',
-            error: error.message 
-        });
+        aiRouteData = {
+          toStart: toAltFirstStop,
+          toEnd: fromAltLastStop,
+          segments: altSegmentsWithStops
+        };
+
+        isAiOptimized = true;
+        console.log("✅ Ruta IA calculada exitosamente.");
+      } catch (aiError) {
+        console.error("⚠️ Error calculando Ruta IA (Se omite):", aiError.message);
+      }
+    } else {
+      console.log("ℹ️ Sin sugerencia válida de IA.");
     }
+
+    // ==========================================
+    // 4. CALCULAR CALIDAD GLOBAL DE RUTA
+    // ==========================================
+    const totalOutliers = segmentsWithStops.reduce((sum, seg) => sum + (seg.outlierCount || 0), 0);
+    const totalImputed = segmentsWithStops.reduce((sum, seg) => sum + (seg.imputedCount || 0), 0);
+    const totalLegs = segmentsWithStops.reduce((sum, seg) => sum + (seg.legsDetailed?.length || 0), 0);
+    const hasLowQuality = segmentsWithStops.some(seg => seg.qualityFlag === 'LOW_QUALITY');
+
+    let globalQualityFlag = null;
+    if (hasLowQuality) {
+      globalQualityFlag = 'LOW_QUALITY';
+    } else if (totalImputed > 0) {
+      globalQualityFlag = 'IMPUTED';
+    }
+
+    // ==========================================
+    // 5. RESPUESTA FINAL
+    // ==========================================
+    res.json({
+      hasErrors: false,
+      isAiOptimized,
+      
+      // Datos Normales
+      toFirstStop,
+      segments: segmentsWithStops,
+      toFinalDestination,
+      
+      // Datos IA
+      aiRoute: aiRouteData,
+      
+      // ARIA
+      aria: {
+        multiplier: ariaResult.multiplier,
+        rutasAnalizadas: ariaResult.rutasAnalizadas
+      },
+
+      // 🆕 Metadata de Calidad
+      routeQuality: {
+        totalSegments: segmentsWithStops.length,
+        totalLegs,
+        totalOutliers,
+        totalImputed,
+        globalQualityFlag,
+        hasSeriousIssues: hasLowQuality
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error CRÍTICO en endpoint:", error);
+    res.status(500).json({
+      hasErrors: true,
+      message: 'Error interno del servidor al procesar la ruta.',
+      error: error.message
+    });
+  }
 });
 
 // =========================================================
