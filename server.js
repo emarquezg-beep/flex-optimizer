@@ -273,12 +273,105 @@ console.log('🤖 ARIA System activado');
  * Valida una dirección individual usando Geocoding API
  * Retorna: { isValid, address, reason, geocoded }
  */
-async function validateAddress(address) {
+
+
+// ═══════════════════════════════════════════════════════════════
+// 🎯 SMART GEOCODING: Use warehouse location as geographic bias
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Cache de warehouses geocodificados para no repetir llamadas
+ */
+const warehouseCache = new Map();
+
+/**
+ * Geocodifica el warehouse y extrae su ubicación + componentes
+ */
+async function getWarehouseReference(warehouseAddress) {
+  // Verificar cache
+  if (warehouseCache.has(warehouseAddress)) {
+    return warehouseCache.get(warehouseAddress);
+  }
+  
+  try {
+    const params = {
+      address: warehouseAddress,
+      key: process.env.GOOGLE_MAPS_API_KEY
+    };
+    
+    const response = await mapsClient.geocode({ params });
+    
+    if (response.data.status !== 'OK' || !response.data.results[0]) {
+      console.error(`⚠️ No se pudo geocodificar warehouse: ${warehouseAddress}`);
+      return null;
+    }
+    
+    const result = response.data.results[0];
+    const location = result.geometry.location;
+    
+    // Extraer componentes de dirección
+    const components = result.address_components;
+    const city = components.find(c => c.types.includes('locality'))?.long_name;
+    const state = components.find(c => c.types.includes('administrative_area_level_1'))?.short_name;
+    const zip = components.find(c => c.types.includes('postal_code'))?.long_name;
+    
+    const warehouseRef = {
+      location,
+      city,
+      state,
+      zip,
+      formatted_address: result.formatted_address,
+      // Crear bounds de ~30 millas alrededor del warehouse
+      bounds: {
+        northeast: {
+          lat: location.lat + 0.507, // ~35 millas
+          lng: location.lng + 0.507
+        },
+        southwest: {
+          lat: location.lat - 0.507,
+          lng: location.lng - 0.507
+        }
+      }
+    };
+    
+    warehouseCache.set(warehouseAddress, warehouseRef);
+    console.log(`✅ Warehouse geocodificado: ${city}, ${state} ${zip}`);
+    
+    return warehouseRef;
+    
+  } catch (error) {
+    console.error(`❌ Error geocodificando warehouse:`, error.message);
+    return null;
+  }
+}
+
+console.log('🎯 Smart Geocoding System activado');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN SMART GEOCODING
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Valida una dirección individual usando Geocoding API
+ * @param {string} address - Dirección a validar
+ * @param {Object} warehouseRef - Referencia del warehouse (opcional)
+ */
+async function validateAddress(address, warehouseRef = null) {
   try {
     const params = {
       address,
       key: process.env.GOOGLE_MAPS_API_KEY
     };
+    
+    // 🆕 Si tenemos warehouse reference, aplicar bounds y components
+    if (warehouseRef) {
+      params.bounds = warehouseRef.bounds;
+      
+      // También podemos forzar componentes de dirección
+      if (warehouseRef.state) {
+        params.components = `administrative_area:${warehouseRef.state}`;
+      }
+    }
     
     const response = await mapsClient.geocode({ params });
     
@@ -293,19 +386,36 @@ async function validateAddress(address) {
     
     const result = response.data.results[0];
     
-    // 🆕 Aceptar partial_match pero registrarlo como warning
+    // 🆕 Verificar que el estado coincida con el warehouse
+    if (warehouseRef && warehouseRef.state) {
+      const geocodedState = result.address_components.find(
+        c => c.types.includes('administrative_area_level_1')
+      )?.short_name;
+      
+      if (geocodedState && geocodedState !== warehouseRef.state) {
+        console.log(`⚠️ Geocoded a estado diferente: ${address}`);
+        console.log(`   Esperado: ${warehouseRef.state}, Obtenido: ${geocodedState}`);
+        
+        return {
+          isValid: false,
+          address,
+          reason: `GEOCODE_WRONG_STATE_${geocodedState}`,
+          geocoded: result.formatted_address
+        };
+      }
+    }
+    
+    // Aceptar partial_match pero registrarlo
     if (result.partial_match === true) {
       console.log(`⚠️ Partial match: ${address} → ${result.formatted_address}`);
-      
-      // Registrar pero NO invalidar
       registerProblematicAddress(address, ['PARTIAL_GEOCODE_MATCH']);
       
       return {
-        isValid: true, // 👈 CAMBIO: Aceptamos partial match
+        isValid: true,
         address,
         geocoded: result.formatted_address,
         location: result.geometry.location,
-        isPartialMatch: true // 👈 Flag para tracking
+        isPartialMatch: true
       };
     }
     
@@ -327,15 +437,16 @@ async function validateAddress(address) {
   }
 }
 
+
 /**
  * Valida todas las direcciones de un segmento
  * Si encuentra inválidas, las reemplaza con promedio
  */
-async function validateAndFixSegment(origin, destination, waypoints) {
+async function validateAndFixSegment(origin, destination, waypoints, warehouseRef = null) {
   console.log(`🔍 Pre-validando segmento: ${waypoints.length + 2} direcciones...`);
   
   const allAddresses = [origin, ...waypoints, destination];
-  const validationPromises = allAddresses.map(addr => validateAddress(addr));
+  const validationPromises = allAddresses.map(addr => validateAddress(addr, warehouseRef));
   const validations = await Promise.all(validationPromises);
   
   // Identificar direcciones inválidas
@@ -369,9 +480,13 @@ console.log('🔍 Address Pre-Validation System activado');
 // ═══════════════════════════════════════════════════════════════
 async function calculateLeg(origin, destination, waypoints = [], departureTime = null, skipValidation = false) {
   try {
+    // 🆕 Enriquecer todas las direcciones
+    origin = enrichAddress(origin);
+    destination = enrichAddress(destination);
+    waypoints = waypoints.map(wp => enrichAddress(wp));
     // 🆕 PASO 0: Pre-validar direcciones (solo si hay waypoints)
     if (!skipValidation && waypoints.length > 0) {
-      const validation = await validateAndFixSegment(origin, destination, waypoints);
+        const validation = await validateAndFixSegment(origin, destination, waypoints, warehouseRef);
       
       if (validation.hasInvalidAddresses) {
         // Si hay direcciones inválidas, removerlas de waypoints
@@ -729,13 +844,15 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     finalDestination: customFinalDestination,
     startTime,
     warehouseDelay,
-    currentDate
+    currentDate,
+    warehouse // 👈 Asegúrate que el frontend lo envíe
   } = req.body;
 
   console.log("------------------------------------------------");
   console.log("📨 RECEPCIÓN DE DATOS EN BACKEND:");
   console.log(`📦 Direcciones Normales: ${addresses ? addresses.length : 0}`);
   console.log(`🤖 Direcciones IA: ${aiOptimizedAddresses ? aiOptimizedAddresses.length : 'NULL/UNDEFINED'}`);
+  console.log(`🏭 Warehouse: ${warehouse || 'NO PROPORCIONADO'}`);
   console.log("------------------------------------------------");
 
   // Validación básica
@@ -746,7 +863,15 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
 
   try {
     const ariaResult = await calcularMultiplierARIA(req.userId);
-
+    
+    // 🆕 Geocodificar warehouse para biasing
+    let warehouseRef = null;
+    if (warehouse && warehouse.trim() !== '') {
+      warehouseRef = await getWarehouseReference(warehouse);
+      if (warehouseRef) {
+        console.log(`🎯 Bias geográfico activado: ${warehouseRef.city}, ${warehouseRef.state}`);
+      }
+    }
     // ==========================================
     // 1. PREPARACIÓN COMÚN
     // ==========================================
