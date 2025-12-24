@@ -387,10 +387,16 @@ async function validateAddress(address, warehouseRef = null) {
     const result = response.data.results[0];
     
     // Verificar partial match
+    // Verificar partial match
     if (result.partial_match === true) {
       const geocodedState = result.address_components.find(
         c => c.types.includes('administrative_area_level_1')
       )?.short_name;
+      
+      // Verificar si tiene street_number
+      const hasStreetNumber = result.address_components.some(
+        c => c.types.includes('street_number')
+      );
       
       // Si tenemos warehouseRef, verificar que el estado coincida
       if (warehouseRef && warehouseRef.state) {
@@ -407,7 +413,19 @@ async function validateAddress(address, warehouseRef = null) {
         }
       }
       
-      // Partial match válido (estado correcto o sin warehouseRef)
+      // 🆕 Rechazar si no tiene número de calle (demasiado impreciso)
+      if (!hasStreetNumber) {
+        console.log(`❌ Partial match sin número de calle: ${address} → ${result.formatted_address}`);
+        
+        return {
+          isValid: false,
+          address,
+          reason: 'PARTIAL_MATCH_NO_STREET_NUMBER',
+          geocoded: result.formatted_address
+        };
+      }
+      
+      // Partial match válido (tiene número de calle y estado correcto)
       console.log(`⚠️ Partial match aceptado: ${address} → ${result.formatted_address}`);
       registerProblematicAddress(address, ['PARTIAL_GEOCODE_MATCH']);
       
@@ -419,6 +437,7 @@ async function validateAddress(address, warehouseRef = null) {
         isPartialMatch: true
       };
     }
+
     
     return {
       isValid: true,
@@ -481,33 +500,56 @@ console.log('🔍 Address Pre-Validation System activado');
 // ═══════════════════════════════════════════════════════════════
 async function calculateLeg(origin, destination, waypoints = [], departureTime = null, skipValidation = false, warehouseRef = null) {
   try {
-    // 🆕 PASO 0: Pre-validar direcciones (solo si hay waypoints)
-    if (!skipValidation && waypoints.length > 0) {
-      const validation = await validateAndFixSegment(origin, destination, waypoints, warehouseRef); // 👈 PASAR warehouseRef
+    // 🆕 PASO 0: Pre-validar direcciones (SIEMPRE, no solo con waypoints)
+    if (!skipValidation) {
+      // Validar origin y destination siempre
+      const originValidation = await validateAddress(origin, warehouseRef);
+      const destValidation = await validateAddress(destination, warehouseRef);
       
-      if (validation.hasInvalidAddresses) {
-        // Si hay direcciones inválidas, removerlas de waypoints
-        const invalidAddressSet = new Set(validation.invalidAddresses.map(v => v.address));
-        const cleanedWaypoints = waypoints.filter(wp => !invalidAddressSet.has(wp));
+      if (!originValidation.isValid) {
+        console.log(`❌ Origin inválido: ${origin} (${originValidation.reason})`);
+        registerProblematicAddress(origin, [originValidation.reason]);
         
-        console.log(`🔧 Waypoints limpiados: ${waypoints.length} → ${cleanedWaypoints.length}`);
+        return {
+          distance: 0,
+          duration: 0,
+          durationValue: 0,
+          error: true,
+          errorType: 'INVALID_ORIGIN',
+          invalidAddresses: [originValidation],
+          legsDetailed: [],
+          maxLegMiles: 0,
+          geocodedWaypoints: []
+        };
+      }
+      
+      if (!destValidation.isValid) {
+        console.log(`❌ Destination inválido: ${destination} (${destValidation.reason})`);
+        registerProblematicAddress(destination, [destValidation.reason]);
         
-        // Si limpiamos waypoints, actualizar
-        waypoints = cleanedWaypoints;
+        return {
+          distance: 0,
+          duration: 0,
+          durationValue: 0,
+          error: true,
+          errorType: 'INVALID_DESTINATION',
+          invalidAddresses: [destValidation],
+          legsDetailed: [],
+          maxLegMiles: 0,
+          geocodedWaypoints: []
+        };
+      }
+      
+      // Validar waypoints si existen
+      if (waypoints.length > 0) {
+        const validation = await validateAndFixSegment(origin, destination, waypoints, warehouseRef);
         
-        // Si origin o destination son inválidos, devolver error inmediato
-        if (validation.invalidAddresses.some(inv => inv.address === origin || inv.address === destination)) {
-          return {
-            distance: 0,
-            duration: 0,
-            durationValue: 0,
-            error: true,
-            errorType: 'INVALID_ORIGIN_OR_DESTINATION',
-            invalidAddresses: validation.invalidAddresses,
-            legsDetailed: [],
-            maxLegMiles: 0,
-            geocodedWaypoints: []
-          };
+        if (validation.hasInvalidAddresses) {
+          const invalidAddressSet = new Set(validation.invalidAddresses.map(v => v.address));
+          const cleanedWaypoints = waypoints.filter(wp => !invalidAddressSet.has(wp));
+          
+          console.log(`🔧 Waypoints limpiados: ${waypoints.length} → ${cleanedWaypoints.length}`);
+          waypoints = cleanedWaypoints;
         }
       }
     }
