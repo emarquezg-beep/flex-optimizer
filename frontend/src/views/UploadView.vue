@@ -733,62 +733,53 @@ async function sendToBackend() {
         }
 
         // C. Preparar Ruta Normal
-        const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => Number(a.number) - Number(b.number));
+        const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => 
+          Number(a.number) - Number(b.number)
+        );
+
         const addressesToSend = sortedByAmazon.map(stop => stop.address);
-        
-        // Usamos la función sanitizeAddress (asegúrate de que exista al final del archivo)
-        const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
-        
-        if (sanitizedAddresses.length === 0) { 
-            throw new Error('Las direcciones extraídas no son válidas o están vacías.'); 
+
+        const sanitizedAddresses = addressesToSend
+          .map(sanitizeAddress)
+          .filter(addr => addr && addr.trim() !== '');
+
+        if (sanitizedAddresses.length === 0) {
+          throw new Error('Las direcciones extraídas no son válidas o están vacías.');
         }
 
         const fullRouteAmazon = [
-            sanitizeAddress(warehouse.address), 
-            ...sanitizedAddresses, 
-            sanitizeAddress(selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value)
+          sanitizeAddress(warehouse.address),
+          ...sanitizedAddresses,
+          sanitizeAddress(
+            selectedDestination.value === 'custom' 
+              ? customDestination.value 
+              : selectedDestination.value
+          )
         ];
 
-        // D. Comparación IA (Texto vs Número)
-        let aiOptimizedStops = null;
-        
-        const hasDifference = extractedAddresses.value.some(stop => {
-            const currentNum = Number(stop.number);
-            const aiNum = (stop.ia_suggestion !== undefined && stop.ia_suggestion !== null) 
-                 ? Number(stop.ia_suggestion) 
-                 : currentNum;
-            return currentNum !== aiNum;
-        });
-
-        if (hasDifference) {
-            console.log("⚡ Diferencia detectada (IA activa)...");
-            const sortedByAI = [...extractedAddresses.value].sort((a, b) => {
-                const valA = (a.ia_suggestion !== undefined && a.ia_suggestion !== null) ? a.ia_suggestion : a.number;
-                const valB = (b.ia_suggestion !== undefined && b.ia_suggestion !== null) ? b.ia_suggestion : b.number;
-                return Number(valA) - Number(valB);
-            });
-            aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
-        } else {
-            console.log("💤 Rutas idénticas (IA inactiva).");
-        }
+        // ... (código de IA)
 
         // --- ENVIAR AL SERVIDOR ---
-        console.log("📡 Enviando datos...");
-        backendResponse.value = { status: 'loading' }; // Esto activa el mensaje "Evaluating scenarios..."
-        
+        console.log('📤 Enviando datos...');
+        backendResponse.value = { status: 'loading' };
+
         const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
-            method: 'POST',
-            body: JSON.stringify({ 
-                addresses: fullRouteAmazon,
-                aiOptimizedAddresses: aiOptimizedStops, 
-                finalDestination: selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value,
-                startTime: blockData.value.hora,
-                warehouseDelay: blockData.value.retraso_almacen,
-                currentDate: blockData.value.fecha
-            }),
+          method: 'POST',
+          body: JSON.stringify({
+            addresses: fullRouteAmazon,
+            aiOptimizedAddresses: aiOptimizedStops,
+            finalDestination: selectedDestination.value === 'custom' 
+              ? customDestination.value 
+              : selectedDestination.value,
+            startTime: blockData.value.hora,
+            warehouseDelay: blockData.value.retrasoalmacen,
+            currentDate: blockData.value.fecha,
+            warehouse: warehouse.address // 👈 ESTA ES LA LÍNEA CRÍTICA
+          })
         });
+
         
         const result = await response.json();
         console.log("✅ Respuesta recibida:", result);
