@@ -822,9 +822,6 @@ async function sendToBackend() {
         hasWarehouse: !!warehouse
         };
 
-        // 👇 ALERT PARA DEBUG
-        alert(`Warehouse: ${requestPayload.warehouse}\nCode: ${requestPayload.warehouseCode}`);
-
         // 👇 ENVIAR
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
           method: 'POST',
@@ -1403,11 +1400,6 @@ async function submitCorrections() {
             ✏️ Edit Parameters
           </button>
         </div>
-          <div class="view-container">
-          <div v-if="debugInfo" class="debug-panel" style="background: #000; color: #0f0; padding: 15px; margin: 10px; font-family: monospace; font-size: 12px;">
-            <h4 style="color: #0ff;">🔍 DEBUG WAREHOUSE:</h4>
-            <pre>{{ JSON.stringify(debugInfo, null, 2) }}</pre>
-          </div>
         <div class="mini-summary">
           <span>📦 {{ extractedAddresses.length }} stops</span>
           <span class="separator">•</span>
