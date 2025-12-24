@@ -386,28 +386,29 @@ async function validateAddress(address, warehouseRef = null) {
     
     const result = response.data.results[0];
     
-    // 🆕 Verificar que el estado coincida con el warehouse
-    if (warehouseRef && warehouseRef.state) {
+    // Verificar partial match
+    if (result.partial_match === true) {
       const geocodedState = result.address_components.find(
         c => c.types.includes('administrative_area_level_1')
       )?.short_name;
       
-      if (geocodedState && geocodedState !== warehouseRef.state) {
-        console.log(`⚠️ Geocoded a estado diferente: ${address}`);
-        console.log(`   Esperado: ${warehouseRef.state}, Obtenido: ${geocodedState}`);
-        
-        return {
-          isValid: false,
-          address,
-          reason: `GEOCODE_WRONG_STATE_${geocodedState}`,
-          geocoded: result.formatted_address
-        };
+      // Si tenemos warehouseRef, verificar que el estado coincida
+      if (warehouseRef && warehouseRef.state) {
+        if (geocodedState !== warehouseRef.state) {
+          console.log(`❌ Partial match en estado incorrecto: ${address}`);
+          console.log(`   Esperado: ${warehouseRef.state}, Obtenido: ${geocodedState}`);
+          
+          return {
+            isValid: false,
+            address,
+            reason: `PARTIAL_MATCH_WRONG_STATE_${geocodedState}`,
+            geocoded: result.formatted_address
+          };
+        }
       }
-    }
-    
-    // Aceptar partial_match pero registrarlo
-    if (result.partial_match === true) {
-      console.log(`⚠️ Partial match: ${address} → ${result.formatted_address}`);
+      
+      // Partial match válido (estado correcto o sin warehouseRef)
+      console.log(`⚠️ Partial match aceptado: ${address} → ${result.formatted_address}`);
       registerProblematicAddress(address, ['PARTIAL_GEOCODE_MATCH']);
       
       return {
