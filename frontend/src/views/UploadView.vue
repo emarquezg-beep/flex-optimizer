@@ -769,6 +769,12 @@ async function sendToBackend() {
         const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
         console.log('📦 Payload completo:', JSON.stringify(payload, null, 2)); // 👈 Debug
+        console.log('🔍 DEBUG WAREHOUSE:');
+        console.log('selectedWarehouseCode:', selectedWarehouseCode.value);
+        console.log('warehouse object:', warehouse);
+        console.log('warehouse.address:', warehouse?.address);
+        console.log('typeof warehouse:', typeof warehouse);
+
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
           method: 'POST',
           body: JSON.stringify({
