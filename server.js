@@ -480,13 +480,9 @@ console.log('🔍 Address Pre-Validation System activado');
 // ═══════════════════════════════════════════════════════════════
 async function calculateLeg(origin, destination, waypoints = [], departureTime = null, skipValidation = false) {
   try {
-    // 🆕 Enriquecer todas las direcciones
-    origin = enrichAddress(origin);
-    destination = enrichAddress(destination);
-    waypoints = waypoints.map(wp => enrichAddress(wp));
     // 🆕 PASO 0: Pre-validar direcciones (solo si hay waypoints)
     if (!skipValidation && waypoints.length > 0) {
-        const validation = await validateAndFixSegment(origin, destination, waypoints, warehouseRef);
+      const validation = await validateAndFixSegment(origin, destination, waypoints);
       
       if (validation.hasInvalidAddresses) {
         // Si hay direcciones inválidas, removerlas de waypoints
