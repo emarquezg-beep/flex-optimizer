@@ -476,17 +476,32 @@ async function validateAndFixSegment(origin, destination, waypoints, warehouseRe
     console.log(`⚠️ ${invalidAddresses.length} direcciones inválidas detectadas:`);
     invalidAddresses.forEach(inv => {
       console.log(`   ❌ ${inv.address} → ${inv.reason}`);
-      // Registrar en BD
       registerProblematicAddress(inv.address, [inv.reason]);
     });
   }
   
+  // 🆕 Reemplazar direcciones con versiones geocodificadas
+  const geocodedOrigin = validations[0].isValid ? validations[0].geocoded : origin;
+  const geocodedDestination = validations[validations.length - 1].isValid 
+    ? validations[validations.length - 1].geocoded 
+    : destination;
+  
+  const geocodedWaypoints = validations
+    .slice(1, -1)  // Excluir origin y destination
+    .filter(v => v.isValid)  // Solo válidas
+    .map(v => v.geocoded);
+  
   return {
     hasInvalidAddresses: invalidAddresses.length > 0,
     invalidAddresses,
-    validAddresses: validations.filter(v => v.isValid)
+    validAddresses: validations.filter(v => v.isValid),
+    // 🆕 Devolver versiones geocodificadas
+    geocodedOrigin,
+    geocodedDestination,
+    geocodedWaypoints
   };
 }
+
 
 console.log('🔍 Address Pre-Validation System activado');
 
@@ -500,7 +515,7 @@ console.log('🔍 Address Pre-Validation System activado');
 // ═══════════════════════════════════════════════════════════════
 async function calculateLeg(origin, destination, waypoints = [], departureTime = null, skipValidation = false, warehouseRef = null) {
   try {
-    // 🆕 PASO 0: Pre-validar direcciones (SIEMPRE, no solo con waypoints)
+    // PASO 0: Pre-validar direcciones (SIEMPRE)
     if (!skipValidation) {
       // Validar origin y destination siempre
       const originValidation = await validateAddress(origin, warehouseRef);
@@ -540,29 +555,33 @@ async function calculateLeg(origin, destination, waypoints = [], departureTime =
         };
       }
       
+      // 🆕 Usar versiones geocodificadas
+      origin = originValidation.geocoded;
+      destination = destValidation.geocoded;
+      
       // Validar waypoints si existen
       if (waypoints.length > 0) {
         const validation = await validateAndFixSegment(origin, destination, waypoints, warehouseRef);
         
         if (validation.hasInvalidAddresses) {
-          const invalidAddressSet = new Set(validation.invalidAddresses.map(v => v.address));
-          const cleanedWaypoints = waypoints.filter(wp => !invalidAddressSet.has(wp));
-          
-          console.log(`🔧 Waypoints limpiados: ${waypoints.length} → ${cleanedWaypoints.length}`);
-          waypoints = cleanedWaypoints;
+          console.log(`🔧 Waypoints limpiados: ${waypoints.length} → ${validation.geocodedWaypoints.length}`);
         }
+        
+        // 🆕 Usar versiones geocodificadas
+        origin = validation.geocodedOrigin;
+        destination = validation.geocodedDestination;
+        waypoints = validation.geocodedWaypoints;
       }
     }
     
-    // 1. Construir parámetros base
+    // 1. Construir parámetros base (ahora con direcciones geocodificadas)
     const params = {
-      origin,
-      destination,
-      waypoints,
+      origin,  // 👈 Ya geocodificada: "246 Vervain Ave, Davenport, FL 33837, USA"
+      destination,  // 👈 Ya geocodificada
+      waypoints,  // 👈 Ya geocodificadas
       avoid: ['tolls'],
       key: process.env.GOOGLE_MAPS_API_KEY,
     };
-
     // 2. Agregar departure time si existe (para tráfico futuro)
     if (departureTime) {
       params.departure_time = departureTime;
