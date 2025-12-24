@@ -1198,6 +1198,7 @@ async function submitCorrections() {
 </script>
 
 <template>
+  <div class="view-container">
     <div class="uploader-container">
 
       <transition name="fade-slide">
@@ -1400,7 +1401,6 @@ async function submitCorrections() {
             ✏️ Edit Parameters
           </button>
         </div>
-          <div class="view-container">
         <div class="mini-summary">
           <span>📦 {{ extractedAddresses.length }} stops</span>
           <span class="separator">•</span>
