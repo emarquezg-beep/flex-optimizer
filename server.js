@@ -843,6 +843,12 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     warehouse
   } = req.body;
 
+  // 🧪 TEMPORAL: Si no viene warehouse, usar uno de prueba
+if (!warehouse || warehouse.trim() === '') {
+  warehouse = "9775 Air Commerce Pkwy, Orlando, FL 32827"; // 👈 DOR5
+  console.log('🧪 USANDO WAREHOUSE DE PRUEBA:', warehouse);
+}
+
   console.log("------------------------------------------------");
   console.log("📨 RECEPCIÓN DE DATOS EN BACKEND:");
   console.log(`📦 Direcciones Normales: ${addresses ? addresses.length : 0}`);
