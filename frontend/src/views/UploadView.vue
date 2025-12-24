@@ -763,6 +763,31 @@ async function sendToBackend() {
 
         // ... (código de IA)
 
+          let aiOptimizedStops = null;
+    
+            const hasDifference = extractedAddresses.value.some(stop => {
+              const currentNum = Number(stop.number);
+              const aiNum = stop.ia_suggestion !== undefined && stop.ia_suggestion !== null 
+                ? Number(stop.ia_suggestion) 
+                : currentNum;
+              return currentNum !== aiNum;
+            });
+
+            if (hasDifference) {
+              console.log('✅ Diferencia detectada, activando ruta IA...');
+              const sortedByAI = [...extractedAddresses.value].sort((a, b) => {
+                const valA = a.ia_suggestion !== undefined && a.ia_suggestion !== null 
+                  ? a.ia_suggestion 
+                  : a.number;
+                const valB = b.ia_suggestion !== undefined && b.ia_suggestion !== null 
+                  ? b.ia_suggestion 
+                  : b.number;
+                return Number(valA) - Number(valB);
+              });
+              aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
+            } else {
+              console.log('ℹ️ No hay diferencia, ruta IA inactiva.');
+          }
         // --- ENVIAR AL SERVIDOR ---
         console.log('📤 Enviando datos al backend...');
         console.log(`🏭 Warehouse a enviar: "${warehouse.address}"`); // 👈 Log de verificación
