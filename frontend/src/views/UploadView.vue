@@ -786,7 +786,7 @@ async function sendToBackend() {
 
         // 👇 ALERT PARA VER EL PAYLOAD
         alert(`PAYLOAD:\nwarehouse: ${payload.warehouse}\nwarehouseCode: ${payload.warehouseCode}`);
-        
+
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
           method: 'POST',
           body: JSON.stringify({
@@ -1174,11 +1174,6 @@ async function submitCorrections() {
 </script>
 
 <template>
-  <div class="view-container">
-    <div v-if="debugInfo" class="debug-panel" style="background: #000; color: #0f0; padding: 15px; margin: 10px; font-family: monospace; font-size: 12px;">
-      <h4 style="color: #0ff;">🔍 DEBUG WAREHOUSE:</h4>
-      <pre>{{ JSON.stringify(debugInfo, null, 2) }}</pre>
-    </div>
     <div class="uploader-container">
 
       <transition name="fade-slide">
@@ -1381,6 +1376,11 @@ async function submitCorrections() {
             ✏️ Edit Parameters
           </button>
         </div>
+          <div class="view-container">
+          <div v-if="debugInfo" class="debug-panel" style="background: #000; color: #0f0; padding: 15px; margin: 10px; font-family: monospace; font-size: 12px;">
+            <h4 style="color: #0ff;">🔍 DEBUG WAREHOUSE:</h4>
+            <pre>{{ JSON.stringify(debugInfo, null, 2) }}</pre>
+          </div>
         <div class="mini-summary">
           <span>📦 {{ extractedAddresses.length }} stops</span>
           <span class="separator">•</span>
