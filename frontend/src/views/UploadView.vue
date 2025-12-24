@@ -717,23 +717,24 @@ async function sendToBackend() {
     console.log("🚀 Iniciando sendToBackend...");
     // 1. Activar Spinner visualmente para que sepas que algo está pasando
     isProcessing.value = true; 
-
+    let warehouse = null;
     try {
         // --- VALIDACIONES PREVIAS (Ahora dentro del try/catch) ---
         
-        // A. Validar Direcciones
-        if (!extractedAddresses.value || extractedAddresses.value.length === 0) {
-            throw new Error("No hay direcciones cargadas en la lista.");
-        }
-
-        // B. Validar Warehouse
-        const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
-        if (!warehouse) {
-          throw new Error(`Error crítico: No se encontró el almacén con código ${selectedWarehouseCode.value}. Revisa la configuración.`);
-        }
-
-        console.log(`✅ Warehouse seleccionado: ${warehouse.code} - ${warehouse.address}`);
-        // C. Preparar Ruta Normal
+    // A. Validar Direcciones
+    if (!extractedAddresses.value || extractedAddresses.value.length === 0) {
+      throw new Error('No hay direcciones cargadas en la lista.');
+    }
+    
+    // B. Validar Warehouse
+    warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+    if (!warehouse) {
+      throw new Error(`No se encontró el almacén con código ${selectedWarehouseCode.value}`);
+    }
+    
+    console.log(`✅ Warehouse: ${warehouse.code} - ${warehouse.address}`);
+        
+    // C. Preparar Ruta Normal
         const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => 
           Number(a.number) - Number(b.number)
         );
