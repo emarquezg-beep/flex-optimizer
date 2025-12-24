@@ -902,7 +902,8 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     startTime,
     warehouseDelay,
     currentDate,
-    warehouse
+    warehouse,           // 👈 Dirección completa (para geocoding)
+    warehouseCode        // 👈 Código (para BD)
   } = req.body;
 
   // 🧪 TEMPORAL: Si no viene warehouse, usar uno de prueba
@@ -916,6 +917,7 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
   console.log(`📦 Direcciones Normales: ${addresses ? addresses.length : 0}`);
   console.log(`🤖 Direcciones IA: ${aiOptimizedAddresses ? aiOptimizedAddresses.length : 'NULL/UNDEFINED'}`);
   console.log(`🏭 Warehouse: ${warehouse || 'NO PROPORCIONADO'}`);
+  console.log(`🔑 Warehouse Code: ${warehouseCode || 'NO PROPORCIONADO'}`);
   console.log("------------------------------------------------");
 
   // Validación básica
@@ -927,16 +929,16 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
   try {
     const ariaResult = await calcularMultiplierARIA(req.userId);
 
-    // 🆕 Geocodificar warehouse para biasing
-    let warehouseRef = null;
-    if (warehouse && warehouse.trim() !== '') {
-      warehouseRef = await getWarehouseReference(warehouse);
-      if (warehouseRef) {
-        console.log(`🎯 Bias geográfico activado: ${warehouseRef.city}, ${warehouseRef.state} ${warehouseRef.zip}`);
+      // 🆕 Geocodificar warehouse para biasing
+      let warehouseRef = null;
+      if (warehouse && warehouse.trim() !== '') {
+        warehouseRef = await getWarehouseReference(warehouse);
+        if (warehouseRef) {
+          console.log(`🎯 Bias geográfico activado: ${warehouseRef.city}, ${warehouseRef.state} ${warehouseRef.zip}`);
+        }
+      } else {
+        console.log('⚠️ No se proporcionó warehouse, geocoding sin bias geográfico');
       }
-    } else {
-      console.log('⚠️ No se proporcionó warehouse, geocoding sin bias geográfico');
-    }
 
     // ==========================================
     // 1. PREPARACIÓN COMÚN
@@ -1186,7 +1188,8 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
         segmentsWithErrors: segmentsWithStops.filter(s => s.qualityFlag === 'ERROR').length,
         globalQualityFlag,
         hasSeriousIssues: hasErrors || hasLowQuality
-      }
+      },
+      warehouseCode // 👈 Devolver el código para que el frontend lo use en calculateLogData
     });
 
   } catch (error) {

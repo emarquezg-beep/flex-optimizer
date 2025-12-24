@@ -464,7 +464,7 @@ function calculateLogData(scenarioKey) {
     fecha: data.fecha,
     block_id: route.query.blockId || null,
     vehicle_id: data.vehiculo,
-    warehouse: selectedWarehouseCode.value,
+    warehouse: backendResponse.value?.warehouseCode || selectedWarehouseCode.value, // 👈 Usar el código
     hora: data.hora,
     duracion_horas, pago,
     pago_por_hora: pago_por_hora.toFixed(2),
@@ -719,7 +719,7 @@ async function sendToBackend() {
     console.log("🚀 Iniciando sendToBackend...");
     // 1. Activar Spinner visualmente para que sepas que algo está pasando
     isProcessing.value = true; 
-    let warehouse = null;
+    
     try {
         // --- VALIDACIONES PREVIAS (Ahora dentro del try/catch) ---
         
@@ -729,9 +729,9 @@ async function sendToBackend() {
     }
     
     // B. Validar Warehouse
-    warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+    const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
     if (!warehouse) {
-      throw new Error(`No se encontró el almacén con código ${selectedWarehouseCode.value}`);
+      throw new Error(`Error crítico: No se encontró el almacén con código ${selectedWarehouseCode.value}. Revisa la configuración.`);
     }
     
     console.log(`✅ Warehouse: ${warehouse.code} - ${warehouse.address}`);
@@ -765,7 +765,7 @@ async function sendToBackend() {
 
         // --- ENVIAR AL SERVIDOR ---
         console.log('📤 Enviando datos al backend...');
-        console.log(`🏭 Warehouse a enviar: ${warehouse.address}`); // 👈 Agregar este log
+        console.log(`🏭 Warehouse a enviar: "${warehouse.address}"`); // 👈 Log de verificación
         backendResponse.value = { status: 'loading' };
 
         const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -795,7 +795,8 @@ async function sendToBackend() {
             startTime: blockData.value.hora,
             warehouseDelay: blockData.value.retrasoalmacen,
             currentDate: blockData.value.fecha,
-            warehouse: warehouse.address
+            warehouse: warehouse.address,        // 👈 Para geocoding
+            warehouseCode: warehouse.code        // 👈 Para BD
           })
         });
 
