@@ -784,6 +784,9 @@ async function sendToBackend() {
         hasWarehouse: !!warehouse
         };
 
+        // 👇 ALERT PARA VER EL PAYLOAD
+        alert(`PAYLOAD:\nwarehouse: ${payload.warehouse}\nwarehouseCode: ${payload.warehouseCode}`);
+        
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
           method: 'POST',
           body: JSON.stringify({
