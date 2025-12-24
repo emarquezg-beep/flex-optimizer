@@ -23,6 +23,8 @@ const route = useRoute();
 const router = useRouter();
 const { userId } = useAuth();
 const { vehicles } = useVehicles();
+// Al inicio de UploadView.vue, en la sección de variables:
+const debugInfo = ref(null);
 
 // Estado de UI y Datos
 const extractedAddresses = ref([]);
@@ -775,6 +777,13 @@ async function sendToBackend() {
         console.log('warehouse.address:', warehouse?.address);
         console.log('typeof warehouse:', typeof warehouse);
 
+        debugInfo.value = {
+        warehouseCode: selectedWarehouseCode.value,
+        warehouseObject: warehouse,
+        warehouseAddress: warehouse?.address,
+        hasWarehouse: !!warehouse
+        };
+
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
           method: 'POST',
           body: JSON.stringify({
@@ -786,7 +795,7 @@ async function sendToBackend() {
             startTime: blockData.value.hora,
             warehouseDelay: blockData.value.retrasoalmacen,
             currentDate: blockData.value.fecha,
-            warehouse: warehouse.address // 👈 ESTA ES LA LÍNEA CRÍTICA
+            warehouse: warehouse.address
           })
         });
 
@@ -1162,6 +1171,10 @@ async function submitCorrections() {
 
 <template>
   <div class="view-container">
+    <div v-if="debugInfo" class="debug-panel" style="background: #000; color: #0f0; padding: 15px; margin: 10px; font-family: monospace; font-size: 12px;">
+      <h4 style="color: #0ff;">🔍 DEBUG WAREHOUSE:</h4>
+      <pre>{{ JSON.stringify(debugInfo, null, 2) }}</pre>
+    </div>
     <div class="uploader-container">
 
       <transition name="fade-slide">
