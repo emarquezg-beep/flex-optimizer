@@ -478,11 +478,11 @@ console.log('🔍 Address Pre-Validation System activado');
 // ═══════════════════════════════════════════════════════════════
 // 🔧 CALCULATE LEG - With Pre-Validation
 // ═══════════════════════════════════════════════════════════════
-async function calculateLeg(origin, destination, waypoints = [], departureTime = null, skipValidation = false) {
+async function calculateLeg(origin, destination, waypoints = [], departureTime = null, skipValidation = false, warehouseRef = null) {
   try {
     // 🆕 PASO 0: Pre-validar direcciones (solo si hay waypoints)
     if (!skipValidation && waypoints.length > 0) {
-      const validation = await validateAndFixSegment(origin, destination, waypoints);
+      const validation = await validateAndFixSegment(origin, destination, waypoints, warehouseRef); // 👈 PASAR warehouseRef
       
       if (validation.hasInvalidAddresses) {
         // Si hay direcciones inválidas, removerlas de waypoints
@@ -830,8 +830,7 @@ console.log('🕵️ Outlier Detection System activado');
 
 
 // ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-// 🛣️ ENDPOINT: OPTIMIZE ROUTE - Extended with Outlier Detection v2
+// 🛣️ ENDPOINT: OPTIMIZE ROUTE - With Smart Geocoding
 // ═══════════════════════════════════════════════════════════════
 app.post('/api/optimize-route', authenticateUser, async (req, res) => {
   let {
@@ -841,7 +840,7 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     startTime,
     warehouseDelay,
     currentDate,
-    warehouse // 👈 Asegúrate que el frontend lo envíe
+    warehouse
   } = req.body;
 
   console.log("------------------------------------------------");
@@ -859,15 +858,18 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
 
   try {
     const ariaResult = await calcularMultiplierARIA(req.userId);
-    
+
     // 🆕 Geocodificar warehouse para biasing
     let warehouseRef = null;
     if (warehouse && warehouse.trim() !== '') {
       warehouseRef = await getWarehouseReference(warehouse);
       if (warehouseRef) {
-        console.log(`🎯 Bias geográfico activado: ${warehouseRef.city}, ${warehouseRef.state}`);
+        console.log(`🎯 Bias geográfico activado: ${warehouseRef.city}, ${warehouseRef.state} ${warehouseRef.zip}`);
       }
+    } else {
+      console.log('⚠️ No se proporcionó warehouse, geocoding sin bias geográfico');
     }
+
     // ==========================================
     // 1. PREPARACIÓN COMÚN
     // ==========================================
@@ -900,11 +902,11 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
 
     console.log(`🛣️ Calculando Ruta Normal (${workStops.length} paradas)...`);
 
-    // Ejecutar cálculos
+    // Ejecutar cálculos CON warehouseRef
     const normalPromises = [
-      calculateLeg(origin, firstStop),
-      calculateLeg(lastStop, finalDestination),
-      ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints))
+      calculateLeg(origin, firstStop, [], null, false, warehouseRef),
+      calculateLeg(lastStop, finalDestination, [], null, false, warehouseRef),
+      ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints, null, false, warehouseRef))
     ];
 
     const normalResults = await Promise.all(normalPromises);
@@ -914,16 +916,15 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
     const toFinalDestination = normalResults[1];
     const normalSegmentResults = normalResults.slice(2);
 
-    // 🕵️ NUEVO: Procesar cada segmento con detección de outliers
+    // 🕵️ Procesar cada segmento con detección de outliers
     const segmentsWithStops = normalSegmentResults.map((result, index) => {
       const seg = normalSegments[index];
       const stops = [seg.origin, ...seg.waypoints, seg.destination];
 
-      // 🆕 CASO 1: Si el segmento tiene error (404, ZERO_RESULTS, etc)
+      // CASO 1: Si el segmento tiene error
       if (result.error) {
         console.log(`❌ Segmento ${index} con error: ${result.errorType}`);
         
-        // Registrar TODAS las direcciones de este segmento como problemáticas
         stops.forEach(address => {
           registerProblematicAddress(address, [`SEGMENT_ERROR_${result.errorType}`]);
         });
@@ -932,7 +933,7 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
           ...result,
           stops,
           hasOutliers: true,
-          outlierCount: stops.length, // Todas las direcciones son sospechosas
+          outlierCount: stops.length,
           qualityFlag: 'ERROR',
           errorDetails: {
             errorType: result.errorType,
@@ -942,14 +943,13 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
         };
       }
 
-      // 🆕 CASO 2: Segmento OK, detectar outliers en legs individuales
+      // CASO 2: Segmento OK, detectar outliers
       const outliers = detectOutlierLegs(result.legsDetailed, result.geocodedWaypoints);
       
       let processedResult = { ...result };
       let qualityFlag = null;
       let imputedCount = 0;
 
-      // Si hay outliers, intentar imputar
       if (outliers.length > 0) {
         console.log(`🕵️ Segmento ${index}: ${outliers.length} outliers detectados`);
         
@@ -959,7 +959,6 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
           result.geocodedWaypoints
         );
 
-        // Si la imputación fue exitosa, recalcular totales
         if (imputation.qualityFlag !== 'LOW_QUALITY') {
           const recalculated = recalculateTotalsFromLegs(imputation.legsImputed);
           processedResult.distance = recalculated.distance;
@@ -975,7 +974,6 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
           console.log(`⚠️ Segmento ${index}: Demasiados outliers, marcado como LOW_QUALITY`);
         }
 
-        // Registrar direcciones problemáticas
         outliers.forEach(outlier => {
           registerProblematicAddress(outlier.endAddress, outlier.reasons);
         });
@@ -1008,9 +1006,9 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
         const altSegments = generateSegments(altWorkStops);
 
         const aiPromises = [
-          calculateLeg(origin, altFirstStop),
-          calculateLeg(altLastStop, finalDestination),
-          ...altSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints))
+          calculateLeg(origin, altFirstStop, [], null, false, warehouseRef),
+          calculateLeg(altLastStop, finalDestination, [], null, false, warehouseRef),
+          ...altSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints, null, false, warehouseRef))
         ];
 
         const aiResults = await Promise.all(aiPromises);
@@ -1019,14 +1017,12 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
         const fromAltLastStop = aiResults[1];
         const altSegmentResults = aiResults.slice(2);
 
-        // Procesar segmentos IA con detección de outliers (igual que normal)
         const altSegmentsWithStops = altSegmentResults.map((result, idx) => {
           const seg = altSegments[idx];
           const segStops = seg.waypoints.length > 0
             ? [seg.origin, ...seg.waypoints, seg.destination]
             : [seg.origin, seg.destination];
 
-          // Error en segmento IA
           if (result.error) {
             segStops.forEach(address => {
               registerProblematicAddress(address, [`AI_SEGMENT_ERROR_${result.errorType}`]);
@@ -1040,7 +1036,6 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
             };
           }
 
-          // Detección normal de outliers
           const outliers = detectOutlierLegs(result.legsDetailed, result.geocodedWaypoints);
           
           if (outliers.length > 0) {
@@ -1104,21 +1099,17 @@ app.post('/api/optimize-route', authenticateUser, async (req, res) => {
       hasErrors: false,
       isAiOptimized,
       
-      // Datos Normales
       toFirstStop,
       segments: segmentsWithStops,
       toFinalDestination,
       
-      // Datos IA
       aiRoute: aiRouteData,
       
-      // ARIA
       aria: {
         multiplier: ariaResult.multiplier,
         rutasAnalizadas: ariaResult.rutasAnalizadas
       },
 
-      // 🆕 Metadata de Calidad
       routeQuality: {
         totalSegments: segmentsWithStops.length,
         totalLegs,
