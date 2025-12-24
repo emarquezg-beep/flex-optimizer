@@ -770,7 +770,20 @@ async function sendToBackend() {
 
         const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
-        console.log('📦 Payload completo:', JSON.stringify(payload, null, 2)); // 👈 Debug
+            const requestPayload = {
+              addresses: fullRouteAmazon,
+              aiOptimizedAddresses: aiOptimizedStops,
+              finalDestination: selectedDestination.value === 'custom' 
+                ? customDestination.value 
+                : selectedDestination.value,
+              startTime: blockData.value.hora,
+              warehouseDelay: blockData.value.retrasoalmacen,
+              currentDate: blockData.value.fecha,
+              warehouse: warehouse.address,
+              warehouseCode: warehouse.code
+            };
+
+        console.log('📦 Payload completo:', JSON.stringify(requestPayload , null, 2)); // 👈 Debug
         console.log('🔍 DEBUG WAREHOUSE:');
         console.log('selectedWarehouseCode:', selectedWarehouseCode.value);
         console.log('warehouse object:', warehouse);
@@ -784,26 +797,15 @@ async function sendToBackend() {
         hasWarehouse: !!warehouse
         };
 
-        // 👇 ALERT PARA VER EL PAYLOAD
-        alert(`PAYLOAD:\nwarehouse: ${payload.warehouse}\nwarehouseCode: ${payload.warehouseCode}`);
+        // 👇 ALERT PARA DEBUG
+        alert(`Warehouse: ${requestPayload.warehouse}\nCode: ${requestPayload.warehouseCode}`);
 
+        // 👇 ENVIAR
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
           method: 'POST',
-          body: JSON.stringify({
-            addresses: fullRouteAmazon,
-            aiOptimizedAddresses: aiOptimizedStops,
-            finalDestination: selectedDestination.value === 'custom' 
-              ? customDestination.value 
-              : selectedDestination.value,
-            startTime: blockData.value.hora,
-            warehouseDelay: blockData.value.retrasoalmacen,
-            currentDate: blockData.value.fecha,
-            warehouse: warehouse.address,        // 👈 Para geocoding
-            warehouseCode: warehouse.code        // 👈 Para BD
-          })
+          body: JSON.stringify(requestPayload)
         });
 
-        
         const result = await response.json();
         console.log("✅ Respuesta recibida:", result);
 
