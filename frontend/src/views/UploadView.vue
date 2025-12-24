@@ -729,9 +729,10 @@ async function sendToBackend() {
         // B. Validar Warehouse
         const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
         if (!warehouse) {
-            throw new Error(`Error crítico: No se encontró el almacén con código '${selectedWarehouseCode.value}'. Revisa la configuración.`);
+          throw new Error(`Error crítico: No se encontró el almacén con código ${selectedWarehouseCode.value}. Revisa la configuración.`);
         }
 
+        console.log(`✅ Warehouse seleccionado: ${warehouse.code} - ${warehouse.address}`);
         // C. Preparar Ruta Normal
         const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => 
           Number(a.number) - Number(b.number)
@@ -760,11 +761,13 @@ async function sendToBackend() {
         // ... (código de IA)
 
         // --- ENVIAR AL SERVIDOR ---
-        console.log('📤 Enviando datos...');
+        console.log('📤 Enviando datos al backend...');
+        console.log(`🏭 Warehouse a enviar: ${warehouse.address}`); // 👈 Agregar este log
         backendResponse.value = { status: 'loading' };
 
         const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
+        console.log('📦 Payload completo:', JSON.stringify(payload, null, 2)); // 👈 Debug
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
           method: 'POST',
           body: JSON.stringify({
