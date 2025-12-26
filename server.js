@@ -88,6 +88,8 @@ console.log('   Current Time (Native):', new Date().toString());
 console.log('=================================================');
 app.use(cors(corsOptions));
 app.use(express.json());
+app.options("*", cors(corsOptions));
+console.log("✅ CORS configurado con soporte OPTIONS explícito");
 const mapsClient = new Client({});
 
 // Tu conexión de Supabase (sin cambios)

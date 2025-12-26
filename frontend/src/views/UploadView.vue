@@ -16,6 +16,75 @@ import {
   getColorForScore 
 } from '@/constants/mensajesConscientes';
 
+// ═══════════════════════════════════════════════════════════════
+// 🔧 A2: FETCH ROBUSTO (WRAPPER SOBRE fetchWithAuth)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Agrega timeout a cualquier fetch usando AbortController
+ * @param {Function} fetchFn - Función de fetch (ej: fetchWithAuth)
+ * @param {string} url - URL del endpoint
+ * @param {Object} options - Opciones del fetch
+ * @param {number} timeoutMs - Timeout en milisegundos (default: 90s)
+ */
+async function fetchWithTimeout(fetchFn, url, options, timeoutMs = 90000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    // Agregar signal al options
+    const optionsWithSignal = {
+      ...options,
+      signal: controller.signal
+    };
+
+    const response = await fetchFn(url, optionsWithSignal);
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Agrega retry con backoff exponencial
+ * @param {Function} fetchFn - Función de fetch con timeout
+ * @param {string} url - URL del endpoint
+ * @param {Object} options - Opciones del fetch
+ * @param {number} maxRetries - Número máximo de reintentos
+ */
+async function fetchWithRetry(fetchFn, url, options, maxRetries = 2) {
+  let attempt = 0;
+
+  while (true) {
+    try {
+      console.log(`📤 Intento ${attempt + 1}/${maxRetries + 1}...`);
+      const response = await fetchWithTimeout(fetchFn, url, options, 90000);
+      return response;
+    } catch (error) {
+      // Si llegamos al límite de reintentos, lanzar error
+      if (attempt >= maxRetries) {
+        console.error(`❌ Falló después de ${attempt + 1} intentos`);
+        throw error;
+      }
+
+      // Si es timeout o error de red, reintentar
+      if (error.name === 'AbortError' || error.message.includes('fetch')) {
+        attempt++;
+        const waitTime = 600 * Math.pow(2, attempt - 1); // 600ms, 1200ms
+        
+        console.log(`⚠️ Error: ${error.message}`);
+        console.log(`🔄 Reintentando en ${waitTime}ms...`);
+        
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      } else {
+        // Si es otro tipo de error (ej: auth), no reintentar
+        throw error;
+      }
+    }
+  }
+}
+
+
 // ============================================
 // 2. VARIABLES Y ESTADO
 // ============================================
@@ -1037,11 +1106,18 @@ async function processImagesWithOCR() {
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
     console.log('📡 Enviando imágenes a:', `${backendUrl}/api/v1/ocr/amazon-stops`);
     
-    const response = await fetchWithAuth(`${backendUrl}/api/v1/ocr/amazon-stops`, {
-      method: 'POST',
-      body: formData,
-      // No incluir Content-Type, fetch lo configurará automáticamente para FormData
-    });
+    // 🆕 Usar fetchWithRetry que envuelve a fetchWithAuth
+    const response = await fetchWithRetry(
+      fetchWithAuth, // ← Pasamos fetchWithAuth como parámetro
+      `${backendUrl}/api/v1/ocr/amazon-stops`,
+      {
+        method: "POST",
+        body: formData,
+        // No incluir Content-Type, fetch lo configurará automáticamente para FormData
+      },
+      2 // ← 2 reintentos máximo
+    );
+
     
     if (!response.ok) {
       const errorData = await response.json();
