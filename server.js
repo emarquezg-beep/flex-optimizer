@@ -88,8 +88,32 @@ console.log('   Current Time (Native):', new Date().toString());
 console.log('=================================================');
 app.use(cors(corsOptions));
 app.use(express.json());
-app.options("*", cors(corsOptions));
-console.log("✅ CORS configurado con soporte OPTIONS explícito");
+// Middleware para interceptar TODAS las requests OPTIONS (preflight)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    console.log(`✅ [PREFLIGHT] ${req.path}`);
+    
+    // Responder manualmente a preflight con headers CORS
+    const origin = req.headers.origin;
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      res.header('Access-Control-Allow-Origin', origin || '*');
+      res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Max-Age', '86400'); // 24 horas de cache
+      
+      return res.status(200).end();
+    } else {
+      console.error(`❌ [PREFLIGHT BLOCKED] Origin: ${origin}`);
+      return res.status(403).json({ error: 'CORS not allowed' });
+    }
+  }
+  
+  next();
+});
+
+console.log("✅ CORS configurado con handler OPTIONS manual");
 const mapsClient = new Client({});
 
 // Tu conexión de Supabase (sin cambios)
