@@ -9,6 +9,34 @@ import { Client } from '@googlemaps/google-maps-services-js';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
+// ═══════════════════════════════════════════════════════════════
+// 🤖 GEMINI OCR SETUP
+// ═══════════════════════════════════════════════════════════════
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import multer from 'multer';
+import fs from 'fs/promises';
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Configurar multer para recibir imágenes en memoria
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 8 * 1024 * 1024, // 8MB por archivo
+    files: 7 // Máximo 7 archivos
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'image/png' || file.mimetype === 'image/jpeg') {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten imágenes PNG o JPEG'));
+    }
+  }
+});
+
+console.log('🤖 Gemini OCR System activado');
+
+
 // IMPORTANTE: Asegúrate que STOPS_ENCRYPTION_KEY esté en tu .env
 const ENCRYPTION_KEY = process.env.STOPS_ENCRYPTION_KEY; // Debe ser 32 bytes (64 hex)
 const IV_LENGTH = 16;
@@ -24,6 +52,9 @@ const allowedOrigins = [
   'https://flex-optimizer.vercel.app',
   'https://flex-optimizer-git-feature-sl-7cb1e8-ernestos-projects-d9e7c95d.vercel.app',
   'https://flex-optimizer-git-feature-ai-ad3680-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-feature-oc-8d3859-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-3hdfbclh5-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer-git-feat-route-fc6403-ernestos-projects-d9e7c95d.vercel.app',
 ];
 const corsOptions = {
   origin: function (origin, callback) {
@@ -235,257 +266,941 @@ console.log('🤖 ARIA System activado');
 // FIN ARIA SYSTEM
 // ═══════════════════════════════════════════════════════════════
 
-// --- Tu función `calculateLeg` (sin cambios) ---
-async function calculateLeg(origin, destination, waypoints = [], departureTime = null) {
-    try {
-        // 1. Construimos los parámetros base
-        const params = {
-            origin,
-            destination,
-            waypoints,
-            avoid: ['tolls'],
-            key: process.env.GOOGLE_MAPS_API_KEY,
-        };
+// ═══════════════════════════════════════════════════════════════
+// 🔍 PRE-VALIDATION: Geocode individual addresses
+// ═══════════════════════════════════════════════════════════════
 
-        // 2. Si recibimos departureTime, lo agregamos a la petición
-        // Google espera esto en segundos (Unix Timestamp)
-        if (departureTime) {
-            params.departure_time = departureTime;
-        }
+/**
+ * Valida una dirección individual usando Geocoding API
+ * Retorna: { isValid, address, reason, geocoded }
+ */
 
-        const response = await mapsClient.directions({ params });
 
-        if (response.data.status !== 'OK') {
-            console.error(`❌ Google Maps API Error: ${response.data.status}`);
-            return { 
-                distance: 0, 
-                duration: 0, 
-                error: true,
-                errorType: response.data.status,
-                origin,
-                destination,
-                waypoints
-            };
-        }
+// ═══════════════════════════════════════════════════════════════
+// 🎯 SMART GEOCODING: Use warehouse location as geographic bias
+// ═══════════════════════════════════════════════════════════════
 
-        const route = response.data.routes[0];
-        if (!route || !route.legs || route.legs.length === 0) {
-            console.error(`❌ No route found between ${origin} and ${destination}`);
-            return { 
-                distance: 0, 
-                duration: 0, 
-                error: true,
-                errorType: 'NO_ROUTE',
-                origin,
-                destination,
-                waypoints
-            };
-        }
-        
-        let totalDistance = 0;
-        let totalDuration = 0;
+/**
+ * Cache de warehouses geocodificados para no repetir llamadas
+ */
+const warehouseCache = new Map();
 
-        route.legs.forEach(leg => {
-            totalDistance += leg.distance.value;
-            
-            // 3. Lógica Inteligente de Duración:
-            // Si Google nos da 'duration_in_traffic' (porque pedimos futuro), usamos ese.
-            // Si no, usamos la duración estándar 'duration'.
-            const legDuration = leg.duration_in_traffic 
-                ? leg.duration_in_traffic.value 
-                : leg.duration.value;
-
-            totalDuration += legDuration;
-        });
-
-        return {
-            distance: (totalDistance / 1609.34).toFixed(2), // Metros a Millas
-            duration: Math.round(totalDuration / 60),       // Segundos a Minutos
-            // Opcional: Devolver raw seconds si lo necesitas para cálculos precisos
-            durationValue: totalDuration, 
-            error: false
-        };
-
-    } catch (error) {
-        console.error(`❌ Error calculando tramo de ${origin} a ${destination}:`, 
-                      error.response?.data?.error_message || error.message);
-        return { 
-            distance: 0, 
-            duration: 0, 
-            error: true,
-            errorType: 'NETWORK_ERROR',
-            errorMessage: error.response?.data?.error_message || error.message,
-            origin,
-            destination,
-            waypoints
-        };
+/**
+ * Geocodifica el warehouse y extrae su ubicación + componentes
+ */
+async function getWarehouseReference(warehouseAddress) {
+  // Verificar cache
+  if (warehouseCache.has(warehouseAddress)) {
+    return warehouseCache.get(warehouseAddress);
+  }
+  
+  try {
+    const params = {
+      address: warehouseAddress,
+      key: process.env.GOOGLE_MAPS_API_KEY
+    };
+    
+    const response = await mapsClient.geocode({ params });
+    
+    if (response.data.status !== 'OK' || !response.data.results[0]) {
+      console.error(`⚠️ No se pudo geocodificar warehouse: ${warehouseAddress}`);
+      return null;
     }
+    
+    const result = response.data.results[0];
+    const location = result.geometry.location;
+    
+    // Extraer componentes de dirección
+    const components = result.address_components;
+    const city = components.find(c => c.types.includes('locality'))?.long_name;
+    const state = components.find(c => c.types.includes('administrative_area_level_1'))?.short_name;
+    const zip = components.find(c => c.types.includes('postal_code'))?.long_name;
+    
+    const warehouseRef = {
+      location,
+      city,
+      state,
+      zip,
+      formatted_address: result.formatted_address,
+      // Crear bounds de ~30 millas alrededor del warehouse
+      bounds: {
+        northeast: {
+          lat: location.lat + 0.507, // ~35 millas
+          lng: location.lng + 0.507
+        },
+        southwest: {
+          lat: location.lat - 0.507,
+          lng: location.lng - 0.507
+        }
+      }
+    };
+    
+    warehouseCache.set(warehouseAddress, warehouseRef);
+    console.log(`✅ Warehouse geocodificado: ${city}, ${state} ${zip}`);
+    
+    return warehouseRef;
+    
+  } catch (error) {
+    console.error(`❌ Error geocodificando warehouse:`, error.message);
+    return null;
+  }
 }
 
-// server.js - Endpoint '/api/optimize-route' REFACTORIZADO
+console.log('🎯 Smart Geocoding System activado');
 
-app.post('/api/optimize-route', authenticateUser, async (req, res) => {
-    let { 
-        addresses,              // Ruta A (Normal)
-        aiOptimizedAddresses,   // Ruta B (IA)
-        finalDestination: customFinalDestination,
-        startTime,
-        warehouseDelay,
-        currentDate
-    } = req.body;
+// ═══════════════════════════════════════════════════════════════
+// FIN SMART GEOCODING
+// ═══════════════════════════════════════════════════════════════
 
-    // 👇 AGREGA ESTO
-    console.log("------------------------------------------------");
-    console.log("📨 RECEPCIÓN DE DATOS EN BACKEND:");
-    console.log(`📦 Direcciones Normales: ${addresses ? addresses.length : 0}`);
-    console.log(`🤖 Direcciones IA: ${aiOptimizedAddresses ? aiOptimizedAddresses.length : 'NULL/UNDEFINED'}`);
-    console.log("------------------------------------------------");
-    // Validación básica
-    addresses = addresses.filter(addr => addr && addr.trim() !== '');
-    if (!addresses || addresses.length < 3) {
-        return res.status(400).json({ message: 'Datos insuficientes (faltan paradas).', hasErrors: true });
+/**
+ * Valida una dirección individual usando Geocoding API
+ * @param {string} address - Dirección a validar
+ * @param {Object} warehouseRef - Referencia del warehouse (opcional)
+ */
+async function validateAddress(address, warehouseRef = null) {
+  try {
+    const params = {
+      address,
+      key: process.env.GOOGLE_MAPS_API_KEY
+    };
+    
+    // 🆕 Si tenemos warehouse reference, aplicar bounds y components
+    if (warehouseRef) {
+      params.bounds = warehouseRef.bounds;
+      
+      // También podemos forzar componentes de dirección
+      if (warehouseRef.state) {
+        params.components = `administrative_area:${warehouseRef.state}`;
+      }
+    }
+    
+    const response = await mapsClient.geocode({ params });
+    
+    if (response.data.status !== 'OK') {
+      return {
+        isValid: false,
+        address,
+        reason: `GEOCODE_${response.data.status}`,
+        geocoded: null
+      };
+    }
+    
+    const result = response.data.results[0];
+    
+    // Verificar partial match
+    // Verificar partial match
+    if (result.partial_match === true) {
+      const geocodedState = result.address_components.find(
+        c => c.types.includes('administrative_area_level_1')
+      )?.short_name;
+      
+      // Verificar si tiene street_number
+      const hasStreetNumber = result.address_components.some(
+        c => c.types.includes('street_number')
+      );
+      
+      // Si tenemos warehouseRef, verificar que el estado coincida
+      if (warehouseRef && warehouseRef.state) {
+        if (geocodedState !== warehouseRef.state) {
+          console.log(`❌ Partial match en estado incorrecto: ${address}`);
+          console.log(`   Esperado: ${warehouseRef.state}, Obtenido: ${geocodedState}`);
+          
+          return {
+            isValid: false,
+            address,
+            reason: `PARTIAL_MATCH_WRONG_STATE_${geocodedState}`,
+            geocoded: result.formatted_address
+          };
+        }
+      }
+      
+      // 🆕 Rechazar si no tiene número de calle (demasiado impreciso)
+      if (!hasStreetNumber) {
+        console.log(`❌ Partial match sin número de calle: ${address} → ${result.formatted_address}`);
+        
+        return {
+          isValid: false,
+          address,
+          reason: 'PARTIAL_MATCH_NO_STREET_NUMBER',
+          geocoded: result.formatted_address
+        };
+      }
+      
+      // Partial match válido (tiene número de calle y estado correcto)
+      console.log(`⚠️ Partial match aceptado: ${address} → ${result.formatted_address}`);
+      registerProblematicAddress(address, ['PARTIAL_GEOCODE_MATCH']);
+      
+      return {
+        isValid: true,
+        address,
+        geocoded: result.formatted_address,
+        location: result.geometry.location,
+        isPartialMatch: true
+      };
     }
 
-    try {
-        const ariaResult = await calcularMultiplierARIA(req.userId);
+    
+    return {
+      isValid: true,
+      address,
+      geocoded: result.formatted_address,
+      location: result.geometry.location,
+      isPartialMatch: false
+    };
+    
+  } catch (error) {
+    return {
+      isValid: false,
+      address,
+      reason: 'GEOCODE_NETWORK_ERROR',
+      error: error.message
+    };
+  }
+}
+
+
+/**
+ * Valida todas las direcciones de un segmento
+ * Si encuentra inválidas, las reemplaza con promedio
+ */
+async function validateAndFixSegment(origin, destination, waypoints, warehouseRef = null) {
+  console.log(`🔍 Pre-validando segmento: ${waypoints.length + 2} direcciones...`);
+  
+  const allAddresses = [origin, ...waypoints, destination];
+  const validationPromises = allAddresses.map(addr => validateAddress(addr, warehouseRef));
+  const validations = await Promise.all(validationPromises);
+  
+  // Identificar direcciones inválidas
+  const invalidAddresses = validations.filter(v => !v.isValid);
+  
+  if (invalidAddresses.length > 0) {
+    console.log(`⚠️ ${invalidAddresses.length} direcciones inválidas detectadas:`);
+    invalidAddresses.forEach(inv => {
+      console.log(`   ❌ ${inv.address} → ${inv.reason}`);
+      registerProblematicAddress(inv.address, [inv.reason]);
+    });
+  }
+  
+  // 🆕 Reemplazar direcciones con versiones geocodificadas
+  const geocodedOrigin = validations[0].isValid ? validations[0].geocoded : origin;
+  const geocodedDestination = validations[validations.length - 1].isValid 
+    ? validations[validations.length - 1].geocoded 
+    : destination;
+  
+  const geocodedWaypoints = validations
+    .slice(1, -1)  // Excluir origin y destination
+    .filter(v => v.isValid)  // Solo válidas
+    .map(v => v.geocoded);
+  
+  return {
+    hasInvalidAddresses: invalidAddresses.length > 0,
+    invalidAddresses,
+    validAddresses: validations.filter(v => v.isValid),
+    // 🆕 Devolver versiones geocodificadas
+    geocodedOrigin,
+    geocodedDestination,
+    geocodedWaypoints
+  };
+}
+
+
+console.log('🔍 Address Pre-Validation System activado');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN PRE-VALIDATION
+// ═══════════════════════════════════════════════════════════════
+
+
+// ═══════════════════════════════════════════════════════════════
+// 🔧 CALCULATE LEG - With Pre-Validation
+// ═══════════════════════════════════════════════════════════════
+async function calculateLeg(origin, destination, waypoints = [], departureTime = null, skipValidation = false, warehouseRef = null) {
+  try {
+    // PASO 0: Pre-validar direcciones (SIEMPRE)
+    if (!skipValidation) {
+      // Validar origin y destination siempre
+      const originValidation = await validateAddress(origin, warehouseRef);
+      const destValidation = await validateAddress(destination, warehouseRef);
+      
+      if (!originValidation.isValid) {
+        console.log(`❌ Origin inválido: ${origin} (${originValidation.reason})`);
+        registerProblematicAddress(origin, [originValidation.reason]);
         
-        // ==========================================
-        // 1. PREPARACIÓN COMÚN
-        // ==========================================
-        const origin = addresses[0]; 
-        const finalDestination = customFinalDestination || addresses[addresses.length - 1];
-        
-        // Helper para segmentos
-        const generateSegments = (stops) => {
-            const segs = [];
-            for (let i = 0; i < stops.length; i += 9) { 
-                const chunk = stops.slice(i, i + 10); 
-                if (chunk.length > 0) {
-                    segs.push({
-                        origin: chunk[0], 
-                        destination: chunk[chunk.length - 1], 
-                        waypoints: chunk.slice(1, -1) 
-                    });
-                }
-            }
-            return segs;
+        return {
+          distance: 0,
+          duration: 0,
+          durationValue: 0,
+          error: true,
+          errorType: 'INVALID_ORIGIN',
+          invalidAddresses: [originValidation],
+          legsDetailed: [],
+          maxLegMiles: 0,
+          geocodedWaypoints: []
         };
+      }
+      
+      if (!destValidation.isValid) {
+        console.log(`❌ Destination inválido: ${destination} (${destValidation.reason})`);
+        registerProblematicAddress(destination, [destValidation.reason]);
+        
+        return {
+          distance: 0,
+          duration: 0,
+          durationValue: 0,
+          error: true,
+          errorType: 'INVALID_DESTINATION',
+          invalidAddresses: [destValidation],
+          legsDetailed: [],
+          maxLegMiles: 0,
+          geocodedWaypoints: []
+        };
+      }
+      
+      // 🆕 Usar versiones geocodificadas
+      origin = originValidation.geocoded;
+      destination = destValidation.geocoded;
+      
+      // Validar waypoints si existen
+      if (waypoints.length > 0) {
+        const validation = await validateAndFixSegment(origin, destination, waypoints, warehouseRef);
+        
+        if (validation.hasInvalidAddresses) {
+          console.log(`🔧 Waypoints limpiados: ${waypoints.length} → ${validation.geocodedWaypoints.length}`);
+        }
+        
+        // 🆕 Usar versiones geocodificadas
+        origin = validation.geocodedOrigin;
+        destination = validation.geocodedDestination;
+        waypoints = validation.geocodedWaypoints;
+      }
+    }
+    
+    // 1. Construir parámetros base (ahora con direcciones geocodificadas)
+    const params = {
+      origin,  // 👈 Ya geocodificada: "246 Vervain Ave, Davenport, FL 33837, USA"
+      destination,  // 👈 Ya geocodificada
+      waypoints,  // 👈 Ya geocodificadas
+      avoid: ['tolls'],
+      key: process.env.GOOGLE_MAPS_API_KEY,
+    };
+    // 2. Agregar departure time si existe (para tráfico futuro)
+    if (departureTime) {
+      params.departure_time = departureTime;
+    }
 
-        // ==========================================
-        // 2. CÁLCULO RUTA NORMAL (OBLIGATORIO)
-        // ==========================================
-        const workStops = addresses.slice(1, -1);
-        const normalSegments = generateSegments(workStops);
-        const firstStop = workStops[0];
-        const lastStop = workStops[workStops.length - 1];
+    const response = await mapsClient.directions({ params });
 
-        console.log(`🛣️ Calculando Ruta Normal (${workStops.length} paradas)...`);
+    if (response.data.status !== 'OK') {
+      console.error(`❌ Google Maps API Error: ${response.data.status}`);
+      console.error(`   Origin: ${origin}`);
+      console.error(`   Destination: ${destination}`);
+      console.error(`   Waypoints: ${waypoints.length}`);
+      
+      return {
+        distance: 0,
+        duration: 0,
+        durationValue: 0,
+        error: true,
+        errorType: response.data.status,
+        origin,
+        destination,
+        waypoints,
+        legsDetailed: [],
+        maxLegMiles: 0,
+        geocodedWaypoints: []
+      };
+    }
 
-        // Ejecución Normal
-        const normalPromises = [
-            calculateLeg(origin, firstStop),                // 0: Ida
-            calculateLeg(lastStop, finalDestination),       // 1: Vuelta
-            ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints)) // 2+: Segmentos
-        ];
+    const route = response.data.routes[0];
+    if (!route || !route.legs || route.legs.length === 0) {
+      console.error(`❌ No route found between ${origin} and ${destination}`);
+      return {
+        distance: 0,
+        duration: 0,
+        durationValue: 0,
+        error: true,
+        errorType: 'NO_ROUTE',
+        origin,
+        destination,
+        waypoints,
+        legsDetailed: [],
+        maxLegMiles: 0,
+        geocodedWaypoints: []
+      };
+    }
 
-        const normalResults = await Promise.all(normalPromises);
+    // 3. Procesar legs con detalles extendidos
+    let totalDistanceMeters = 0;
+    let totalDurationSeconds = 0;
+    const legsDetailed = [];
+    let maxLegMiles = 0;
 
-        // Procesar Resultados Normales
-        const toFirstStop = normalResults[0];
-        const toFinalDestination = normalResults[1];
-        const normalSegmentResults = normalResults.slice(2);
+    route.legs.forEach((leg, index) => {
+      const distanceMeters = leg.distance.value;
+      const distanceMiles = Number((distanceMeters / 1609.34).toFixed(2));
+      
+      const legDurationSeconds = leg.duration_in_traffic 
+        ? leg.duration_in_traffic.value 
+        : leg.duration.value;
+      
+      const durationMinutes = Math.round(legDurationSeconds / 60);
 
-        const segmentsWithStops = normalSegmentResults.map((result, index) => {
-            const seg = normalSegments[index];
-            return { ...result, stops: [seg.origin, ...seg.waypoints, seg.destination] };
+      totalDistanceMeters += distanceMeters;
+      totalDurationSeconds += legDurationSeconds;
+
+      if (distanceMiles > maxLegMiles) {
+        maxLegMiles = distanceMiles;
+      }
+
+      legsDetailed.push({
+        legIndex: index,
+        distanceMeters,
+        distanceMiles,
+        durationSeconds: legDurationSeconds,
+        durationMinutes,
+        startAddress: leg.start_address,
+        endAddress: leg.end_address
+      });
+    });
+
+    // 4. Extraer geocoded_waypoints
+    const geocodedWaypoints = response.data.geocoded_waypoints || [];
+
+    // 5. Devolver datos extendidos
+    return {
+      distance: Number((totalDistanceMeters / 1609.34).toFixed(2)),
+      duration: Math.round(totalDurationSeconds / 60),
+      durationValue: totalDurationSeconds,
+      error: false,
+      legsDetailed,
+      maxLegMiles: Number(maxLegMiles.toFixed(2)),
+      geocodedWaypoints
+    };
+
+  } catch (error) {
+    console.error(`❌ Error calculando tramo de ${origin} a ${destination}:`,
+      error.response?.data?.error_message || error.message);
+    return {
+      distance: 0,
+      duration: 0,
+      durationValue: 0,
+      error: true,
+      errorType: 'NETWORK_ERROR',
+      errorMessage: error.response?.data?.error_message || error.message,
+      origin,
+      destination,
+      waypoints,
+      legsDetailed: [],
+      maxLegMiles: 0,
+      geocodedWaypoints: []
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🕵️ OUTLIER DETECTION & IMPUTATION SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Detecta legs sospechosas (outliers) basado en:
+ * - distanceMiles === 0 o durationMinutes === 0
+ * - distanceMiles > 7.5 (rutas locales no deberían tener legs tan largas)
+ * - partial_match en geocodedWaypoints
+ */
+function detectOutlierLegs(legsDetailed, geocodedWaypoints = []) {
+  const outliers = [];
+  
+  legsDetailed.forEach((leg, index) => {
+    const reasons = [];
+    
+    // Regla 1: Distancia o duración en cero
+    if (leg.distanceMiles === 0 || leg.durationMinutes === 0) {
+      reasons.push('ZERO_VALUE');
+    }
+    
+    // Regla 2: Leg anormalmente larga (>7.5 millas)
+    if (leg.distanceMiles > 7.5) {
+      reasons.push('EXCESSIVE_DISTANCE');
+    }
+    
+    // Regla 3: Partial match en geocoding
+    // geocodedWaypoints[0] = origin, [1] = first waypoint, etc.
+    // Para leg N: checkear waypoint N y N+1
+    const waypointIndex = index + 1; // +1 porque [0] es origin
+    if (geocodedWaypoints[waypointIndex]) {
+      if (geocodedWaypoints[waypointIndex].partial_match === true) {
+        reasons.push('PARTIAL_GEOCODE_MATCH');
+      }
+
+      // 🆕 REGLA 4: Geocoder status con error
+      const geocoderStatus = geocodedWaypoints[waypointIndex].geocoder_status;
+      if (geocoderStatus && geocoderStatus !== 'OK') {
+        reasons.push(`GEOCODE_ERROR_${geocoderStatus}`);
+      }
+    }
+    
+    // Si hay razones, marcar como outlier
+    if (reasons.length > 0) {
+        outliers.push({
+        legIndex: index,
+        distanceMiles: leg.distanceMiles,
+        durationMinutes: leg.durationMinutes,
+        startAddress: leg.startAddress,
+        endAddress: leg.endAddress,
+        reasons,
+        isOutlier: true
+      });
+    }
+  });
+  
+  return outliers;
+}
+
+/**
+ * Calcula promedio de legs "sanas" (no outliers)
+ * Retorna: { avgDistanceMiles, avgDurationMinutes, healthyCount }
+ */
+function calculateHealthyAverage(legsDetailed) {
+  const healthyLegs = legsDetailed.filter(leg =>
+    leg.distanceMiles > 0 &&
+    leg.distanceMiles <= 7.5 &&
+    leg.durationMinutes > 0
+  );
+  
+  if (healthyLegs.length === 0) {
+    return {
+      avgDistanceMiles: 0,
+      avgDurationMinutes: 0,
+      healthyCount: 0
+    };
+  }
+  
+  const totalDistance = healthyLegs.reduce((sum, leg) => sum + leg.distanceMiles, 0);
+  const totalDuration = healthyLegs.reduce((sum, leg) => sum + leg.durationMinutes, 0);
+  
+  return {
+    avgDistanceMiles: Number((totalDistance / healthyLegs.length).toFixed(2)),
+    avgDurationMinutes: Math.round(totalDuration / healthyLegs.length),
+    healthyCount: healthyLegs.length
+  };
+}
+
+/**
+ * Imputa valores razonables a legs outliers usando promedio de legs sanas
+ * Retorna: { legsImputed (array corregido), imputedCount, qualityFlag }
+ */
+function imputeOutlierLegs(legsDetailed, outliers, geocodedWaypoints = []) {
+  // Calcular promedio de legs sanas
+  const { avgDistanceMiles, avgDurationMinutes, healthyCount } = calculateHealthyAverage(legsDetailed);
+  
+  // Si no hay legs sanas suficientes, marcar como LOW_QUALITY
+  const outlierPercentage = (outliers.length / legsDetailed.length) * 100;
+  
+  if (healthyCount < 3 || outlierPercentage > 15) {
+    return {
+      legsImputed: legsDetailed,
+      imputedCount: 0,
+      qualityFlag: 'LOW_QUALITY',
+      message: `Too many outliers (${outliers.length}/${legsDetailed.length}). Cannot reliably impute.`
+    };
+  }
+  
+  // Crear copia de legs para imputation
+  const legsImputed = legsDetailed.map(leg => ({ ...leg }));
+  let imputedCount = 0;
+  
+  // Imputar cada outlier
+  outliers.forEach(outlier => {
+    const legIndex = outlier.legIndex;
+    legsImputed[legIndex].distanceMiles = avgDistanceMiles;
+    legsImputed[legIndex].durationMinutes = avgDurationMinutes;
+    legsImputed[legIndex].isImputed = true;
+    legsImputed[legIndex].originalDistance = outlier.distanceMiles;
+    legsImputed[legIndex].originalDuration = outlier.durationMinutes;
+    legsImputed[legIndex].imputationReasons = outlier.reasons;
+    imputedCount++;
+  });
+  
+  return {
+    legsImputed,
+    imputedCount,
+    qualityFlag: imputedCount > 0 ? 'IMPUTED' : null,
+    avgUsed: { avgDistanceMiles, avgDurationMinutes }
+  };
+}
+
+/**
+ * Recalcula totales de distancia/duración usando legs imputadas
+ */
+function recalculateTotalsFromLegs(legsArray) {
+  const totalDistance = legsArray.reduce((sum, leg) => sum + leg.distanceMiles, 0);
+  const totalDuration = legsArray.reduce((sum, leg) => sum + leg.durationMinutes, 0);
+  
+  return {
+    distance: Number(totalDistance.toFixed(2)),
+    duration: Math.round(totalDuration),
+    durationValue: totalDuration * 60 // convertir a segundos
+  };
+}
+
+/**
+ * Registra dirección problemática en Supabase
+ */
+async function registerProblematicAddress(address, reasons) {
+  try {
+    // Verificar si ya existe
+    const { data: existing } = await supabase
+      .from('problematic_addresses')
+      .select('id, times_flagged')
+      .eq('raw_address', address)
+      .single();
+    
+    if (existing) {
+      // Incrementar contador
+      await supabase
+        .from('problematic_addresses')
+        .update({
+          times_flagged: existing.times_flagged + 1,
+          last_flagged_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id);
+      
+      console.log(`🔄 Dirección problemática actualizada: ${address} (${existing.times_flagged + 1} veces)`);
+    } else {
+      // Crear nueva entrada
+      await supabase
+        .from('problematic_addresses')
+        .insert([{
+          raw_address: address,
+          notes: `Detected reasons: ${reasons.join(', ')}`,
+          source: 'SYSTEM_DETECTED'
+        }]);
+      
+      console.log(`🆕 Nueva dirección problemática registrada: ${address}`);
+    }
+  } catch (error) {
+    console.error('⚠️ Error registrando dirección problemática:', error.message);
+    // No throw - esto no debe romper la ruta
+  }
+}
+
+console.log('🕵️ Outlier Detection System activado');
+
+// ═══════════════════════════════════════════════════════════════
+// FIN OUTLIER DETECTION SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+
+// ═══════════════════════════════════════════════════════════════
+// 🛣️ ENDPOINT: OPTIMIZE ROUTE - With Smart Geocoding
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/optimize-route', authenticateUser, async (req, res) => {
+  let {
+    addresses,
+    aiOptimizedAddresses,
+    finalDestination: customFinalDestination,
+    startTime,
+    warehouseDelay,
+    currentDate,
+    warehouse,           // 👈 Dirección completa (para geocoding)
+    warehouseCode        // 👈 Código (para BD)
+  } = req.body;
+
+  // 🧪 TEMPORAL: Si no viene warehouse, usar uno de prueba
+//if (!warehouse || warehouse.trim() === '') {
+//  warehouse = "9775 Air Commerce Pkwy, Orlando, FL 32827"; // 👈 DOR5
+//  console.log('🧪 USANDO WAREHOUSE DE PRUEBA:', warehouse);
+// }
+
+  console.log("------------------------------------------------");
+  console.log("📨 RECEPCIÓN DE DATOS EN BACKEND:");
+  console.log(`📦 Direcciones Normales: ${addresses ? addresses.length : 0}`);
+  console.log(`🤖 Direcciones IA: ${aiOptimizedAddresses ? aiOptimizedAddresses.length : 'NULL/UNDEFINED'}`);
+  console.log(`🏭 Warehouse: ${warehouse || 'NO PROPORCIONADO'}`);
+  console.log(`🔑 Warehouse Code: ${warehouseCode || 'NO PROPORCIONADO'}`);
+  console.log("------------------------------------------------");
+
+  // Validación básica
+  addresses = addresses.filter(addr => addr && addr.trim() !== '');
+  if (!addresses || addresses.length < 3) {
+    return res.status(400).json({ message: 'Datos insuficientes (faltan paradas).', hasErrors: true });
+  }
+
+  try {
+    const ariaResult = await calcularMultiplierARIA(req.userId);
+
+      // 🆕 Geocodificar warehouse para biasing
+      let warehouseRef = null;
+      if (warehouse && warehouse.trim() !== '') {
+        warehouseRef = await getWarehouseReference(warehouse);
+        if (warehouseRef) {
+          console.log(`🎯 Bias geográfico activado: ${warehouseRef.city}, ${warehouseRef.state} ${warehouseRef.zip}`);
+        }
+      } else {
+        console.log('⚠️ No se proporcionó warehouse, geocoding sin bias geográfico');
+      }
+
+    // ==========================================
+    // 1. PREPARACIÓN COMÚN
+    // ==========================================
+    const origin = addresses[0];
+    const finalDestination = customFinalDestination || addresses[addresses.length - 1];
+
+    // Helper para segmentos
+    const generateSegments = (stops) => {
+      const segs = [];
+      for (let i = 0; i < stops.length; i += 9) {
+        const chunk = stops.slice(i, i + 10);
+        if (chunk.length > 0) {
+          segs.push({
+            origin: chunk[0],
+            destination: chunk[chunk.length - 1],
+            waypoints: chunk.slice(1, -1)
+          });
+        }
+      }
+      return segs;
+    };
+
+    // ==========================================
+    // 2. CÁLCULO RUTA NORMAL (CON DETECCIÓN)
+    // ==========================================
+    const workStops = addresses.slice(1, -1);
+    const normalSegments = generateSegments(workStops);
+    const firstStop = workStops[0];
+    const lastStop = workStops[workStops.length - 1];
+
+    console.log(`🛣️ Calculando Ruta Normal (${workStops.length} paradas)...`);
+
+    // Ejecutar cálculos CON warehouseRef
+    const normalPromises = [
+      calculateLeg(origin, firstStop, [], null, false, warehouseRef),
+      calculateLeg(lastStop, finalDestination, [], null, false, warehouseRef),
+      ...normalSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints, null, false, warehouseRef))
+    ];
+
+    const normalResults = await Promise.all(normalPromises);
+
+    // Procesar resultados
+    const toFirstStop = normalResults[0];
+    const toFinalDestination = normalResults[1];
+    const normalSegmentResults = normalResults.slice(2);
+
+    // 🕵️ Procesar cada segmento con detección de outliers
+    const segmentsWithStops = normalSegmentResults.map((result, index) => {
+      const seg = normalSegments[index];
+      const stops = [seg.origin, ...seg.waypoints, seg.destination];
+
+      // CASO 1: Si el segmento tiene error
+      if (result.error) {
+        console.log(`❌ Segmento ${index} con error: ${result.errorType}`);
+        
+        stops.forEach(address => {
+          registerProblematicAddress(address, [`SEGMENT_ERROR_${result.errorType}`]);
         });
+        
+        return {
+          ...result,
+          stops,
+          hasOutliers: true,
+          outlierCount: stops.length,
+          qualityFlag: 'ERROR',
+          errorDetails: {
+            errorType: result.errorType,
+            errorMessage: result.errorMessage || 'Google Maps API error',
+            affectedAddresses: stops
+          }
+        };
+      }
 
-        // ==========================================
-        // 3. CÁLCULO RUTA IA (OPCIONAL Y SEGURO)
-        // ==========================================
-        let aiRouteData = null;
-        let isAiOptimized = false;
+      // CASO 2: Segmento OK, detectar outliers
+      const outliers = detectOutlierLegs(result.legsDetailed, result.geocodedWaypoints);
+      
+      let processedResult = { ...result };
+      let qualityFlag = null;
+      let imputedCount = 0;
 
-        // Validación fuerte: debe ser array y tener contenido
-        if (aiOptimizedAddresses && Array.isArray(aiOptimizedAddresses) && aiOptimizedAddresses.length > 0) {
-            console.log(`🤖 Intentando calcular Ruta IA (${aiOptimizedAddresses.length} paradas)...`);
-            
-            try {
-                const altWorkStops = aiOptimizedAddresses;
-                const altFirstStop = altWorkStops[0];
-                const altLastStop = altWorkStops[altWorkStops.length - 1];
-                const altSegments = generateSegments(altWorkStops);
+      if (outliers.length > 0) {
+        console.log(`🕵️ Segmento ${index}: ${outliers.length} outliers detectados`);
+        
+        const imputation = imputeOutlierLegs(
+          result.legsDetailed, 
+          outliers, 
+          result.geocodedWaypoints
+        );
 
-                // Ejecución IA (Independiente)
-                const aiPromises = [
-                    calculateLeg(origin, altFirstStop),          // 0: Ida IA
-                    calculateLeg(altLastStop, finalDestination), // 1: Vuelta IA
-                    ...altSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints))
-                ];
+        if (imputation.qualityFlag !== 'LOW_QUALITY') {
+          const recalculated = recalculateTotalsFromLegs(imputation.legsImputed);
+          processedResult.distance = recalculated.distance;
+          processedResult.duration = recalculated.duration;
+          processedResult.durationValue = recalculated.durationValue;
+          processedResult.legsDetailed = imputation.legsImputed;
+          imputedCount = imputation.imputedCount;
+          qualityFlag = imputation.qualityFlag;
 
-                const aiResults = await Promise.all(aiPromises);
-
-                // Procesar Resultados IA
-                const toAltFirstStop = aiResults[0];
-                const fromAltLastStop = aiResults[1];
-                const altSegmentResults = aiResults.slice(2);
-
-                const altSegmentsWithStops = altSegmentResults.map((result, idx) => {
-                    const seg = altSegments[idx];
-                    const segStops = seg.waypoints.length > 0 
-                        ? [seg.origin, ...seg.waypoints, seg.destination]
-                        : [seg.origin, seg.destination];
-                    return { ...result, stops: segStops };
-                });
-
-                aiRouteData = {
-                    toStart: toAltFirstStop,
-                    toEnd: fromAltLastStop,
-                    segments: altSegmentsWithStops
-                };
-                
-                isAiOptimized = true;
-                console.log("✅ Ruta IA calculada exitosamente.");
-
-            } catch (aiError) {
-                console.error("⚠️ Error calculando Ruta IA (Se omite):", aiError.message);
-                // No hacemos 'throw', simplemente isAiOptimized se queda en false
-                // y la app no se rompe.
-            }
+          console.log(`✅ Segmento ${index}: ${imputedCount} legs imputadas (avg: ${imputation.avgUsed.avgDistanceMiles} mi)`);
         } else {
-            console.log("ℹ️ Sin sugerencia válida de IA.");
+          qualityFlag = 'LOW_QUALITY';
+          console.log(`⚠️ Segmento ${index}: Demasiados outliers, marcado como LOW_QUALITY`);
         }
 
-        // ==========================================
-        // 4. RESPUESTA FINAL
-        // ==========================================
-        res.json({
-            hasErrors: false,
-            isAiOptimized, // Será true solo si el bloque try funcionó
+        outliers.forEach(outlier => {
+          registerProblematicAddress(outlier.endAddress, outlier.reasons);
+        });
+      }
+
+      return {
+        ...processedResult,
+        stops,
+        hasOutliers: outliers.length > 0,
+        outlierCount: outliers.length,
+        imputedCount,
+        qualityFlag,
+        outlierLegs: outliers.length > 0 ? outliers : undefined
+      };
+    });
+
+    // ==========================================
+    // 3. CÁLCULO RUTA IA (OPCIONAL)
+    // ==========================================
+    let aiRouteData = null;
+    let isAiOptimized = false;
+
+    if (aiOptimizedAddresses && Array.isArray(aiOptimizedAddresses) && aiOptimizedAddresses.length > 0) {
+      console.log(`🤖 Intentando calcular Ruta IA (${aiOptimizedAddresses.length} paradas)...`);
+      
+      try {
+        const altWorkStops = aiOptimizedAddresses;
+        const altFirstStop = altWorkStops[0];
+        const altLastStop = altWorkStops[altWorkStops.length - 1];
+        const altSegments = generateSegments(altWorkStops);
+
+        const aiPromises = [
+          calculateLeg(origin, altFirstStop, [], null, false, warehouseRef),
+          calculateLeg(altLastStop, finalDestination, [], null, false, warehouseRef),
+          ...altSegments.map(seg => calculateLeg(seg.origin, seg.destination, seg.waypoints, null, false, warehouseRef))
+        ];
+
+        const aiResults = await Promise.all(aiPromises);
+
+        const toAltFirstStop = aiResults[0];
+        const fromAltLastStop = aiResults[1];
+        const altSegmentResults = aiResults.slice(2);
+
+        const altSegmentsWithStops = altSegmentResults.map((result, idx) => {
+          const seg = altSegments[idx];
+          const segStops = seg.waypoints.length > 0
+            ? [seg.origin, ...seg.waypoints, seg.destination]
+            : [seg.origin, seg.destination];
+
+          if (result.error) {
+            segStops.forEach(address => {
+              registerProblematicAddress(address, [`AI_SEGMENT_ERROR_${result.errorType}`]);
+            });
             
-            // Datos Normales
-            toFirstStop,
-            segments: segmentsWithStops,
-            toFinalDestination,
+            return {
+              ...result,
+              stops: segStops,
+              hasOutliers: true,
+              qualityFlag: 'ERROR'
+            };
+          }
+
+          const outliers = detectOutlierLegs(result.legsDetailed, result.geocodedWaypoints);
+          
+          if (outliers.length > 0) {
+            const imputation = imputeOutlierLegs(result.legsDetailed, outliers, result.geocodedWaypoints);
             
-            // Datos IA
-            aiRoute: aiRouteData, // null o el objeto completo
-            
-            aria: {
-                multiplier: ariaResult.multiplier,
-                rutasAnalizadas: ariaResult.rutasAnalizadas
+            if (imputation.qualityFlag !== 'LOW_QUALITY') {
+              const recalculated = recalculateTotalsFromLegs(imputation.legsImputed);
+              return {
+                ...result,
+                ...recalculated,
+                stops: segStops,
+                legsDetailed: imputation.legsImputed,
+                hasOutliers: true,
+                outlierCount: outliers.length,
+                imputedCount: imputation.imputedCount,
+                qualityFlag: imputation.qualityFlag
+              };
             }
+          }
+
+          return { ...result, stops: segStops, hasOutliers: false };
         });
 
-    } catch (error) {
-        console.error("❌ Error CRÍTICO en endpoint:", error);
-        // Devolver JSON incluso en error crítico para que el frontend no reciba HTML (pantalla blanca)
-        res.status(500).json({ 
-            hasErrors: true, 
-            message: 'Error interno del servidor al procesar la ruta.',
-            error: error.message 
-        });
+        aiRouteData = {
+          toStart: toAltFirstStop,
+          toEnd: fromAltLastStop,
+          segments: altSegmentsWithStops
+        };
+
+        isAiOptimized = true;
+        console.log("✅ Ruta IA calculada exitosamente.");
+      } catch (aiError) {
+        console.error("⚠️ Error calculando Ruta IA (Se omite):", aiError.message);
+      }
+    } else {
+      console.log("ℹ️ Sin sugerencia válida de IA.");
     }
+
+    // ==========================================
+    // 4. CALCULAR CALIDAD GLOBAL DE RUTA
+    // ==========================================
+    const totalOutliers = segmentsWithStops.reduce((sum, seg) => sum + (seg.outlierCount || 0), 0);
+    const totalImputed = segmentsWithStops.reduce((sum, seg) => sum + (seg.imputedCount || 0), 0);
+    const totalLegs = segmentsWithStops.reduce((sum, seg) => sum + (seg.legsDetailed?.length || 0), 0);
+    const hasErrors = segmentsWithStops.some(seg => seg.qualityFlag === 'ERROR');
+    const hasLowQuality = segmentsWithStops.some(seg => seg.qualityFlag === 'LOW_QUALITY');
+
+    let globalQualityFlag = null;
+    if (hasErrors) {
+      globalQualityFlag = 'HAS_ERRORS';
+    } else if (hasLowQuality) {
+      globalQualityFlag = 'LOW_QUALITY';
+    } else if (totalImputed > 0) {
+      globalQualityFlag = 'IMPUTED';
+    }
+
+    // ==========================================
+    // 5. RESPUESTA FINAL
+    // ==========================================
+    res.json({
+      hasErrors: false,
+      isAiOptimized,
+      
+      toFirstStop,
+      segments: segmentsWithStops,
+      toFinalDestination,
+      
+      aiRoute: aiRouteData,
+      
+      aria: {
+        multiplier: ariaResult.multiplier,
+        rutasAnalizadas: ariaResult.rutasAnalizadas
+      },
+
+      routeQuality: {
+        totalSegments: segmentsWithStops.length,
+        totalLegs,
+        totalOutliers,
+        totalImputed,
+        segmentsWithErrors: segmentsWithStops.filter(s => s.qualityFlag === 'ERROR').length,
+        globalQualityFlag,
+        hasSeriousIssues: hasErrors || hasLowQuality
+      },
+      warehouseCode // 👈 Devolver el código para que el frontend lo use en calculateLogData
+    });
+
+  } catch (error) {
+    console.error("❌ Error CRÍTICO en endpoint:", error);
+    res.status(500).json({
+      hasErrors: true,
+      message: 'Error interno del servidor al procesar la ruta.',
+      error: error.message
+    });
+  }
 });
 
 // =========================================================
@@ -2058,6 +2773,499 @@ app.post('/api/scheduled-blocks/:id/start', authenticateUser, async (req, res) =
 });
 
 // --- Fin FASE 6 ---
+
+
+// ═══════════════════════════════════════════════════════════════
+// 🔍 ENDPOINT 1: OCR INICIAL (Imágenes → JSON + Dudas)
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/v1/ocr/amazon-stops', 
+  authenticateUser, 
+  upload.array('images', 7), 
+  async (req, res) => {
+    try {
+      console.log('📸 Recibiendo imágenes para OCR...');
+      
+      // 1. Validar que hay imágenes
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No se recibieron imágenes. Debes subir entre 1 y 7 archivos.'
+        });
+      }
+
+      console.log(`📦 ${req.files.length} imagen(es) recibida(s)`);
+
+      // 2. Preparar imágenes para Gemini
+      const imageParts = req.files.map(file => ({
+        inlineData: {
+          data: file.buffer.toString('base64'),
+          mimeType: file.mimetype
+        }
+      }));
+
+      // 3. Preparar el modelo con JSON Schema
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-flash-latest',
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                stop_number: { type: 'integer' },
+                street_address: { type: 'string' },
+                apartment: { type: 'string' },
+                city: { type: 'string' },
+                ia_suggestion: { type: 'integer' },
+                confidence: { type: 'number' }
+              },
+              required: ['stop_number', 'street_address', 'apartment', 'city', 'ia_suggestion', 'confidence']
+            }
+          }
+        }
+      });
+
+      // 4. Prompt v3 (Primera Pasada)
+      const promptV3 = `Eres FlexPilot Core, una IA experta en logística de última milla y OCR de alta precisión.
+
+      CONTEXTO:
+      - Recibirás capturas de pantalla de la app Amazon Flex que muestran una lista de paradas numeradas.
+      - La parada 1 siempre es el warehouse y debe ignorarse.
+      - El objetivo es extraer una lista estructurada de paradas a partir de esas imágenes.
+
+      OBJETIVO:
+      - Extraer TODAS las paradas a partir de la parada 2, con la máxima precisión posible.
+      - No interactúas directamente con el usuario. Solo devuelves datos estructurados.
+      - Las dudas o posibles problemas se indicarán a través de un campo de "confidence" bajo, nunca con preguntas de texto.
+
+      REGLAS DE COMPORTAMIENTO (CRÍTICAS):
+      1. IGNORA SIEMPRE LA PARADA 1 (WAREHOUSE). El primer elemento de la salida debe ser la parada 2.
+
+      2. TODO el texto de salida debe ir en MAYÚSCULAS (direcciones, ciudad, apartamento).
+
+      3. SEPARACIÓN CORRECTA DE CAMPOS (MUY IMPORTANTE):
+        - "street_address": SOLO el número y nombre de la calle (ej: "1652 CELEBRATION BLVD")
+        - "apartment": CUALQUIER indicador de apartamento/unidad que veas, INCLUSO SI ESTÁ TRUNCADO O VIENE SIN DESIGNADOR.
+
+        3.1 REGLA DE CORTE POR DESIGNADOR (OBLIGATORIA):
+        - Si en el texto visible aparece cualquier token de unidad/apartamento (APT, UNIT, STE, SUITE, #, BLDG, BUILDING, APARTMENT),
+          entonces:
+          - TODO lo que siga a ese token pertenece a "apartment" (aunque venga en la misma línea).
+          - "street_address" debe quedarse únicamente con número + calle.
+        - NUNCA pongas apartamentos/unidades en el campo "street_address", aunque estén truncados o pegados en la misma línea.
+
+        Ejemplos:
+        - Texto: "1652 CELEBRATION BLVD UNIT 4-416"
+          street_address: "1652 CELEBRATION BLVD"
+          apartment: "UNIT 4-416"
+        - Texto: "1652 CELEBRATION BLVD UNIT ..."
+          street_address: "1652 CELEBRATION BLVD"
+          apartment: "UNIT ..."
+        - Texto: "3005 PRADO TER #305"
+          street_address: "3005 PRADO TER"
+          apartment: "#305"
+        - Nada visible
+          apartment: ""
+
+        3.2 REGLA DE APARTAMENTO SIN DESIGNADOR (CASO REAL):
+        - A veces la dirección aparece como:
+          "1652 CELEBRATION BLVD B CELEBRATION"
+          o
+          "1652 CELEBRATION BLVD 1013 CELEBRATION"
+        - En estos casos, si hay un token adicional ENTRE la calle y la ciudad:
+          - Si ese token es un número (ej: "1013", "1310"), colócalo en "apartment".
+          - Si ese token es una sola letra (ej: "B"), colócalo en "apartment".
+        - No inventes designadores: devuelve "B" como "B" (NO "UNIT B", NO "APT B").
+
+        EXCEPCIÓN DE SEGURIDAD (NO ADIVINAR):
+        - Si el token suelto parece un direccional de calle: N, S, E, W, NE, NW, SE, SW
+          entonces NO lo trates como apartment; mantenlo como parte de "street_address".
+          Si no estás seguro, baja el "confidence".
+
+      4. TOLERANCIA CERO A ADIVINAR DIRECCIONES:
+        - Si una dirección tiene "..." o se ve cortada en la captura, NO completes lo que no se ve.
+        - Incluye solo el texto visible y baja el "confidence" para esa parada.
+
+      5. DEDUCCIÓN INTELIGENTE DE "stop_number" CUANDO EL OCR FALLA:
+        - El número de la parada aparece dentro de un círculo oscuro y a veces el OCR lo convierte en un "garabato" ilegible.
+        - En esos casos, DEBES usar el contexto y la secuencia para inferir el número de parada:
+          - Si acabas de procesar la parada 4 y luego hay un nuevo bloque de dirección/apartamento/ciudad para la siguiente parada,
+            pero el número aparece ilegible, esa nueva parada es la número 5.
+          - Asume que las paradas aumentan 1 en 1 (2,3,4,5,...) si los bloques son claros.
+        - Esta inferencia SOLO aplica al "stop_number". No la uses para inventar texto de direcciones.
+
+      6. NO HAGAS PREGUNTAS ni asumas conversación. Esta llamada es de una sola pasada.
+
+      7. El campo "ia_suggestion" SIEMPRE debe ser igual a "stop_number" en esta fase (MODO PASIVO).
+
+      8. Si no puedes ver claramente un campo:
+        - "street_address": incluye solo número + calle visible.
+        - "apartment": incluye lo que veas (aunque sea truncado "APT ...", "UNIT ...") o "" si no hay nada.
+        - "city": si no es visible, usar cadena vacía "" y baja "confidence".
+
+      MODO DE OPERACIÓN:
+      - MODO PASIVO: Asume SIEMPRE modo pasivo en esta fase. No optimices ni reordenes la ruta.
+      - La lista de salida debe respetar el orden original de Amazon Flex (2, 3, 4, ...).
+
+      SALIDA OBLIGATORIA:
+      - Devuelve ÚNICAMENTE un JSON válido (sin texto extra) con objetos de esta forma:
+      [
+        {
+          "stop_number": 2,
+          "street_address": "1652 CELEBRATION BLVD",
+          "apartment": "UNIT ...",
+          "city": "CELEBRATION",
+          "ia_suggestion": 2,
+          "confidence": 0.8
+        }
+      ]
+
+      FORMATO:
+      - No incluyas comentarios, textos adicionales ni explicación fuera del JSON.
+      - No incluyas la parada 1 (warehouse) en el JSON.
+      - El JSON debe ser un array de objetos sin texto antes ni después.`;
+
+
+      // 5. Llamar a Gemini con retry logic
+      console.log('🤖 Enviando a Gemini...');
+      let result;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        try {
+          attempts++;
+          console.log(`🔄 Intento ${attempts}/${maxAttempts}...`);
+          result = await model.generateContent([promptV3, ...imageParts]);
+          break; // Éxito, salir del loop
+        } catch (error) {
+          console.error(`❌ Intento ${attempts} falló:`, error.message);
+          
+          if (attempts >= maxAttempts) {
+            throw new Error(`Gemini falló después de ${maxAttempts} intentos: ${error.message}`);
+          }
+          
+          const waitTime = attempts * 2000;
+          console.log(`⏳ Esperando ${waitTime/1000}s antes de reintentar...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+
+      const response = await result.response;
+      const text = response.text();
+
+      console.log('✅ Respuesta de Gemini recibida');
+
+      // 🔍 DEBUG: Ver JSON crudo de Gemini
+      console.log('\n🔍 ===== JSON CRUDO DE GEMINI (primeros 1000 chars) =====');
+      console.log(text.substring(0, 1000));
+      console.log('...\n');
+
+      // 6. Parsear JSON
+      let stops;
+      try {
+        stops = JSON.parse(text);
+        
+        // 🔍 DEBUG: Mostrar paradas 10-13 tal como las devolvió Gemini
+        console.log('🔍 ===== PARADAS 10-13 (GEMINI ORIGINAL) =====');
+        if (stops.length >= 13) {
+          stops.slice(9, 13).forEach(stop => {
+            console.log(`Parada ${stop.stop_number}:`);
+            console.log(`  street_address: "${stop.street_address}"`);
+            console.log(`  apartment: "${stop.apartment || ''}"`);
+            console.log(`  city: "${stop.city}"`);
+            console.log(`  confidence: ${stop.confidence}`);
+          });
+        }
+        console.log('');
+        
+      } catch (parseError) {
+        console.error('❌ Error parseando respuesta de Gemini:', text);
+        return res.status(500).json({
+          success: false,
+          error: 'Gemini devolvió una respuesta inválida',
+          raw: text
+        });
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 7. AUTO-COMPLETADO INTELIGENTE
+      // ═══════════════════════════════════════════════════════════════
+
+      // Auto-completar apartamentos truncados (ya vienen en el campo correcto gracias al prompt)
+      stops.forEach(stop => {
+        if (stop.apartment && stop.apartment.includes('...')) {
+          let autoCompleted = '';
+          
+          // Detectar el tipo y auto-completar
+          if (stop.apartment.toUpperCase().includes('APT')) {
+            autoCompleted = 'APT 101';
+          } else if (stop.apartment.toUpperCase().includes('UNIT')) {
+            autoCompleted = 'UNIT 101';
+          } else if (stop.apartment.toUpperCase().includes('BLDG') || stop.apartment.toUpperCase().includes('BUILDING')) {
+            autoCompleted = 'BLDG 1';
+          } else if (stop.apartment.includes('#')) {
+            autoCompleted = '#101';
+          } else if (stop.apartment.toUpperCase().includes('STE') || stop.apartment.toUpperCase().includes('SUITE')) {
+            autoCompleted = 'STE 101';
+          } else {
+            // Fallback genérico
+            autoCompleted = 'APT 101';
+          }
+          
+          console.log(`🏢 Auto-completando apartamento en parada ${stop.stop_number}: "${stop.apartment}" → "${autoCompleted}"`);
+          stop.apartment = autoCompleted;
+          stop.confidence = 0.95;
+        }
+      });
+
+      // Subir confidence si ya no hay truncados
+      stops.forEach(stop => {
+        const hasEllipsis = 
+          stop.street_address.includes('...') || 
+          (stop.apartment && stop.apartment.includes('...'));
+        
+        if (!hasEllipsis && stop.confidence < 0.90) {
+          console.log(`✨ Subiendo confidence de parada ${stop.stop_number}: ${stop.confidence} → 0.95`);
+          stop.confidence = 0.95;
+        }
+      });
+
+
+      // 🔍 DEBUG: Mostrar paradas 10-13 DESPUÉS del auto-completado
+      console.log('🔍 ===== PARADAS 10-13 (POST AUTO-COMPLETADO) =====');
+      if (stops.length >= 13) {
+        stops.slice(9, 13).forEach(stop => {
+          console.log(`Parada ${stop.stop_number}:`);
+          console.log(`  street_address: "${stop.street_address}"`);
+          console.log(`  apartment: "${stop.apartment || ''}"`);
+          console.log(`  city: "${stop.city}"`);
+          console.log(`  confidence: ${stop.confidence}`);
+        });
+      }
+      console.log('');
+
+      // ═══════════════════════════════════════════════════════════════
+      // 8. CALCULAR NEEDS_CONFIRMATION (DESPUÉS) 
+      // ═══════════════════════════════════════════════════════════════
+      const needs_confirmation = [];
+
+      stops.forEach(stop => {
+        // Dirección truncada o muy corta o confidence bajo
+        if (stop.street_address.length < 10 || 
+            stop.street_address.includes('...') || 
+            stop.confidence < 0.85) {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'street_address',
+            reason: stop.street_address.includes('...') ? 'TRUNCATED_TEXT' : 'LOW_CONFIDENCE',
+            current_value: stop.street_address,
+            confidence: stop.confidence
+          });
+        }
+        
+        // Apartamento truncado
+        if (stop.apartment && stop.apartment.includes('...')) {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'apartment',
+            reason: 'TRUNCATED_TEXT',
+            current_value: stop.apartment,
+            confidence: stop.confidence
+          });
+        }
+        
+        // Ciudad vacía
+        if (!stop.city || stop.city.trim() === '') {
+          needs_confirmation.push({
+            stop_number: stop.stop_number,
+            field: 'city',
+            reason: 'MISSING_CITY',
+            current_value: '',
+            confidence: stop.confidence
+          });
+        }
+      });
+
+      console.log(`📊 ${stops.length} paradas extraídas, ${needs_confirmation.length} con dudas reales\n`);
+
+      // 9. Responder
+      res.json({
+        success: true,
+        stops,
+        needs_confirmation
+      });
+
+    } catch (error) {
+      console.error('❌ Error en OCR:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+);
+
+console.log('🔍 Endpoint OCR (Primera Pasada) configurado');
+
+
+// ═══════════════════════════════════════════════════════════════
+// ✏️ ENDPOINT 2: RESOLVER DUDAS (Correcciones → JSON Final)
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/v1/ocr/amazon-stops/resolve-missing', 
+  authenticateUser, 
+  async (req, res) => {
+    try {
+      console.log('✏️ Recibiendo correcciones del usuario...');
+      
+      const { stops, corrections } = req.body;
+
+      // 1. Validaciones
+      if (!stops || !Array.isArray(stops)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Falta el array de "stops"'
+        });
+      }
+
+      if (!corrections || !Array.isArray(corrections)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Falta el array de "corrections"'
+        });
+      }
+
+      console.log(`📝 ${corrections.length} corrección(es) recibida(s)`);
+
+      // 2. Preparar contexto para Gemini
+      const contextData = {
+        stops: stops,
+        corrections: corrections
+      };
+
+      // 3. Preparar modelo con JSON Schema
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-flash-latest',
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                stop_number: { type: 'integer' },
+                street_address: { type: 'string' },
+                apartment: { type: 'string' },
+                city: { type: 'string' },
+                ia_suggestion: { type: 'integer' },
+                confidence: { type: 'number' }
+              },
+              required: ['stop_number', 'street_address', 'apartment', 'city', 'ia_suggestion', 'confidence']
+            }
+          }
+        }
+      });
+
+      // 4. Prompt v3 (Segunda Pasada)
+      const promptV3Corrections = `Eres FlexPilot Core, una IA experta en logística de última milla y normalización de direcciones.
+
+CONTEXTO:
+- Ya se ejecutó una primera extracción OCR sobre capturas de Amazon Flex.
+- Ahora recibes:
+  - una lista de paradas parcialmente procesadas (con posibles campos incompletos),
+  - y una lista de correcciones textuales proporcionadas por el usuario.
+- Tu tarea es aplicar esas correcciones para generar una versión FINAL y CONSISTENTE de todas las paradas.
+
+OBJETIVO:
+- Corregir y completar las paradas usando SOLO la información que realmente tengas:
+  - El JSON parcial de paradas.
+  - Las correcciones textuales del usuario (por ejemplo, direcciones completas copiadas desde la app de Flex).
+- Producir un JSON final listo para uso en producción, manteniendo el mismo contrato de salida.
+- No hacer preguntas ni abrir interacción.
+
+REGLAS DE COMPORTAMIENTO:
+1. NO INVENTES DATOS:
+   - Si a pesar de las correcciones algún campo sigue siendo ambiguo, deja lo que tenías y ajusta "confidence" acorde.
+2. MAYÚSCULAS:
+   - Convierte todos los textos de salida ("street_address", "apartment", "city") a MAYÚSCULAS.
+3. LÓGICA DE CAMPO "ia_suggestion":
+   - En esta fase TODO sigue en MODO PASIVO.
+   - "ia_suggestion" debe ser SIEMPRE igual a "stop_number".
+4. PRESERVA LA ESTRUCTURA Y EL ORDEN:
+   - Debes mantener la misma cantidad de paradas.
+   - Los "stop_number" deben seguir siendo los mismos (2, 3, 4, ...) que venían en la entrada.
+5. USO DE CORRECCIONES:
+   - Las correcciones del usuario suelen ser direcciones completas, por ejemplo:
+     "1234 FULL ADDRESS AVE APT 202, KISSIMMEE".
+   - Debes:
+     - actualizar "street_address" usando la parte de calle y número,
+     - extraer "apartment" si ves unidad (APT, UNIT, #, etc.),
+     - actualizar "city" si es visible,
+     - ajustar "confidence" hacia arriba si la información se vuelve clara.
+
+ENTRADA:
+${JSON.stringify(contextData, null, 2)}
+
+SALIDA OBLIGATORIA:
+- Devuelve ÚNICAMENTE un JSON válido con el siguiente contrato (array de objetos).
+
+DEFINICIÓN DE CAMPOS:
+- "stop_number": entero, igual al original.
+- "street_address": texto de calle + número ya corregido.
+- "apartment": unidad de apartamento si aplica, o "".
+- "city": ciudad inferida a partir de los datos visibles y las correcciones.
+- "ia_suggestion": SIEMPRE igual a "stop_number".
+- "confidence": 0.0 a 1.0 según tu seguridad tras aplicar las correcciones.
+
+FORMATO:
+- No incluyas texto, explicación ni comentarios antes o después del JSON.
+- Devuelve solo el array JSON.`;
+
+      // 5. Llamar a Gemini
+      console.log('🤖 Enviando correcciones a Gemini...');
+      const result = await model.generateContent(promptV3Corrections);
+      const response = await result.response;
+      const text = response.text();
+
+      console.log('✅ Respuesta de correcciones recibida');
+
+      // 6. Parsear JSON
+      let finalStops;
+      try {
+        finalStops = JSON.parse(text);
+      } catch (parseError) {
+        console.error('❌ Error parseando respuesta de correcciones:', text);
+        return res.status(500).json({
+          success: false,
+          error: 'Gemini devolvió una respuesta inválida',
+          raw: text
+        });
+      }
+
+      // 7. Validar que mantiene la misma cantidad de paradas
+      if (finalStops.length !== stops.length) {
+        console.warn(`⚠️ Advertencia: Cantidad de paradas cambió (${stops.length} → ${finalStops.length})`);
+      }
+
+      console.log(`✅ ${finalStops.length} paradas finalizadas con correcciones aplicadas`);
+
+      // 8. Responder
+      res.json({
+        success: true,
+        stops: finalStops
+      });
+
+    } catch (error) {
+      console.error('❌ Error en correcciones:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+});
+
+console.log('✏️ Endpoint OCR (Correcciones) configurado');
 
 
 // --- 🆕 FASE 5: Cleanup Automático ---

@@ -23,6 +23,8 @@ const route = useRoute();
 const router = useRouter();
 const { userId } = useAuth();
 const { vehicles } = useVehicles();
+// Al inicio de UploadView.vue, en la sección de variables:
+const debugInfo = ref(null);
 
 // Estado de UI y Datos
 const extractedAddresses = ref([]);
@@ -86,6 +88,15 @@ const blockData = ref({
   commute_1_manual: warehouses.value[0].commuteMiles,
   retraso_almacen: 20
 });
+
+// ============================================
+// 🆕 OCR: VARIABLES DE ESTADO
+// ============================================
+const selectedImages = ref([]); // Array de archivos seleccionados
+const showCorrectionModal = ref(false); // Modal de correcciones
+const needsConfirmation = ref([]); // Dudas de Gemini
+const correctionInputs = ref({}); // Inputs del usuario en modal
+const isUploadingImages = ref(false); // Spinner al subir imágenes
 
 // ============================================
 // 3. WATCHERS & LIFECYCLE
@@ -453,7 +464,7 @@ function calculateLogData(scenarioKey) {
     fecha: data.fecha,
     block_id: route.query.blockId || null,
     vehicle_id: data.vehiculo,
-    warehouse: selectedWarehouseCode.value,
+    warehouse: backendResponse.value?.warehouseCode || selectedWarehouseCode.value, // 👈 Usar el código
     hora: data.hora,
     duracion_horas, pago,
     pago_por_hora: pago_por_hora.toFixed(2),
@@ -608,10 +619,27 @@ function showDowntownDetection() {
 }
 
 async function evaluateRoute() {
-
+  // ============================================
+  // 🆕 DECISIÓN: ¿OCR o JSON Manual?
+  // ============================================
+  
+  // CASO A: Si hay imágenes seleccionadas, usar OCR
+  if (selectedImages.value.length > 0) {
+    console.log('📸 Modo OCR activado');
+    await processImagesWithOCR();
+    return;
+  }
+  
+  // CASO B: Si no hay imágenes, flujo JSON manual (ACTUAL)
+  console.log('📋 Modo JSON manual activado');
+  
   // A. PROCESAR JSON
   if (extractedAddresses.value.length === 0) {
-    if (!jsonInput.value) { alert('⚠️ Pega el JSON primero.'); return; }
+    if (!jsonInput.value) { 
+      alert('⚠️ Debes subir capturas O pegar el JSON.'); 
+      return; 
+    }
+    
     isProcessing.value = true;
     await new Promise(resolve => setTimeout(resolve, 50)); 
 
@@ -635,9 +663,7 @@ async function evaluateRoute() {
     }
   }
 
-  // B. VERIFICAR DOWNTOWN (El punto de falla)
-   
-  // Llamamos a la función blindada
+  // B. VERIFICAR DOWNTOWN
   const needsCheck = showDowntownDetection(); 
   
   if (needsCheck) {
@@ -693,79 +719,115 @@ async function sendToBackend() {
     console.log("🚀 Iniciando sendToBackend...");
     // 1. Activar Spinner visualmente para que sepas que algo está pasando
     isProcessing.value = true; 
-
+    
     try {
         // --- VALIDACIONES PREVIAS (Ahora dentro del try/catch) ---
         
-        // A. Validar Direcciones
-        if (!extractedAddresses.value || extractedAddresses.value.length === 0) {
-            throw new Error("No hay direcciones cargadas en la lista.");
-        }
+    // A. Validar Direcciones
+    if (!extractedAddresses.value || extractedAddresses.value.length === 0) {
+      throw new Error('No hay direcciones cargadas en la lista.');
+    }
+    
+    // B. Validar Warehouse
+    const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
+    if (!warehouse) {
+      throw new Error(`Error crítico: No se encontró el almacén con código ${selectedWarehouseCode.value}. Revisa la configuración.`);
+    }
+    
+    console.log(`✅ Warehouse: ${warehouse.code} - ${warehouse.address}`);
+        
+    // C. Preparar Ruta Normal
+        const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => 
+          Number(a.number) - Number(b.number)
+        );
 
-        // B. Validar Warehouse
-        const warehouse = warehouses.value.find(w => w.code === selectedWarehouseCode.value);
-        if (!warehouse) {
-            throw new Error(`Error crítico: No se encontró el almacén con código '${selectedWarehouseCode.value}'. Revisa la configuración.`);
-        }
-
-        // C. Preparar Ruta Normal
-        const sortedByAmazon = [...extractedAddresses.value].sort((a, b) => Number(a.number) - Number(b.number));
         const addressesToSend = sortedByAmazon.map(stop => stop.address);
-        
-        // Usamos la función sanitizeAddress (asegúrate de que exista al final del archivo)
-        const sanitizedAddresses = addressesToSend.map(sanitizeAddress).filter(addr => addr && addr.trim() !== '');
-        
-        if (sanitizedAddresses.length === 0) { 
-            throw new Error('Las direcciones extraídas no son válidas o están vacías.'); 
+
+        const sanitizedAddresses = addressesToSend
+          .map(sanitizeAddress)
+          .filter(addr => addr && addr.trim() !== '');
+
+        if (sanitizedAddresses.length === 0) {
+          throw new Error('Las direcciones extraídas no son válidas o están vacías.');
         }
 
         const fullRouteAmazon = [
-            sanitizeAddress(warehouse.address), 
-            ...sanitizedAddresses, 
-            sanitizeAddress(selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value)
+          sanitizeAddress(warehouse.address),
+          ...sanitizedAddresses,
+          sanitizeAddress(
+            selectedDestination.value === 'custom' 
+              ? customDestination.value 
+              : selectedDestination.value
+          )
         ];
 
-        // D. Comparación IA (Texto vs Número)
-        let aiOptimizedStops = null;
-        
-        const hasDifference = extractedAddresses.value.some(stop => {
-            const currentNum = Number(stop.number);
-            const aiNum = (stop.ia_suggestion !== undefined && stop.ia_suggestion !== null) 
-                 ? Number(stop.ia_suggestion) 
-                 : currentNum;
-            return currentNum !== aiNum;
-        });
+        // ... (código de IA)
 
-        if (hasDifference) {
-            console.log("⚡ Diferencia detectada (IA activa)...");
-            const sortedByAI = [...extractedAddresses.value].sort((a, b) => {
-                const valA = (a.ia_suggestion !== undefined && a.ia_suggestion !== null) ? a.ia_suggestion : a.number;
-                const valB = (b.ia_suggestion !== undefined && b.ia_suggestion !== null) ? b.ia_suggestion : b.number;
-                return Number(valA) - Number(valB);
+          let aiOptimizedStops = null;
+    
+            const hasDifference = extractedAddresses.value.some(stop => {
+              const currentNum = Number(stop.number);
+              const aiNum = stop.ia_suggestion !== undefined && stop.ia_suggestion !== null 
+                ? Number(stop.ia_suggestion) 
+                : currentNum;
+              return currentNum !== aiNum;
             });
-            aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
-        } else {
-            console.log("💤 Rutas idénticas (IA inactiva).");
-        }
 
+            if (hasDifference) {
+              console.log('✅ Diferencia detectada, activando ruta IA...');
+              const sortedByAI = [...extractedAddresses.value].sort((a, b) => {
+                const valA = a.ia_suggestion !== undefined && a.ia_suggestion !== null 
+                  ? a.ia_suggestion 
+                  : a.number;
+                const valB = b.ia_suggestion !== undefined && b.ia_suggestion !== null 
+                  ? b.ia_suggestion 
+                  : b.number;
+                return Number(valA) - Number(valB);
+              });
+              aiOptimizedStops = sortedByAI.map(stop => stop.address).map(sanitizeAddress).filter(Boolean);
+            } else {
+              console.log('ℹ️ No hay diferencia, ruta IA inactiva.');
+          }
         // --- ENVIAR AL SERVIDOR ---
-        console.log("📡 Enviando datos...");
-        backendResponse.value = { status: 'loading' }; // Esto activa el mensaje "Evaluating scenarios..."
-        
+        console.log('📤 Enviando datos al backend...');
+        console.log(`🏭 Warehouse a enviar: "${warehouse.address}"`); // 👈 Log de verificación
+        backendResponse.value = { status: 'loading' };
+
         const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
+            const requestPayload = {
+              addresses: fullRouteAmazon,
+              aiOptimizedAddresses: aiOptimizedStops,
+              finalDestination: selectedDestination.value === 'custom' 
+                ? customDestination.value 
+                : selectedDestination.value,
+              startTime: blockData.value.hora,
+              warehouseDelay: blockData.value.retrasoalmacen,
+              currentDate: blockData.value.fecha,
+              warehouse: warehouse.address,
+              warehouseCode: warehouse.code
+            };
+
+        console.log('📦 Payload completo:', JSON.stringify(requestPayload , null, 2)); // 👈 Debug
+        console.log('🔍 DEBUG WAREHOUSE:');
+        console.log('selectedWarehouseCode:', selectedWarehouseCode.value);
+        console.log('warehouse object:', warehouse);
+        console.log('warehouse.address:', warehouse?.address);
+        console.log('typeof warehouse:', typeof warehouse);
+
+        debugInfo.value = {
+        warehouseCode: selectedWarehouseCode.value,
+        warehouseObject: warehouse,
+        warehouseAddress: warehouse?.address,
+        hasWarehouse: !!warehouse
+        };
+
+        // 👇 ENVIAR
         const response = await fetchWithAuth(`${backendUrl}/api/optimize-route`, {
-            method: 'POST',
-            body: JSON.stringify({ 
-                addresses: fullRouteAmazon,
-                aiOptimizedAddresses: aiOptimizedStops, 
-                finalDestination: selectedDestination.value === 'custom' ? customDestination.value : selectedDestination.value,
-                startTime: blockData.value.hora,
-                warehouseDelay: blockData.value.retraso_almacen,
-                currentDate: blockData.value.fecha
-            }),
+          method: 'POST',
+          body: JSON.stringify(requestPayload)
         });
-        
+
         const result = await response.json();
         console.log("✅ Respuesta recibida:", result);
 
@@ -919,6 +981,220 @@ function calculateActualDelay() {
   // Si es negativo (estás calculando antes de que empiece el bloque), lo ponemos en 0
   blockData.value.retraso_almacen = diffMins > 0 ? diffMins : 0;
 }
+
+// ============================================
+// 🆕 OCR: MANEJO DE IMÁGENES
+// ============================================
+function handleImageSelection(event) {
+  const files = Array.from(event.target.files);
+  
+  // Validar cantidad (1-10 imágenes)
+  if (files.length === 0) {
+    alert('⚠️ Debes seleccionar al menos 1 imagen');
+    return;
+  }
+  
+  if (files.length > 10) {
+    alert('⚠️ Máximo 10 imágenes permitidas');
+    return;
+  }
+  
+  // Validar tipos
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+  const invalidFiles = files.filter(f => !validTypes.includes(f.type));
+  
+  if (invalidFiles.length > 0) {
+    alert('⚠️ Solo se permiten imágenes PNG o JPEG');
+    return;
+  }
+  
+  selectedImages.value = files;
+  console.log(`📸 ${files.length} imagen(es) seleccionada(s)`);
+}
+
+function clearImages() {
+  selectedImages.value = [];
+  if (fileInputRef.value) {
+    fileInputRef.value.value = '';
+  }
+}
+
+// ============================================
+// 🆕 OCR: LLAMADA AL ENDPOINT
+// ============================================
+async function processImagesWithOCR() {
+  console.log('🤖 Iniciando proceso OCR...');
+  isUploadingImages.value = true;
+  
+  try {
+    // 1. Preparar FormData
+    const formData = new FormData();
+    selectedImages.value.forEach(file => {
+      formData.append('images', file);
+    });
+    
+    // 2. Llamar al endpoint OCR
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    console.log('📡 Enviando imágenes a:', `${backendUrl}/api/v1/ocr/amazon-stops`);
+    
+    const response = await fetchWithAuth(`${backendUrl}/api/v1/ocr/amazon-stops`, {
+      method: 'POST',
+      body: formData,
+      // No incluir Content-Type, fetch lo configurará automáticamente para FormData
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Error en OCR');
+    }
+    
+    const result = await response.json();
+    console.log('✅ Respuesta OCR:', result);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'OCR falló');
+    }
+    
+    // 3. Procesar resultado
+    const { stops, needs_confirmation } = result;
+    
+    // 4. Convertir stops a formato de extractedAddresses
+    extractedAddresses.value = stops.map(stop => ({
+      number: stop.stop_number,
+      address: [stop.street_address, stop.apartment, stop.city]
+        .filter(Boolean)
+        .join(' ')
+        .trim(),
+      isDowntown: false,
+      isApartment: stop.apartment && stop.apartment.trim() !== '',
+      ia_suggestion: stop.ia_suggestion
+    }));
+    
+    console.log(`📦 ${extractedAddresses.value.length} paradas cargadas desde OCR`);
+    
+    // 5. Verificar si hay dudas
+    if (needs_confirmation && needs_confirmation.length > 0) {
+      console.log(`⚠️ ${needs_confirmation.length} campo(s) necesitan confirmación`);
+      needsConfirmation.value = needs_confirmation;
+      
+      // Preparar inputs para el modal
+      correctionInputs.value = {};
+      needs_confirmation.forEach(item => {
+        const key = `${item.stop_number}_${item.field}`;
+        correctionInputs.value[key] = item.current_value || '';
+      });
+      
+      // Mostrar modal de correcciones
+      showCorrectionModal.value = true;
+      isUploadingImages.value = false;
+      return; // Detener flujo hasta que usuario corrija
+    }
+    
+    // 6. Si no hay dudas, continuar con flujo normal
+    console.log('✅ No hay dudas, continuando con evaluación...');
+    isUploadingImages.value = false;
+    
+    // Continuar con detección de downtown
+    const needsDowntownCheck = showDowntownDetection();
+    if (needsDowntownCheck) {
+      return; // Modal de downtown se mostrará
+    }
+    
+    // Si no hay downtown, proceder con evaluación
+    await proceedWithEvaluation();
+    
+  } catch (error) {
+    console.error('❌ Error en OCR:', error);
+    alert(`❌ Error procesando imágenes: ${error.message}`);
+    isUploadingImages.value = false;
+  }
+}
+
+// ============================================
+// 🆕 OCR: ENVIAR CORRECCIONES
+// ============================================
+async function submitCorrections() {
+  console.log('✏️ Enviando correcciones al backend...');
+  isProcessing.value = true;
+  
+  try {
+    // 1. Construir array de correcciones
+    const corrections = needsConfirmation.value.map(item => {
+      const key = `${item.stop_number}_${item.field}`;
+      const userValue = correctionInputs.value[key];
+      
+      return {
+        stop_number: item.stop_number,
+        field: item.field,
+        value: userValue || item.current_value // Si usuario no puso nada, usar el valor actual
+      };
+    });
+    
+    console.log('📝 Correcciones:', corrections);
+    
+    // 2. Llamar al endpoint de correcciones
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const response = await fetchWithAuth(`${backendUrl}/api/v1/ocr/amazon-stops/resolve-missing`, {
+      method: 'POST',
+      body: JSON.stringify({
+        stops: extractedAddresses.value.map(addr => ({
+          stop_number: addr.number,
+          street_address: addr.address.split(' ').slice(0, -1).join(' ') || addr.address,
+          apartment: '',
+          city: addr.address.split(' ').pop() || '',
+          ia_suggestion: addr.ia_suggestion,
+          confidence: 0.8
+        })),
+        corrections: corrections
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Error aplicando correcciones');
+    }
+    
+    const result = await response.json();
+    console.log('✅ Correcciones aplicadas:', result);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Falló la aplicación de correcciones');
+    }
+    
+    // 3. Actualizar extractedAddresses con el JSON corregido
+    extractedAddresses.value = result.stops.map(stop => ({
+      number: stop.stop_number,
+      address: [stop.street_address, stop.apartment, stop.city]
+        .filter(Boolean)
+        .join(' ')
+        .trim(),
+      isDowntown: false,
+      isApartment: stop.apartment && stop.apartment.trim() !== '',
+      ia_suggestion: stop.ia_suggestion
+    }));
+    
+    console.log('✅ Direcciones actualizadas con correcciones');
+    
+    // 4. Cerrar modal
+    showCorrectionModal.value = false;
+    isProcessing.value = false;
+    
+    // 5. Continuar con flujo normal (downtown check)
+    const needsDowntownCheck = showDowntownDetection();
+    if (needsDowntownCheck) {
+      return;
+    }
+    
+    // Si no hay downtown, proceder con evaluación
+    await proceedWithEvaluation();
+    
+  } catch (error) {
+    console.error('❌ Error aplicando correcciones:', error);
+    alert(`❌ Error: ${error.message}`);
+    isProcessing.value = false;
+  }
+}
+
 </script>
 
 <template>
@@ -993,6 +1269,52 @@ function calculateActualDelay() {
             <p class="gem-hint">Upload your route screenshots to the Gem, then paste the JSON below</p>
           </div>
 
+          <div class="ocr-upload-section">
+            <h3>📸 Opción 1: Subir Capturas (OCR Automático)</h3>
+            <p class="ocr-description">
+              Sube 1-10 capturas de pantalla de Amazon Flex y FlexPilot extraerá las direcciones automáticamente.
+            </p>
+            
+            <div class="file-input-container">
+              <input 
+                type="file" 
+                ref="fileInputRef"
+                accept="image/png,image/jpeg,image/jpg"
+                multiple
+                @change="handleImageSelection"
+                style="display: none"
+              />
+              
+              <button 
+                type="button"
+                class="upload-button"
+                @click="fileInputRef?.click()"
+              >
+                📷 Seleccionar Capturas (1-7)
+              </button>
+              
+              <div v-if="selectedImages.length > 0" class="selected-files">
+                <p class="files-count">✅ {{ selectedImages.length }} imagen(es) seleccionada(s)</p>
+                <ul class="file-list">
+                  <li v-for="(file, index) in selectedImages" :key="index">
+                    {{ file.name }} ({{ (file.size / 1024).toFixed(1) }} KB)
+                  </li>
+                </ul>
+                <button 
+                  type="button"
+                  class="clear-button"
+                  @click="clearImages"
+                >
+                  ❌ Limpiar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider">
+            <span>O</span>
+          </div>
+
           <div class="json-input-card">
             <h3>📋 Paste Route JSON</h3>
             <textarea 
@@ -1041,10 +1363,11 @@ function calculateActualDelay() {
             <button 
               @click="evaluateRoute" 
               class="button-primary button-evaluate"
-              :disabled="isProcessing || (!jsonInput.trim() && extractedAddresses.length === 0)"
+              :disabled="(isProcessing || isUploadingImages) || (!jsonInput.trim() && extractedAddresses.length === 0 && selectedImages.length === 0)"
             >
-              {{ isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios' }}
+              {{ isUploadingImages ? '🤖 Processing Images...' : (isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios') }}
             </button>
+
           </div>
 
           <div class="additional-settings">
@@ -1127,7 +1450,11 @@ function calculateActualDelay() {
         </div>
       </transition>
 
-      <div v-if="isProcessing" class="status"><h3>Evaluating route scenarios...</h3></div>
+      <div v-if="isProcessing || isUploadingImages" class="status">
+        <h3 v-if="isUploadingImages">🤖 Procesando imágenes con IA...</h3>
+        <h3 v-else>Evaluating route scenarios...</h3>
+      </div>
+
       <div v-if="backendResponse && backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
 
       <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing && reportData && normalPayload.pago">
@@ -1176,6 +1503,78 @@ function calculateActualDelay() {
       </div>
       
     </div>
+
+    <!-- ============================================
+     🆕 MODAL DE CORRECCIONES OCR
+     ============================================ -->
+    <div v-if="showCorrectionModal" class="modal-overlay" @click.self="showCorrectionModal = false">
+      <div class="modal-content correction-modal">
+        <div class="modal-header">
+          <h2>✏️ Completar Información</h2>
+          <p class="modal-subtitle">
+            Gemini necesita que completes algunos datos que no pudo leer claramente en las capturas.
+          </p>
+        </div>
+
+        <div class="modal-body">
+          <div 
+            v-for="item in needsConfirmation" 
+            :key="`${item.stop_number}_${item.field}`"
+            class="correction-item"
+          >
+            <div class="correction-header">
+              <span class="stop-badge">Parada {{ item.stop_number }}</span>
+              <span class="field-badge">{{ item.field === 'street_address' ? 'Dirección' : (item.field === 'apartment' ? 'Apartamento' : 'Ciudad') }}</span>
+            </div>
+
+            <div class="correction-reason">
+              <span v-if="item.reason === 'TRUNCATED_TEXT'">📋 Texto truncado detectado</span>
+              <span v-else-if="item.reason === 'LOW_CONFIDENCE'">⚠️ Baja confianza ({{ Math.round(item.confidence * 100) }}%)</span>
+              <span v-else-if="item.reason === 'MISSING_CITY'">🏙️ Ciudad no detectada</span>
+            </div>
+
+            <div class="correction-current">
+              <strong>Valor actual:</strong> 
+              <code>{{ item.current_value || '(vacío)' }}</code>
+            </div>
+
+            <div class="correction-input">
+              <label :for="`correction_${item.stop_number}_${item.field}`">
+                Valor correcto:
+              </label>
+              <input 
+                :id="`correction_${item.stop_number}_${item.field}`"
+                type="text"
+                v-model="correctionInputs[`${item.stop_number}_${item.field}`]"
+                :placeholder="`Ej: ${item.field === 'street_address' ? '1234 MAIN ST APT 202' : (item.field === 'apartment' ? 'APT 101' : 'KISSIMMEE')}`"
+              />
+              <small class="input-hint">
+                💡 Tip: Copia la dirección completa desde la app de Amazon Flex
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button 
+            type="button"
+            class="button-secondary"
+            @click="showCorrectionModal = false"
+          >
+            ❌ Cancelar
+          </button>
+          <button 
+            type="button"
+            class="button-primary"
+            @click="submitCorrections"
+            :disabled="isProcessing"
+          >
+            {{ isProcessing ? '⏳ Procesando...' : '✅ Confirmar y Continuar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 <style scoped>
@@ -2736,4 +3135,297 @@ function calculateActualDelay() {
   color: #64748b; 
   margin-top: 6px; 
 }
+
+/* ============================================
+   🆕 OCR: ESTILOS
+   ============================================ */
+.ocr-upload-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  color: white;
+}
+
+.ocr-upload-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ocr-description {
+  margin: 0 0 16px 0;
+  opacity: 0.9;
+  font-size: 14px;
+}
+
+.file-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.upload-button {
+  background: white;
+  color: #667eea;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 15px;
+}
+
+.upload-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.selected-files {
+  background: rgba(255,255,255,0.15);
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.files-count {
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+.file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px 0;
+}
+
+.file-list li {
+  padding: 6px 0;
+  font-size: 13px;
+  opacity: 0.9;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.file-list li:last-child {
+  border-bottom: none;
+}
+
+.clear-button {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.clear-button:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.divider {
+  text-align: center;
+  margin: 24px 0;
+  position: relative;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: #ddd;
+}
+
+.divider span {
+  background: white;
+  padding: 0 16px;
+  position: relative;
+  color: #666;
+  font-weight: 600;
+}
+
+.json-input-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.json-description {
+  margin: 0 0 12px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+/* ============================================
+   🆕 MODAL DE CORRECCIONES
+   ============================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+  padding: 24px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.modal-header h2 {
+  margin: 0 0 8px 0;
+  color: #333;
+  font-size: 24px;
+}
+
+.modal-subtitle {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.correction-item {
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.correction-item:last-child {
+  margin-bottom: 0;
+}
+
+.correction-header {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stop-badge {
+  background: #667eea;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field-badge {
+  background: #764ba2;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.correction-reason {
+  font-size: 13px;
+  color: #856404;
+  background: #fff3cd;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.correction-current {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.correction-current code {
+  background: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  color: #d73a49;
+}
+
+.correction-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.correction-input label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+
+.correction-input input {
+  padding: 10px 12px;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.correction-input input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.input-hint {
+  font-size: 12px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 2px solid #f0f0f0;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.button-secondary {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.button-secondary:hover {
+  background: #5a6268;
+}
+
+
 </style>
