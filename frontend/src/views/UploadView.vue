@@ -1088,104 +1088,283 @@ function clearImages() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 🔧 A2-PLUS: VARIABLES Y HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+// 🆕 Variables para telemetría (agregar junto a las otras const ref)
+const uploadMetrics = ref({
+  startTime: null,
+  imageCount: 0,
+  totalSizeMB: 0,
+  attempt: 0,
+  error: null,
+  duration: null
+});
+
+const uploadProgress = ref({
+  stage: '',
+  message: '',
+  percentage: 0
+});
+
+// 🆕 Helper: Fetch con timeout
+async function fetchWithTimeoutAndMetrics(fetchFn, url, options, timeoutMs = 120000) {
+  const controller = new AbortController();
+  const startTime = Date.now();
+  
+  const timeoutId = setTimeout(() => {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.error(`⏱️ TIMEOUT después de ${elapsed}s (límite: ${timeoutMs/1000}s)`);
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const optionsWithSignal = {
+      ...options,
+      signal: controller.signal
+    };
+
+    console.log(`📤 [${new Date().toISOString()}] Iniciando fetch...`);
+    const response = await fetchFn(url, optionsWithSignal);
+    
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`✅ Response recibida en ${elapsed}s`);
+    
+    return response;
+  } catch (error) {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    error.elapsedSeconds = elapsed;
+    error.isTimeout = error.name === 'AbortError';
+    
+    console.error(`❌ Fetch falló después de ${elapsed}s:`, error.message);
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// 🆕 Helper: Retry con progreso
+async function fetchWithRetryAndProgress(fetchFn, url, options, maxRetries = 2) {
+  let attempt = 0;
+
+  while (true) {
+    try {
+      uploadMetrics.value.attempt = attempt + 1;
+      
+      if (attempt === 0) {
+        uploadProgress.value.stage = 'uploading';
+        uploadProgress.value.message = '📤 Subiendo imágenes al servidor...';
+        uploadProgress.value.percentage = 30;
+      } else {
+        uploadProgress.value.stage = 'retrying';
+        uploadProgress.value.message = `🔄 Reintento ${attempt}/${maxRetries}...`;
+        uploadProgress.value.percentage = 30 + (attempt * 20);
+      }
+
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`📊 INTENTO ${attempt + 1}/${maxRetries + 1}`);
+      console.log(`🕐 Hora: ${new Date().toLocaleTimeString()}`);
+      console.log(`📱 Conexión: ${navigator.connection?.effectiveType || 'unknown'}`);
+      console.log(`${'='.repeat(60)}\n`);
+
+      const response = await fetchWithTimeoutAndMetrics(fetchFn, url, options, 120000);
+      
+      uploadProgress.value.stage = 'processing';
+      uploadProgress.value.message = '🤖 Gemini está procesando...';
+      uploadProgress.value.percentage = 70;
+      
+      return response;
+
+    } catch (error) {
+      uploadMetrics.value.error = {
+        name: error.name,
+        message: error.message,
+        isTimeout: error.isTimeout,
+        elapsedSeconds: error.elapsedSeconds,
+        attempt: attempt + 1
+      };
+
+      console.error(`\n${'❌'.repeat(30)}`);
+      console.error(`ERROR EN INTENTO ${attempt + 1}`);
+      console.error(`Tipo: ${error.name}`);
+      console.error(`Mensaje: ${error.message}`);
+      console.error(`Es Timeout: ${error.isTimeout}`);
+      console.error(`Duración: ${error.elapsedSeconds}s`);
+      console.error(`${'❌'.repeat(30)}\n`);
+
+      if (attempt >= maxRetries) {
+        console.error(`\n💥 FALLÓ DESPUÉS DE ${attempt + 1} INTENTOS`);
+        console.error(`Métricas completas:`, uploadMetrics.value);
+        throw error;
+      }
+
+      const waitTime = 1000 * Math.pow(2, attempt);
+      console.log(`⏳ Esperando ${waitTime/1000}s antes de reintentar...`);
+      uploadProgress.value.message = `⏳ Esperando ${waitTime/1000}s...`;
+      
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      attempt++;
+    }
+  }
+}
 // ============================================
 // 🆕 OCR: LLAMADA AL ENDPOINT
 // ============================================
+// ═══════════════════════════════════════════════════════════════
+// 🔧 A2-PLUS: FUNCIÓN PRINCIPAL (REEMPLAZA LA VIEJA)
+// ═══════════════════════════════════════════════════════════════
+
 async function processImagesWithOCR() {
-  console.log('🤖 Iniciando proceso OCR...');
+  console.log("\n\n" + "🚀".repeat(30));
+  console.log("INICIO: processImagesWithOCR");
+  console.log("🚀".repeat(30) + "\n");
+
+  // Reset de métricas
+  uploadMetrics.value = {
+    startTime: Date.now(),
+    imageCount: selectedImages.value.length,
+    totalSizeMB: (selectedImages.value.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2),
+    attempt: 0,
+    error: null,
+    duration: null
+  };
+
+  uploadProgress.value = {
+    stage: 'preparing',
+    message: '📦 Preparando imágenes...',
+    percentage: 10
+  };
+
   isUploadingImages.value = true;
-  
+
   try {
-    // 1. Preparar FormData
+    // 1. Log inicial
+    console.log("📊 MÉTRICAS INICIALES:");
+    console.log(`  - Imágenes: ${uploadMetrics.value.imageCount}`);
+    console.log(`  - Tamaño total: ${uploadMetrics.value.totalSizeMB} MB`);
+    console.log(`  - Hora inicio: ${new Date(uploadMetrics.value.startTime).toLocaleTimeString()}`);
+    console.log(`  - Conexión: ${navigator.connection?.effectiveType || 'unknown'}`);
+
+    // 2. Preparar FormData
     const formData = new FormData();
-    selectedImages.value.forEach(file => {
-      formData.append('images', file);
+    selectedImages.value.forEach((file, index) => {
+      console.log(`  📎 Archivo ${index + 1}: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+      formData.append("images", file);
     });
-    
-    // 2. Llamar al endpoint OCR
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-    console.log('📡 Enviando imágenes a:', `${backendUrl}/api/v1/ocr/amazon-stops`);
-    
-    // 🆕 Usar fetchWithRetry que envuelve a fetchWithAuth
-    const response = await fetchWithRetry(
-      fetchWithAuth, // ← Pasamos fetchWithAuth como parámetro
+
+    uploadProgress.value.percentage = 20;
+
+    // 3. Llamar con retry + telemetría
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+    console.log(`\n🎯 Target: ${backendUrl}/api/v1/ocr/amazon-stops`);
+
+    const response = await fetchWithRetryAndProgress(
+      fetchWithAuth,
       `${backendUrl}/api/v1/ocr/amazon-stops`,
       {
         method: "POST",
         body: formData,
-        // No incluir Content-Type, fetch lo configurará automáticamente para FormData
       },
-      2 // ← 2 reintentos máximo
+      2
     );
 
-    
+    // 4. Procesar respuesta
+    uploadProgress.value.percentage = 90;
+
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Error en OCR');
+      throw new Error(errorData.error || `HTTP ${response.status}`);
     }
-    
+
     const result = await response.json();
-    console.log('✅ Respuesta OCR:', result);
     
-    if (!result.success) {
-      throw new Error(result.error || 'OCR falló');
-    }
-    
-    // 3. Procesar resultado
+    uploadMetrics.value.duration = ((Date.now() - uploadMetrics.value.startTime) / 1000).toFixed(1);
+
+    console.log(`\n✅ ${'='.repeat(60)}`);
+    console.log(`ÉXITO - Duración total: ${uploadMetrics.value.duration}s`);
+    console.log(`Intentos necesarios: ${uploadMetrics.value.attempt}`);
+    console.log(`${'='.repeat(60)}\n`);
+
+    uploadProgress.value = {
+      stage: 'complete',
+      message: '✅ Listo!',
+      percentage: 100
+    };
+
+    // 5. Procesar resultado
     const { stops, needs_confirmation } = result;
-    
-    // 4. Convertir stops a formato de extractedAddresses
-    extractedAddresses.value = stops.map(stop => ({
+
+    extractedAddresses.value = stops.map((stop) => ({
       number: stop.stop_number,
       address: [stop.street_address, stop.apartment, stop.city]
         .filter(Boolean)
-        .join(' ')
+        .join(" ")
         .trim(),
       isDowntown: false,
-      isApartment: stop.apartment && stop.apartment.trim() !== '',
-      ia_suggestion: stop.ia_suggestion
+      isApartment: stop.apartment && stop.apartment.trim() !== "",
+      ia_suggestion: stop.ia_suggestion,
     }));
-    
-    console.log(`📦 ${extractedAddresses.value.length} paradas cargadas desde OCR`);
-    
-    // 5. Verificar si hay dudas
+
+    console.log(`✅ ${extractedAddresses.value.length} paradas cargadas desde OCR`);
+
+    // 6. Verificar si hay dudas
     if (needs_confirmation && needs_confirmation.length > 0) {
-      console.log(`⚠️ ${needs_confirmation.length} campo(s) necesitan confirmación`);
+      console.log(`⚠️ ${needs_confirmation.length} campos necesitan confirmación`);
       needsConfirmation.value = needs_confirmation;
-      
-      // Preparar inputs para el modal
+
       correctionInputs.value = {};
-      needs_confirmation.forEach(item => {
+      needs_confirmation.forEach((item) => {
         const key = `${item.stop_number}_${item.field}`;
         correctionInputs.value[key] = item.current_value || '';
       });
-      
-      // Mostrar modal de correcciones
+
       showCorrectionModal.value = true;
       isUploadingImages.value = false;
-      return; // Detener flujo hasta que usuario corrija
+      return;
     }
-    
-    // 6. Si no hay dudas, continuar con flujo normal
-    console.log('✅ No hay dudas, continuando con evaluación...');
+
+    // 7. Continuar con flujo normal
+    console.log("✅ No hay dudas, continuando...");
     isUploadingImages.value = false;
-    
-    // Continuar con detección de downtown
+
     const needsDowntownCheck = showDowntownDetection();
-    if (needsDowntownCheck) {
-      return; // Modal de downtown se mostrará
-    }
-    
-    // Si no hay downtown, proceder con evaluación
+    if (needsDowntownCheck) return;
+
     await proceedWithEvaluation();
-    
+
   } catch (error) {
-    console.error('❌ Error en OCR:', error);
-    alert(`❌ Error procesando imágenes: ${error.message}`);
+    uploadMetrics.value.duration = ((Date.now() - uploadMetrics.value.startTime) / 1000).toFixed(1);
+
+    console.error("\n\n" + "💥".repeat(30));
+    console.error("ERROR FINAL:");
+    console.error("💥".repeat(30));
+    console.error("Métricas completas:", JSON.stringify(uploadMetrics.value, null, 2));
+    console.error("\n");
+
+    let errorMessage = "Error procesando imágenes";
+    let debugInfo = "";
+
+    if (error.isTimeout || error.name === "AbortError") {
+      errorMessage = `⏱️ Timeout después de ${error.elapsedSeconds || uploadMetrics.value.duration}s`;
+      debugInfo = `\n\n🔍 DEBUG:\n- Tamaño: ${uploadMetrics.value.totalSizeMB}MB\n- Intentos: ${uploadMetrics.value.attempt}\n- Conexión: ${navigator.connection?.effectiveType || 'unknown'}`;
+    } else if (error.message.includes("fetch") || error.message.includes("network")) {
+      errorMessage = "🌐 Error de conexión";
+      debugInfo = `\n\n🔍 DEBUG:\n- Duración: ${uploadMetrics.value.duration}s\n- Intento: ${uploadMetrics.value.attempt}`;
+    } else {
+      errorMessage = `❌ ${error.message}`;
+    }
+
+    alert(errorMessage + debugInfo);
+
+  } finally {
     isUploadingImages.value = false;
+    
+    setTimeout(() => {
+      uploadProgress.value = { stage: '', message: '', percentage: 0 };
+    }, 2000);
   }
 }
-
 // ============================================
 // 🆕 OCR: ENVIAR CORRECCIONES
 // ============================================
@@ -1368,6 +1547,32 @@ async function submitCorrections() {
               >
                 📷 Seleccionar Capturas (1-7)
               </button>
+
+              <!-- Indicador de progreso del upload -->
+              <div v-if="uploadProgress.stage !== ''" class="upload-progress">
+                <div class="progress-bar-container">
+                  <div 
+                    class="progress-bar" 
+                    :style="{ width: uploadProgress.percentage + '%' }"
+                    :class="{
+                      'progress-uploading': uploadProgress.stage === 'uploading',
+                      'progress-processing': uploadProgress.stage === 'processing',
+                      'progress-retrying': uploadProgress.stage === 'retrying',
+                      'progress-complete': uploadProgress.stage === 'complete'
+                    }"
+                  ></div>
+                </div>
+                
+                <p class="progress-message">
+                  {{ uploadProgress.message }}
+                </p>
+                
+                <p class="progress-details" v-if="uploadMetrics.totalSizeMB">
+                  {{ uploadMetrics.imageCount }} imágenes • 
+                  {{ uploadMetrics.totalSizeMB }} MB • 
+                  Intento {{ uploadMetrics.attempt }}
+                </p>
+              </div>
               
               <div v-if="selectedImages.length > 0" class="selected-files">
                 <p class="files-count">✅ {{ selectedImages.length }} imagen(es) seleccionada(s)</p>
@@ -3501,6 +3706,62 @@ async function submitCorrections() {
 
 .button-secondary:hover {
   background: #5a6268;
+}
+.upload-progress {
+  margin: 16px 0;
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-bar {
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.progress-uploading {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.progress-processing {
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+}
+
+.progress-retrying {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.progress-complete {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.progress-message {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.progress-details {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
 }
 
 
