@@ -17,7 +17,7 @@ import {
 } from '@/constants/mensajesConscientes';
 
 // ═══════════════════════════════════════════════════════════════
-// 🔧 A2: FETCH ROBUSTO (WRAPPER SOBRE fetchWithAuth)
+// 🔧 A2: FETCH ROBUSTO (WRAPPER SOBRE fetchWithAuth) --- fornzando commit
 // ═══════════════════════════════════════════════════════════════
 
 /**
