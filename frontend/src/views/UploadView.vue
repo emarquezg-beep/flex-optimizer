@@ -25,9 +25,9 @@ import {
  * @param {Function} fetchFn - Función de fetch (ej: fetchWithAuth)
  * @param {string} url - URL del endpoint
  * @param {Object} options - Opciones del fetch
- * @param {number} timeoutMs - Timeout en milisegundos (default: 90s)
+ * @param {number} timeoutMs - Timeout en milisegundos (default: 180s)
  */
-async function fetchWithTimeout(fetchFn, url, options, timeoutMs = 90000) {
+async function fetchWithTimeout(fetchFn, url, options, timeoutMs = 180000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
