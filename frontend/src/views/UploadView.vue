@@ -1273,7 +1273,6 @@ async function fetchWithRetryAndProgress(fetchFn, url, options, maxRetries = 2) 
 // ═══════════════════════════════════════════════════════════════
 // 🔧 A2-PLUS: FUNCIÓN PRINCIPAL (REEMPLAZA LA VIEJA)
 // ═══════════════════════════════════════════════════════════════
-
 async function processImagesWithOCR() {
   console.log("\n\n" + "🚀".repeat(30));
   console.log("INICIO: processImagesWithOCR");
@@ -1283,7 +1282,8 @@ async function processImagesWithOCR() {
   uploadMetrics.value = {
     startTime: Date.now(),
     imageCount: selectedImages.value.length,
-    totalSizeMB: (selectedImages.value.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2),
+    originalSizeMB: (selectedImages.value.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2),
+    compressedSizeMB: 0,
     attempt: 0,
     error: null,
     duration: null
@@ -1301,7 +1301,7 @@ async function processImagesWithOCR() {
     // Log inicial
     console.log("📊 MÉTRICAS INICIALES:");
     console.log(`  - Imágenes: ${uploadMetrics.value.imageCount}`);
-    console.log(`  - Tamaño total: ${uploadMetrics.value.totalSizeMB} MB`);
+    console.log(`  - Tamaño original: ${uploadMetrics.value.originalSizeMB} MB`);
     console.log(`  - Hora inicio: ${new Date(uploadMetrics.value.startTime).toLocaleTimeString()}`);
     console.log(`  - Conexión: ${navigator.connection?.effectiveType || 'unknown'}`);
 
@@ -1310,7 +1310,14 @@ async function processImagesWithOCR() {
     const compressedImages = await Promise.all(
       selectedImages.value.map(file => compressImageForOCR(file))
     );
-    console.log(`✅ Compresión completa`);
+
+    // 📊 Calcular tamaños originales y comprimidos
+    const originalSize = selectedImages.value.reduce((sum, file) => sum + file.size, 0);
+    const compressedSize = compressedImages.reduce((sum, file) => sum + file.size, 0);
+    uploadMetrics.value.compressedSizeMB = (compressedSize / 1024 / 1024).toFixed(2);
+    const savings = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
+
+    console.log(`✅ Compresión completa: ${uploadMetrics.value.originalSizeMB} MB → ${uploadMetrics.value.compressedSizeMB} MB (${savings}% ahorro)`);
 
     // 2. Preparar FormData con imágenes comprimidas
     const formData = new FormData();
@@ -1323,7 +1330,9 @@ async function processImagesWithOCR() {
 
     // 3. Llamar con retry + telemetría
     const backendUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-    console.log(`\n🎯 Target: ${backendUrl}/api/v1/ocr/amazon-stops`);
+    console.log(`\n📤 Subiendo imágenes al servidor...`);
+    console.log(`   ${uploadMetrics.value.imageCount} imágenes • Original: ${uploadMetrics.value.originalSizeMB} MB → Comprimido: ${uploadMetrics.value.compressedSizeMB} MB (${savings}% ahorro) • Intento ${uploadMetrics.value.attempt + 1}`);
+    console.log(`🎯 Target: ${backendUrl}/api/v1/ocr/amazon-stops`);
 
     const response = await fetchWithRetryAndProgress(
       fetchWithAuth,
@@ -1349,6 +1358,7 @@ async function processImagesWithOCR() {
 
     console.log(`\n✅ ${'='.repeat(60)}`);
     console.log(`ÉXITO - Duración total: ${uploadMetrics.value.duration}s`);
+    console.log(`Ahorro de compresión: ${savings}%`);
     console.log(`Intentos necesarios: ${uploadMetrics.value.attempt}`);
     console.log(`${'='.repeat(60)}\n`);
 
@@ -1413,7 +1423,7 @@ async function processImagesWithOCR() {
 
     if (error.isTimeout || error.name === "AbortError") {
       errorMessage = `⏱️ Timeout después de ${error.elapsedSeconds || uploadMetrics.value.duration}s`;
-      debugInfo = `\n\n🔍 DEBUG:\n- Tamaño: ${uploadMetrics.value.totalSizeMB}MB\n- Intentos: ${uploadMetrics.value.attempt}\n- Conexión: ${navigator.connection?.effectiveType || 'unknown'}`;
+      debugInfo = `\n\n🔍 DEBUG:\n- Tamaño original: ${uploadMetrics.value.originalSizeMB}MB\n- Tamaño comprimido: ${uploadMetrics.value.compressedSizeMB}MB\n- Intentos: ${uploadMetrics.value.attempt}\n- Conexión: ${navigator.connection?.effectiveType || 'unknown'}`;
     } else if (error.message.includes("fetch") || error.message.includes("network")) {
       errorMessage = "🌐 Error de conexión";
       debugInfo = `\n\n🔍 DEBUG:\n- Duración: ${uploadMetrics.value.duration}s\n- Intento: ${uploadMetrics.value.attempt}`;
@@ -1431,6 +1441,7 @@ async function processImagesWithOCR() {
     }, 2000);
   }
 }
+
 // ============================================
 // 🆕 OCR: ENVIAR CORRECCIONES
 // ============================================

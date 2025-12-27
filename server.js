@@ -2820,7 +2820,18 @@ app.post('/api/v1/ocr/amazon-stops',
         });
       }
 
-      console.log(`📦 ${req.files.length} imagen(es) recibida(s)`);
+      // Calcular tamaño total recibido
+      const totalReceivedSize = req.files.reduce((sum, file) => sum + file.size, 0);
+      const receivedMB = (totalReceivedSize / (1024 * 1024)).toFixed(2);
+
+      console.log(`📦 ${req.files.length} imagen(es) recibida(s) • ${receivedMB} MB total`);
+
+      // Log individual de cada imagen
+      req.files.forEach((file, index) => {
+        const sizeKB = (file.size / 1024).toFixed(1);
+        console.log(`   ${index + 1}. ${file.originalname} - ${sizeKB} KB`);
+      });
+
 
       // 2. Preparar imágenes para Gemini
       const imageParts = req.files.map(file => ({
