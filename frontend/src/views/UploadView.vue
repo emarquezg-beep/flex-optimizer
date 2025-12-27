@@ -1088,6 +1088,64 @@ function clearImages() {
   }
 }
 
+/**
+ * 🆕 Comprimir imagen manteniendo calidad alta para OCR
+ */
+async function compressImageForOCR(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      const img = new Image();
+      
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        
+        // Mantener tamaño si es < 2000px, sino reducir
+        let width = img.width;
+        let height = img.height;
+        const maxDimension = 2000;
+        
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = (height / width) * maxDimension;
+            width = maxDimension;
+          } else {
+            width = (width / height) * maxDimension;
+            height = maxDimension;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Comprimir a JPEG 85% quality
+        canvas.toBlob((blob) => {
+          const compressedFile = new File(
+            [blob], 
+            file.name.replace(/\.[^/.]+$/, '.jpg'),
+            { type: 'image/jpeg' }
+          );
+          
+          console.log(`📦 ${file.name}:`);
+          console.log(`   Original: ${(file.size / 1024).toFixed(1)} KB`);
+          console.log(`   Comprimido: ${(compressedFile.size / 1024).toFixed(1)} KB`);
+          console.log(`   Ahorro: ${(((file.size - compressedFile.size) / file.size) * 100).toFixed(1)}%`);
+          
+          resolve(compressedFile);
+        }, 'image/jpeg', 0.85);
+      };
+      
+      img.src = e.target.result;
+    };
+    
+    reader.readAsDataURL(file);
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
 // 🔧 A2-PLUS: VARIABLES Y HELPERS
 // ═══════════════════════════════════════════════════════════════
