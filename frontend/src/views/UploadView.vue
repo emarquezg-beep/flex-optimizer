@@ -1297,18 +1297,25 @@ async function processImagesWithOCR() {
   isUploadingImages.value = true;
 
   try {
-    // 1. Log inicial
+    // Log inicial
     console.log("📊 MÉTRICAS INICIALES:");
     console.log(`  - Imágenes: ${uploadMetrics.value.imageCount}`);
     console.log(`  - Tamaño total: ${uploadMetrics.value.totalSizeMB} MB`);
     console.log(`  - Hora inicio: ${new Date(uploadMetrics.value.startTime).toLocaleTimeString()}`);
     console.log(`  - Conexión: ${navigator.connection?.effectiveType || 'unknown'}`);
 
-    // 2. Preparar FormData
+    // 🆕 1. Comprimir imágenes
+    console.log('📦 Comprimiendo imágenes...');
+    const compressedImages = await Promise.all(
+      selectedImages.value.map(file => compressImageForOCR(file))
+    );
+    console.log(`✅ Compresión completa`);
+
+    // 2. Preparar FormData con imágenes comprimidas
     const formData = new FormData();
-    selectedImages.value.forEach((file, index) => {
-      console.log(`  📎 Archivo ${index + 1}: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
-      formData.append("images", file);
+    compressedImages.forEach((file, index) => {
+      console.log(`📎 ${index + 1}. ${file.name} - ${(file.size / 1024).toFixed(1)} KB`);
+      formData.append('images', file);
     });
 
     uploadProgress.value.percentage = 20;
