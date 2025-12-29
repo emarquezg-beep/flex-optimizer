@@ -439,3 +439,41 @@ button.button-primary,
     scroll-behavior: auto !important;
   }
 }
+
+/* ==================== DARK THEME PATCH: DASHBOARD + MODALS ==================== */
+
+/* Asegurar fondo base oscuro y texto legible */
+#app,
+.view-container {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Modales: fondo de la tarjeta/modal oscuro */
+.modal,
+.modal-content,
+.dialog,
+.dialog-content,
+[class*="modal"] [class*="content"] {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-primary) !important;
+}
+
+/* Inputs dentro de modales (evita “lavado” en tu screenshot) */
+.modal input,
+.modal select,
+.modal textarea,
+[class*="modal"] input,
+[class*="modal"] select,
+[class*="modal"] textarea {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-primary) !important;
+}
+
+/* Títulos/labels dentro de modales */
+.modal h1, .modal h2, .modal h3, .modal label,
+[class*="modal"] h1, [class*="modal"] h2, [class*="modal"] h3, [class*="modal"] label {
+  color: var(--text-primary) !important;
+}
