@@ -468,7 +468,6 @@ function buildBadNetworkMessage(net) {
 Sugerencias:
 - Conéctate al Wi‑Fi del warehouse (casi siempre está disponible).
 - Espera 1–2 minutos y vuelve a intentar.
-- Si urge, prueba con menos imágenes.
 
 ${details ? `\n📶 ${details}` : ''}`
   );
@@ -1484,20 +1483,23 @@ async function processImagesWithOCR() {
     } 
     
     const net = getNetworkSnapshot();
+
     const isFetchNetworkFail =
       (error instanceof TypeError) || /failed to fetch/i.test(error.message || '');
 
-    if (!net.online || isFetchNetworkFail) {
+    const isTimeout = error.isTimeout || error.name === "AbortError";
+
+    if (!net.online || isFetchNetworkFail || isTimeout) {
       const msg = buildBadNetworkMessage(net);
 
       uploadProgress.value = {
         stage: 'error',
-        message: '⚠️ No hay señal suficiente para subir. Conéctate al Wi‑Fi del warehouse y reintenta.',
+        message: '⚠️ Señal demasiado débil para subir las capturas. Conéctate al Wi‑Fi del warehouse y reintenta.',
         percentage: 0
       };
 
       alert(msg);
-      return; // importante: ya mostramos el mensaje correcto
+      return;
     }
 
     else if (error.message.includes("fetch") || error.message.includes("network")) {
