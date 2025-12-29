@@ -1,5 +1,4 @@
 <script setup>
-  console.log('ESTOY AQUI')
 // ============================================
 // 1. IMPORTS
 // ============================================
@@ -432,6 +431,49 @@ const scenarioETAs = computed(() => {
 
   return { normal: normalScenarios, inverse: inverseScenarios };
 });
+
+// HELPERS: EVALUACIÓN DE RED
+function getNetworkSnapshot() {
+  const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+
+  return {
+    online: navigator.onLine,
+    effectiveType: c?.effectiveType || null,   // 'slow-2g' | '2g' | '3g' | '4g'
+    downlink: typeof c?.downlink === 'number' ? c.downlink : null, // Mbps aprox
+    rtt: typeof c?.rtt === 'number' ? c.rtt : null,               // ms
+  };
+}
+
+function isVeryBadNetwork(net) {
+  if (!net.online) return true;
+
+  // Reglas conservadoras (puedes ajustar)
+  if (net.effectiveType === 'slow-2g' || net.effectiveType === '2g') return true;
+  if (net.downlink !== null && net.downlink < 0.4) return true; // <0.4 Mbps suele ser mortal para uploads
+  if (net.rtt !== null && net.rtt > 2000) return true;          // >2s RTT = conexión pésima
+
+  return false;
+}
+
+function buildBadNetworkMessage(net) {
+  const details = [
+    net.effectiveType ? `Tipo: ${net.effectiveType}` : null,
+    net.downlink !== null ? `Velocidad aprox: ${net.downlink} Mbps` : null,
+    net.rtt !== null ? `RTT: ${net.rtt} ms` : null,
+  ].filter(Boolean).join(' • ');
+
+  return (
+`⚠️ Señal demasiado débil para subir las capturas.
+
+Sugerencias:
+- Conéctate al Wi‑Fi del warehouse (casi siempre está disponible).
+- Espera 1–2 minutos y vuelve a intentar.
+- Si urge, prueba con menos imágenes.
+
+${details ? `\n📶 ${details}` : ''}`
+  );
+}
+// FIN HELPERS: EVALUACIÓN DE RED
 
 // --- HELPER: CÁLCULO DE PAYLOADS FINALES ---
 function calculateLogData(scenarioKey) {
@@ -1334,6 +1376,21 @@ async function processImagesWithOCR() {
     console.log(`   ${uploadMetrics.value.imageCount} imágenes • Original: ${uploadMetrics.value.originalSizeMB} MB → Comprimido: ${uploadMetrics.value.compressedSizeMB} MB (${savings}% ahorro) • Intento ${uploadMetrics.value.attempt + 1}`);
     console.log(`🎯 Target: ${backendUrl}/api/v1/ocr/amazon-stops`);
 
+    // 🧠 Guard: si la señal es MUY mala, no intentamos subir
+    const net = getNetworkSnapshot();
+    if (isVeryBadNetwork(net)) {
+      const msg = buildBadNetworkMessage(net);
+
+      uploadProgress.value = {
+        stage: 'error',
+        message: '⚠️ Señal demasiado débil. Conéctate al Wi‑Fi del warehouse y reintenta.',
+        percentage: 0
+      };
+
+      alert(msg);
+      return;
+    }
+    
     const response = await fetchWithRetryAndProgress(
       fetchWithAuth,
       `${backendUrl}/api/v1/ocr/amazon-stops`,
@@ -1424,7 +1481,26 @@ async function processImagesWithOCR() {
     if (error.isTimeout || error.name === "AbortError") {
       errorMessage = `⏱️ Timeout después de ${error.elapsedSeconds || uploadMetrics.value.duration}s`;
       debugInfo = `\n\n🔍 DEBUG:\n- Tamaño original: ${uploadMetrics.value.originalSizeMB}MB\n- Tamaño comprimido: ${uploadMetrics.value.compressedSizeMB}MB\n- Intentos: ${uploadMetrics.value.attempt}\n- Conexión: ${navigator.connection?.effectiveType || 'unknown'}`;
-    } else if (error.message.includes("fetch") || error.message.includes("network")) {
+    } 
+    
+    const net = getNetworkSnapshot();
+    const isFetchNetworkFail =
+      (error instanceof TypeError) || /failed to fetch/i.test(error.message || '');
+
+    if (!net.online || isFetchNetworkFail) {
+      const msg = buildBadNetworkMessage(net);
+
+      uploadProgress.value = {
+        stage: 'error',
+        message: '⚠️ No hay señal suficiente para subir. Conéctate al Wi‑Fi del warehouse y reintenta.',
+        percentage: 0
+      };
+
+      alert(msg);
+      return; // importante: ya mostramos el mensaje correcto
+    }
+
+    else if (error.message.includes("fetch") || error.message.includes("network")) {
       errorMessage = "🌐 Error de conexión";
       debugInfo = `\n\n🔍 DEBUG:\n- Duración: ${uploadMetrics.value.duration}s\n- Intento: ${uploadMetrics.value.attempt}`;
     } else {
@@ -1635,7 +1711,8 @@ async function submitCorrections() {
                       'progress-uploading': uploadProgress.stage === 'uploading',
                       'progress-processing': uploadProgress.stage === 'processing',
                       'progress-retrying': uploadProgress.stage === 'retrying',
-                      'progress-complete': uploadProgress.stage === 'complete'
+                      'progress-complete': uploadProgress.stage === 'complete',
+                      'progress-error': uploadProgress.stage === 'error'
                     }"
                   ></div>
                 </div>
@@ -3910,6 +3987,9 @@ async function submitCorrections() {
     justify-content: space-between;
     width: 100%;
   }
+}
+.progress-error {
+  background: linear-gradient(90deg, #ef4444, #f97316);
 }
 
 
