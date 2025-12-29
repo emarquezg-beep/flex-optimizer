@@ -66,12 +66,29 @@ input, select, textarea {
   font-family: inherit;
   font-size: inherit;
   color: var(--text-primary);
-  background-color: var(--bg-primary); /* 🔥 Fondo blanco para mejor contraste */
+
+  /* ✅ Theme-friendly: en dark será oscuro, en light puede seguir claro */
+  background-color: var(--bg-secondary);
+
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-base);
   padding: var(--space-3) var(--space-4);
   transition: all var(--transition-base);
-  box-shadow: var(--shadow-xs); /* 🆕 Sombra sutil para definición */
+  box-shadow: var(--shadow-xs);
+}
+
+select {
+  /* icono del dropdown en claro */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='rgba(255,255,255,0.65)' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E") !important;
+}
+
+/* Zonas punteadas / upload areas en dark */
+.file-input-area,
+.json-paste-container,
+.manual-entry-container,
+.gem-link-container {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 input:hover:not(:disabled), 
