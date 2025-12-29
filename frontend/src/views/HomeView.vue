@@ -1228,13 +1228,14 @@ function closeProfileModal() {
 /* ============================================
    MODAL
    ============================================ */
+/* ============================================
+   MODAL (theme-aware)
+   ============================================= */
+
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1250,7 +1251,9 @@ function closeProfileModal() {
 }
 
 .modal-content {
-  background: white;
+  /* ✅ Antes: background: white; */
+  background: var(--card-bg, var(--bg-secondary));
+  border: 1px solid var(--border-primary);
   border-radius: 20px 20px 0 0;
   width: 100%;
   max-width: 500px;
@@ -1270,12 +1273,8 @@ function closeProfileModal() {
 }
 
 @keyframes slideUp {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
 .modal-header {
@@ -1283,14 +1282,16 @@ function closeProfileModal() {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid #e5e7eb;
+  /* ✅ Antes: border-bottom: 1px solid #e5e7eb; */
+  border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
 }
 
 .modal-header h3 {
   font-size: 18px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  /* ✅ Antes: color: var(--color-text-primary); */
+  color: var(--text-primary);
 }
 
 .close-btn {
@@ -1298,8 +1299,9 @@ function closeProfileModal() {
   height: 32px;
   border-radius: 50%;
   border: none;
-  background: #f3f4f6;
-  color: var(--color-text-secondary);
+  /* ✅ Antes: background: #f3f4f6; */
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
   font-size: 24px;
   cursor: pointer;
   display: flex;
@@ -1309,7 +1311,7 @@ function closeProfileModal() {
 }
 
 .close-btn:hover {
-  background: #e5e7eb;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .modal-body {
@@ -1325,19 +1327,23 @@ function closeProfileModal() {
   display: flex;
   justify-content: space-between;
   padding: 12px;
-  background: #f9fafb;
-  border-radius: 8px;
+  /* ✅ Antes: background: #f9fafb; */
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
 }
 
 .detail-label {
   font-size: 14px;
-  color: var(--color-text-secondary);
+  /* ✅ Antes: color: var(--color-text-secondary); */
+  color: var(--text-secondary);
 }
 
 .detail-value {
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  /* ✅ Antes: color: var(--color-text-primary); */
+  color: var(--text-primary);
 }
 
 .modal-actions {
@@ -1346,8 +1352,9 @@ function closeProfileModal() {
   gap: 12px;
   padding: 20px;
   padding-bottom: 24px;
-  border-top: 1px solid #e5e7eb;
-  background: white;
+  /* ✅ Antes: border-top: 1px solid #e5e7eb; background: white; */
+  border-top: 1px solid var(--border-primary);
+  background: transparent;
   flex-shrink: 0;
   position: relative;
   z-index: 10;
@@ -1363,7 +1370,7 @@ function closeProfileModal() {
     flex-direction: row;
     padding-bottom: 20px;
   }
-  
+
   .modal-btn {
     flex: 1;
   }
@@ -1373,11 +1380,12 @@ function closeProfileModal() {
   .modal-content {
     margin-bottom: calc(80px + env(safe-area-inset-bottom));
   }
-  
+
   .modal-actions {
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 }
+
 
 /* Botón Dorado Free Money */
 .btn-gold {
