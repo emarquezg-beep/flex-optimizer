@@ -1237,31 +1237,24 @@ function closeProfileModal() {
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
-  align-items: flex-end;
+  align-items: center;   /* ✅ centrado siempre */
   justify-content: center;
   z-index: 1000;
-  padding: 0;
-}
-
-@media (min-width: 768px) {
-  .modal-overlay {
-    align-items: center;
-    padding: 20px;
-  }
+  padding: 16px;
 }
 
 .modal-content {
   /* ✅ Antes: background: white; */
   background: var(--card-bg, var(--bg-secondary));
   border: 1px solid var(--border-primary);
-  border-radius: 20px 20px 0 0;
+  border-radius: 20px;
   width: 100%;
   max-width: 500px;
   max-height: 75vh;
   display: flex;
   flex-direction: column;
   animation: slideUp 0.3s ease;
-  margin-bottom: 80px;
+  margin-bottom: 0;
 }
 
 @media (min-width: 768px) {
@@ -1273,8 +1266,14 @@ function closeProfileModal() {
 }
 
 @keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from { 
+    transform: translateY(8px); 
+    opacity: 0;
+  }
+  to { 
+    transform: translateY(0); 
+    opacity: 1;
+  }
 }
 
 .modal-header {
@@ -1377,10 +1376,6 @@ function closeProfileModal() {
 }
 
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .modal-content {
-    margin-bottom: calc(80px + env(safe-area-inset-bottom));
-  }
-
   .modal-actions {
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
