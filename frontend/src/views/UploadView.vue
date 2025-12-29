@@ -1137,7 +1137,7 @@ async function compressImageForOCR(file) {
           console.log(`   Ahorro: ${(((file.size - compressedFile.size) / file.size) * 100).toFixed(1)}%`);
           
           resolve(compressedFile);
-        }, 'image/jpeg', 0.85);
+        }, 'image/jpeg', 0.92); // 92% quality - mejor para OCR de texto pequeño
       };
       
       img.src = e.target.result;
