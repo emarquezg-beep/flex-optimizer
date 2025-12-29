@@ -1,21 +1,29 @@
 /* frontend/src/assets/styles/audible-theme.css */
+/* Tema oscuro estilo Audible (override de tokens existentes) */
 :root {
-  /* Surfaces */
-  --fp-bg: #0b0f14;
-  --fp-surface: #0f1621;
-  --fp-surface-2: #121c2a;
+  /* Backgrounds / surfaces */
+  --bg-primary: #0b0f14;
+  --bg-secondary: #0f1621;
+  --bg-tertiary: #121c2a;
 
   /* Text */
-  --fp-text: rgba(255, 255, 255, 0.92);
-  --fp-text-muted: rgba(255, 255, 255, 0.70);
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-tertiary: rgba(255, 255, 255, 0.55);
+  --text-inverse: #0b0f14;
 
-  /* Accent */
-  --fp-accent: #ffa500;
+  /* Brand (orange) */
+  --brand-primary: #ffa500;
+  --brand-primary-hover: #eb9800;  /* calculado desde #ffa500 */ /* [code_file:78] */
+  --brand-primary-active: #d98c00; /* calculado desde #ffa500 */ /* [code_file:78] */
 
-  /* Shape & depth */
-  --fp-radius: 18px;
-  --fp-shadow: 0 14px 34px rgba(0,0,0,0.45);
+  /* Borders */
+  --border-primary: rgba(255, 255, 255, 0.10);
+  --border-focus: rgba(255, 165, 0, 0.60);
 
-  /* Spacing */
-  --fp-gap: 14px;
+  /* Card backgrounds helpers (nuevo) */
+  --card-bg: linear-gradient(180deg, rgba(255,165,0,0.10), rgba(255,165,0,0.00) 45%),
+             linear-gradient(180deg, var(--bg-secondary), var(--bg-tertiary));
+  --card-bg-flat: var(--bg-secondary);
+  --card-bg-elevated: var(--bg-tertiary);
 }

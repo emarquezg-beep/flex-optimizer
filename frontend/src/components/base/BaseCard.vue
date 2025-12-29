@@ -33,7 +33,7 @@ const cardClasses = computed(() => {
 <style scoped>
 /* 🔥 Base card con sombra mejorada */
 .base-card {
-  background-color: var(--bg-secondary);
+  background: var(--card-bg, var(--bg-secondary));
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   transition: all var(--transition-base);
@@ -78,7 +78,7 @@ const cardClasses = computed(() => {
 /* 🆕 Elevated variant */
 .base-card--elevated {
   box-shadow: var(--shadow-elevated);
-  background-color: var(--bg-primary); /* Fondo blanco para más contraste */
+  background: var(--card-bg-elevated, var(--bg-tertiary));
 }
 
 .base-card--elevated.base-card--hoverable:hover {
@@ -90,7 +90,7 @@ const cardClasses = computed(() => {
 .base-card--flat {
   box-shadow: none;
   border: 1px solid var(--border-primary);
-  background-color: var(--bg-primary);
+  background: var(--card-bg-flat, var(--bg-secondary));
 }
 
 .base-card--flat.base-card--hoverable:hover {
