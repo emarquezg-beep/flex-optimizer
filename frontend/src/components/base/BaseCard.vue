@@ -1,4 +1,6 @@
 <script setup>
+
+//forzando commit
 import { computed } from 'vue'
 
 const props = defineProps({
