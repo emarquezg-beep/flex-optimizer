@@ -4,6 +4,7 @@ import router from './router'
 import { useAuth } from './composables/useAuth'
 
 import './assets/styles/design-tokens.css'
+import './assets/styles/audible-theme.css'
 import './style.css'
 
 async function initApp() {

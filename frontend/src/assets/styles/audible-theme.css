@@ -1,0 +1,21 @@
+/* frontend/src/assets/styles/audible-theme.css */
+:root {
+  /* Surfaces */
+  --fp-bg: #0b0f14;
+  --fp-surface: #0f1621;
+  --fp-surface-2: #121c2a;
+
+  /* Text */
+  --fp-text: rgba(255, 255, 255, 0.92);
+  --fp-text-muted: rgba(255, 255, 255, 0.70);
+
+  /* Accent */
+  --fp-accent: #ffa500;
+
+  /* Shape & depth */
+  --fp-radius: 18px;
+  --fp-shadow: 0 14px 34px rgba(0,0,0,0.45);
+
+  /* Spacing */
+  --fp-gap: 14px;
+}
