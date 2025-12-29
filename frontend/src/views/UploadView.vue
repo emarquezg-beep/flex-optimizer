@@ -1652,20 +1652,34 @@ async function submitCorrections() {
               </div>
               
               <div v-if="selectedImages.length > 0" class="selected-files">
-                <p class="files-count">✅ {{ selectedImages.length }} imagen(es) seleccionada(s)</p>
+                <p class="files-count">{{ selectedImages.length }} imagen(es) seleccionadas</p>
+                
+                <!-- 🆕 BANNER DE COMPRESIÓN -->
+                <div v-if="uploadMetrics.compressedSizeMB > 0" class="compression-banner">
+                  <div class="compression-stats">
+                    <div class="stat-item">
+                      <span class="stat-label">📦 Original:</span>
+                      <span class="stat-value">{{ uploadMetrics.originalSizeMB }} MB</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">✅ Comprimido:</span>
+                      <span class="stat-value">{{ uploadMetrics.compressedSizeMB }} MB</span>
+                    </div>
+                    <div class="stat-item highlight">
+                      <span class="stat-label">🎉 Ahorro:</span>
+                      <span class="stat-value">{{ ((uploadMetrics.originalSizeMB - uploadMetrics.compressedSizeMB) / uploadMetrics.originalSizeMB * 100).toFixed(1) }}%</span>
+                    </div>
+                  </div>
+                </div>
+
                 <ul class="file-list">
                   <li v-for="(file, index) in selectedImages" :key="index">
                     {{ file.name }} ({{ (file.size / 1024).toFixed(1) }} KB)
                   </li>
                 </ul>
-                <button 
-                  type="button"
-                  class="clear-button"
-                  @click="clearImages"
-                >
-                  ❌ Limpiar
-                </button>
+                <button type="button" class="clear-button" @click="clearImages">Limpiar</button>
               </div>
+
             </div>
           </div>
 
@@ -3839,6 +3853,63 @@ async function submitCorrections() {
   font-size: 12px;
   color: #6b7280;
   margin: 0;
+}
+
+/* 🆕 BANNER DE COMPRESIÓN */
+.compression-banner {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.compression-stats {
+  display: flex;
+  justify-content: space-around;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+
+.stat-item.highlight .stat-value {
+  font-size: 24px;
+  color: #ffd700;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .compression-stats {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .stat-item {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+  }
 }
 
 
