@@ -1,6 +1,8 @@
 <script setup>
 import { defineProps, defineEmits, computed } from 'vue'
 import ScenarioCard from './ScenarioCard.vue'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import 'swiper/css'
 
 const props = defineProps({
   normalData: { type: Object, required: true },
@@ -11,76 +13,117 @@ const props = defineProps({
 const emit = defineEmits(['update:selectedScenario'])
 
 const hasAlt = computed(() => !!(props.inverseData && props.inverseData.eta_normal))
+const activeIndex = computed(() => (props.selectedScenario === 'inverse' ? 1 : 0))
+
 </script>
 
 <template>
-  <div class="summary" :class="{ 'summary--split': hasAlt, 'summary--solo': !hasAlt }">
-    <ScenarioCard
-      kind="normal"
-      :data="normalData"
-      :isActive="selectedScenario === 'normal'"
-      :isSolo="!hasAlt"
-      :hasChoice="hasAlt"
-      @select="emit('update:selectedScenario', 'normal')"
-    />
+  <div class="summary">
+    <!-- ✅ MOBILE: swipe Normal <-> AI dentro del slide -->
+    <div v-if="hasAlt" class="summary__mobile">
+      <Swiper
+        :slides-per-view="1"
+        :space-between="12"
+        :nested="true"
+        :touchMoveStopPropagation="true"
+        :initial-slide="activeIndex"
+        @slideChange="(s) => emit('update:selectedScenario', s.activeIndex === 1 ? 'inverse' : 'normal')"
+      >
+        <SwiperSlide>
+          <ScenarioCard
+            kind="normal"
+            :data="normalData"
+            :isActive="selectedScenario === 'normal'"
+            :isSolo="false"
+            :hasChoice="true"
+            @select="emit('update:selectedScenario', 'normal')"
+          />
+        </SwiperSlide>
 
-    <ScenarioCard
-      v-if="hasAlt"
-      kind="alt"
-      :data="inverseData"
-      :isActive="selectedScenario === 'inverse'"
-      :isSolo="false"
-      :hasChoice="true"
-      @select="emit('update:selectedScenario', 'inverse')"
-    />
+        <SwiperSlide>
+          <ScenarioCard
+            kind="alt"
+            :data="inverseData"
+            :isActive="selectedScenario === 'inverse'"
+            :isSolo="false"
+            :hasChoice="true"
+            @select="emit('update:selectedScenario', 'inverse')"
+          />
+        </SwiperSlide>
+      </Swiper>
+    </div>
+
+    <!-- ✅ SOLO: solo normal -->
+    <div v-else class="summary__solo">
+      <ScenarioCard
+        kind="normal"
+        :data="normalData"
+        :isActive="true"
+        :isSolo="true"
+        :hasChoice="false"
+      />
+    </div>
+
+    <!-- ✅ DESKTOP: comparación lado a lado -->
+    <div v-if="hasAlt" class="summary__desktop">
+      <ScenarioCard
+        kind="normal"
+        :data="normalData"
+        :isActive="selectedScenario === 'normal'"
+        :isSolo="false"
+        :hasChoice="true"
+        @select="emit('update:selectedScenario', 'normal')"
+      />
+      <ScenarioCard
+        kind="alt"
+        :data="inverseData"
+        :isActive="selectedScenario === 'inverse'"
+        :isSolo="false"
+        :hasChoice="true"
+        @select="emit('update:selectedScenario', 'inverse')"
+      />
+    </div>
   </div>
 </template>
+
 
 <style scoped>
 .summary {
   width: 100%;
   height: 100%;
-  padding: 0;
 }
 
-/* ✅ MÓVIL: swipe entre cards (Audible-like) */
-.summary--split {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 100%;
-  gap: 12px;
-
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-
-  /* opcional: un poco de padding lateral “premium” */
-  padding: 0 10px 10px;
-}
-
-.summary--split :deep(.scenario) {
-  scroll-snap-align: center;
-}
-
-/* Ocultar scrollbar (opcional) */
-.summary--split::-webkit-scrollbar {
+/* default: móvil */
+.summary__desktop {
   display: none;
 }
 
-/* ✅ SOLO: 1 card normal */
-.summary--solo {
-  display: block;
+.summary__mobile :deep(.swiper) {
+  width: 100%;
 }
 
-/* ✅ DESKTOP/TABLET: split real 2 columnas */
+.summary__mobile :deep(.swiper-slide) {
+  display: flex;
+  justify-content: center;
+}
+
+/* para que el card no quede pegado a bordes */
+.summary__mobile {
+  padding: 0 10px;
+}
+
+/* desktop */
 @media (min-width: 900px) {
-  .summary--split {
+  .summary__mobile,
+  .summary__solo {
+    display: none;
+  }
+
+  .summary__desktop {
     display: grid;
-    grid-auto-flow: initial;
     grid-template-columns: 1fr 1fr;
-    overflow: visible;
-    padding: 0;
+    gap: 12px;
   }
 }
+
 </style>
