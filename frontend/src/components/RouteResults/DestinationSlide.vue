@@ -117,10 +117,10 @@ watch(() => props.data.primary_city, (newCity) => {
   z-index: 1;
 
   background:
-    radial-gradient(900px 500px at 20% 10%, rgba(255,165,0,0.18), transparent 55%),
-    radial-gradient(900px 500px at 80% 20%, rgba(0,0,0,0.35), transparent 60%),
-    linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,0.82));
-  backdrop-filter: blur(2px);
+    radial-gradient(900px 500px at 20% 10%, rgba(255,165,0,0.16), transparent 55%),
+    linear-gradient(to bottom, rgba(0,0,0,0.20), rgba(0,0,0,0.86));
+    z-index: 1;
+  backdrop-filter: blur(1px);
 }
 
 .content-wrapper {
@@ -182,10 +182,28 @@ watch(() => props.data.primary_city, (newCity) => {
 .weather-temp { font-size: 2.5rem; font-weight: 800; line-height: 1; }
 .weather-desc { font-size: 0.9rem; opacity: 0.8; font-weight: 500; }
 
-.weather-grid { display: flex; justify-content: space-between; }
-.w-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.w-lbl { font-size: 0.7rem; text-transform: uppercase; opacity: 0.6; }
-.w-val { font-size: 0.9rem; font-weight: 600; }
+.weather-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.w-item {
+  background: rgba(0,0,0,0.28);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px;
+  padding: 10px 8px;
+}
+.w-lbl {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.75;
+}
+.w-val {
+  margin-top: 4px;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
 
 /* LOADING */
 .loading-card { display: flex; justify-content: center; align-items: center; height: 150px; }
