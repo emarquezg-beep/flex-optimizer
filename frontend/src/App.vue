@@ -6,7 +6,7 @@ import BottomNavBar from '@/components/BottomNavBar.vue'
 import PendingETABanner from '@/components/PendingETABanner.vue'
 
 // Si tienes logo
-import logo from '@/assets/logo.svg' // Ajusta la ruta según tu proyecto
+import logo from '@/assets/logo-temp.png' // Ajusta la ruta según tu proyecto
 
 const route = useRoute()
 const { isAuthenticated } = useAuth()
@@ -71,10 +71,6 @@ const showLayout = computed(() => {
   width: auto;
   max-width: 120px;
   object-fit: contain;
-
-  /* ✅ Hack temporal: vuelve blanco el SVG (hasta tener logo blanco/transparente) */
-  filter: brightness(0) invert(1);
-  opacity: 0.95;
 }
 
 /* Responsive mobile */
