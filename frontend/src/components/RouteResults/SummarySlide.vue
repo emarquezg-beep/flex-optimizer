@@ -203,9 +203,14 @@ watch(
 
 /* Desktop/tablet */
 @media (min-width: 900px) {
-  .summary__mobile,
-  .summary__solo {
+  /* ✅ En desktop: solo escondemos el layout mobile (nested swiper) */
+  .summary__mobile {
     display: none;
+  }
+
+  /* ✅ El solo (sin AI) debe seguir visible en desktop */
+  .summary__solo {
+    display: block;
   }
 
   .summary__desktop {
