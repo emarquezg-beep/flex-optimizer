@@ -32,7 +32,7 @@ watch(() => props.data.primary_city, (newCity) => {
 </script>
 
 <template>
-  <div class="slide-content" :style="{ backgroundImage: `url(${cityImage})` }">
+  <div class="slide-content" :style="cityImage? { backgroundImage: `url(${cityImage})`, '--city-bg': `url(${cityImage})` }: { backgroundImage: 'none', '--city-bg': 'none' }">
     
     <div class="overlay"></div>
 
@@ -90,22 +90,37 @@ watch(() => props.data.primary_city, (newCity) => {
 .slide-content {
   height: 100%;
   width: 100%;
-  background-size: cover;
-  background-position: center;
   position: relative;
-  /* El borde se maneja en el padre, pero por si acaso */
-  border-radius: 0 0 12px 12px; 
   overflow: hidden;
+  border-radius: 0 0 12px 12px;
+
+  /* ✅ background controlado */
+  background: var(--bg-primary);
 }
 
-/* EL GRIS MÁGICO (Gradiente elegante) */
+.slide-content::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--city-bg);
+  background-size: cover;
+  background-position: center;
+  filter: saturate(1.05) contrast(1.05);
+  transform: scale(1.02);
+  z-index: 0;
+}
+
+/* Overlay más “Audible” (profundo + viñeta) */
 .overlay {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  /* Gris oscuro arriba (30%) -> Gris casi negro abajo (90%) */
-  background: linear-gradient(to bottom, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.9));
+  inset: 0;
   z-index: 1;
-  backdrop-filter: blur(2px); /* Un toque de blur para que la foto no distraiga */
+
+  background:
+    radial-gradient(900px 500px at 20% 10%, rgba(255,165,0,0.18), transparent 55%),
+    radial-gradient(900px 500px at 80% 20%, rgba(0,0,0,0.35), transparent 60%),
+    linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,0.82));
+  backdrop-filter: blur(2px);
 }
 
 .content-wrapper {
@@ -121,7 +136,7 @@ watch(() => props.data.primary_city, (newCity) => {
 
 /* HEADER */
 .city-header { text-align: center; margin-top: 15px; }
-.label { font-size: 0.75rem; letter-spacing: 3px; color: #94a3b8; font-weight: 800; }
+.label { font-size: 0.75rem; letter-spacing: 3px; color: var(--text-secondary); font-weight: 800; }
 .city-name { 
   font-size: 2.8rem; font-weight: 900; margin: 5px 0 15px 0; 
   text-shadow: 0 4px 20px rgba(0,0,0,0.5); 
@@ -133,21 +148,21 @@ watch(() => props.data.primary_city, (newCity) => {
 
 .arrival-pill {
   display: inline-block;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
   padding: 8px 16px;
   border-radius: 30px;
   font-size: 0.95rem;
   font-weight: 600;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.12);
   box-shadow: 0 4px 15px rgba(0,0,0,0.2);
 }
 
 /* WEATHER CARD (Glassmorphism) */
 .weather-card {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 24px;
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   margin-top: auto; 
   margin-bottom: 30px;
