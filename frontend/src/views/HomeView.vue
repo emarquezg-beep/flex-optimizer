@@ -818,12 +818,18 @@ function closeProfileModal() {
    Variables y Reset
    ============================================ */
 :root {
-  --color-primary: #3b82f6;
-  --color-primary-dark: #2563eb;
-  --color-text-primary: #1f2937;
-  --color-text-secondary: #6b7280;
-  --color-text-tertiary: #9ca3af;
-  --color-bg-secondary: #f9fafb;
+  /* map local vars -> global tokens */
+  --color-primary: var(--brand-primary);
+  --color-primary-dark: var(--brand-primary-hover);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-bg-secondary: var(--bg-secondary);
+
+  /* extras para HomeView */
+  --hv-surface: var(--bg-secondary);
+  --hv-surface-2: var(--bg-tertiary);
+  --hv-border: var(--border-primary);
 }
 
 /* ============================================
@@ -831,7 +837,8 @@ function closeProfileModal() {
    ============================================ */
 .home-view {
   min-height: 100vh;
-  background: linear-gradient(to bottom, #f0f9ff, #ffffff);
+  background: radial-gradient(900px 500px at 20% 0%, rgba(255,165,0,0.12), transparent 55%),
+  linear-gradient(180deg, var(--bg-primary), var(--bg-primary));
   padding: 20px 16px 100px;
 }
 
@@ -858,10 +865,11 @@ function closeProfileModal() {
   display: flex;
   gap: 12px;
   margin-bottom: 20px;
-  background: white;
+  background: rgba(255, 255, 255, 0.04);
   padding: 6px;
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--hv-border);
+  box-shadow: none;
   position: relative;
   z-index: 10;
 }
@@ -886,7 +894,7 @@ function closeProfileModal() {
 .week-tab.active {
   background: var(--color-primary);
   color: white;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  box-shadow: none;
 }
 
 /* 🆕 Slider Container */
@@ -952,9 +960,9 @@ function closeProfileModal() {
    Summary Card
    ============================================ */
 .summary-card {
-  background: white;
+  background: var(--card-bg, var(--hv-surface));
+  border: 1px solid var(--hv-border);
 }
-
 /* Progress Section */
 .progress-section {
   margin-bottom: 24px;
@@ -1032,14 +1040,15 @@ function closeProfileModal() {
   align-items: center;
   gap: 10px;
   padding: 14px;
-  background: var(--color-bg-secondary);
+  background: rgba(255,255,255,0.04);
   border-radius: 12px;
   transition: all 0.2s;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
 .stat-icon {
@@ -1091,7 +1100,8 @@ function closeProfileModal() {
    Blocks Card
    ============================================ */
 .blocks-card {
-  background: white;
+  background: var(--card-bg, var(--hv-surface));
+  border: 1px solid var(--hv-border);
 }
 
 .blocks-header {
@@ -1114,14 +1124,15 @@ function closeProfileModal() {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: #f9fafb;
+  background: rgba(255,255,255,0.04);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .block-item:hover {
-  background: #f3f4f6;
+  background: rgba(255,255,255,0.06);
   transform: translateX(4px);
 }
 
@@ -1131,7 +1142,7 @@ function closeProfileModal() {
   flex-direction: column;
   align-items: center;
   padding: 12px;
-  background: white;
+  background: rgba(255,255,255,0.06);
   border-radius: 8px;
   min-width: 70px;
 }
