@@ -22,18 +22,27 @@ export function useAtmosphere() {
 
   // 1. Obtener Foto de la Ciudad
   const fetchCityImage = (cityName) => {
-    if (!cityName) return;
+      if (!cityName) {
+        cityImage.value = CITY_IMAGES['default']
+      return
+      }
     
     // Normalizamos el nombre (ej: "Orlando, FL" -> "Orlando")
     const cleanName = cityName.split(',')[0].trim();
     
-    // Buscamos en nuestro diccionario o usamos default
-    // (Podrías agregar lógica aquí para buscar en una API real luego)
-    const img = Object.keys(CITY_IMAGES).find(key => 
-      cleanName.toLowerCase().includes(key.toLowerCase())
-    );
-    
-    cityImage.value = img ? CITY_IMAGES[img] : CITY_IMAGES['default'];
+    // 1) Primero intentamos curated dictionary (calidad garantizada)
+    const keyMatch = Object.keys(CITY_IMAGES).find((key) =>
+      key !== 'default' && cleanName.toLowerCase().includes(key.toLowerCase())
+    )
+
+    if (keyMatch) {
+      cityImage.value = CITY_IMAGES[keyMatch]
+      return
+    }
+
+    // 2) Fallback dinámico sin API key (imagen grande para que no se pixelee)
+    const q = encodeURIComponent(`${cleanName},city,skyline`)
+    cityImage.value = `https://source.unsplash.com/1600x900/?${q}`
   };
 
   // 2. Fetch Clima (AHORA REAL) 📡
