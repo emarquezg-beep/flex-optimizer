@@ -1,5 +1,7 @@
 <script setup>
-import { defineProps, defineEmits, computed, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import ScenarioCard from './ScenarioCard.vue'
+
 import { Swiper, SwiperSlide } from 'swiper/vue'
 import { Pagination } from 'swiper/modules'
 import 'swiper/css'
@@ -11,16 +13,16 @@ const props = defineProps({
   selectedScenario: { type: String, required: true }
 })
 
+const emit = defineEmits(['update:selectedScenario'])
+
 const innerSwiper = ref(null)
 
 const hasAlt = computed(() => !!(props.inverseData && props.inverseData.eta_normal))
-
 const activeIndex = computed(() => (props.selectedScenario === 'inverse' ? 1 : 0))
 
 const onInnerSwiper = (swiper) => {
   innerSwiper.value = swiper
-  // Asegura que arranque en el scenario correcto
-  swiper.slideTo(activeIndex.value)
+  swiper.slideTo(activeIndex.value) // sync inicial [web:231]
 }
 
 const setScenario = (scenario) => {
@@ -28,15 +30,12 @@ const setScenario = (scenario) => {
   innerSwiper.value?.slideTo(scenario === 'inverse' ? 1 : 0) // sync UI [web:231]
 }
 
-// Si el padre cambia selectedScenario (por lógica externa), sincroniza el swiper
 watch(
   () => props.selectedScenario,
   (val) => {
     innerSwiper.value?.slideTo(val === 'inverse' ? 1 : 0)
   }
 )
-
-
 </script>
 
 <template>
@@ -187,6 +186,33 @@ watch(
 
 .summary__mobile :deep(.swiper-pagination-bullet-active) {
   background: var(--brand-primary);
+}
+
+.summary {
+  width: 100%;
+}
+
+/* default = móvil */
+.summary__desktop {
+  display: none;
+}
+
+.summary__mobile :deep(.swiper) {
+  width: 100%;
+}
+
+/* Desktop/tablet */
+@media (min-width: 900px) {
+  .summary__mobile,
+  .summary__solo {
+    display: none;
+  }
+
+  .summary__desktop {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
 }
 
 
