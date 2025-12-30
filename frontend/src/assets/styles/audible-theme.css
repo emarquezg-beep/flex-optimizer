@@ -1,6 +1,12 @@
 /* frontend/src/assets/styles/audible-theme.css */
 /* Tema oscuro estilo Audible (override de tokens existentes) */
 :root {
+  /* Navigation */
+  --nav-bg: rgba(11, 15, 20, 0.92);
+  --nav-border: rgba(255,255,255,0.08);
+  --nav-text: rgba(255,255,255,0.92);
+  --nav-muted: rgba(255,255,255,0.55);
+  
   /* Backgrounds / surfaces */
   --bg-primary: #0b0f14;
   --bg-secondary: #0f1621;
