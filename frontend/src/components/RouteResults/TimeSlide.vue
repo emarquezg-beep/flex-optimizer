@@ -87,7 +87,7 @@ const formatMin = (minutes) => {
 
 <style scoped>
 .slide-content {
-  padding: 10px 20px;
+  padding: 14px 20px 12px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -101,47 +101,85 @@ const formatMin = (minutes) => {
 .slide-header h3 { margin: 0; font-size: 1.3rem; color: var(--text-primary); font-weight: 700; }
 .subtitle { margin: 0; color: var(--text-secondary); font-size: 0.85rem; }
 
-/* TIMELINE */
+/* TIMELINE (Audible-like) */
 .timeline-wrapper {
   display: flex;
   justify-content: center;
-  margin-bottom: 20px;
+  margin: 12px 0 18px;
 }
 
 .timeline-container {
+  width: 100%;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
+  gap: 12px;
+
   position: relative;
-  padding-left: 25px;
-  border-left: 2px dashed var(--border-primary);
-  margin-left: 10px;
+  padding-left: 22px;
+}
+
+/* Rail vertical suave */
+.timeline-container::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 999px;
 }
 
 .timeline-item {
   position: relative;
-  padding-bottom: 25px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
 }
-.timeline-item:last-child { padding-bottom: 0; }
 
+/* Dots */
 .time-dot {
   position: absolute;
-  left: -32px;
-  top: 4px;
+  left: 2px;
+  top: 18px;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 3px solid var(--bg-surface);
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.1);
+  border: 3px solid var(--bg-primary);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.08);
 }
 
-.time-dot.start { background-color: #fbbf24; } /* Amarillo */
-.time-dot.block { background-color: #3b82f6; } /* Azul */
-.time-dot.end { background-color: #34d399; }   /* Verde */
+/* Tokens (sin hardcode) */
+.time-dot.start { background: rgba(245, 158, 11, 0.95); } /* amber-like */
+.time-dot.block { background: var(--brand-primary); }
+.time-dot.end   { background: rgba(34, 197, 94, 0.95); }  /* green-like */
 
-.time-content { display: flex; flex-direction: column; align-items: flex-start; }
-.time-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px; margin-bottom: 2px; }
-.time-val { font-size: 1.15rem; font-weight: 600; color: var(--text-primary); }
-.highlight { color: var(--brand-primary) !important; font-weight: 700; }
+.time-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.time-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+}
+
+.time-val {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: var(--text-primary);
+}
+
+.highlight {
+  color: var(--brand-primary) !important;
+  font-weight: 900;
+}
 
 /* SUMMARY BOX */
 .summary-box {
