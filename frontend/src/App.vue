@@ -55,18 +55,25 @@ const showLayout = computed(() => {
   align-items: center;
   justify-content: center;
   padding: 0 var(--space-4);
-  background-color: var(--bg-elevated);
-  border-bottom: 1px solid var(--border-secondary);
-  box-shadow: var(--shadow-sm);
+
+  /* ✅ Usa nav tokens */
+  background: var(--nav-bg);
+  border-bottom: 1px solid var(--nav-border);
+
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
 .app-logo {
-  height: 32px;  /* ✅ Tamaño ideal */
+  height: 32px;
   width: auto;
   max-width: 120px;
   object-fit: contain;
+
+  /* ✅ Hack temporal: vuelve blanco el SVG (hasta tener logo blanco/transparente) */
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
 }
 
 /* Responsive mobile */

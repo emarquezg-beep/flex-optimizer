@@ -42,8 +42,8 @@ const isActive = (path) => {
   left: 0;
   right: 0;
   height: var(--bottom-nav-height);
-  background-color: var(--bg-elevated);
-  border-top: 1px solid var(--border-secondary);
+  background: var(--nav-bg);
+  border-top: 1px solid var(--nav-border);
   display: flex;
   justify-content: space-around;
   align-items: center;
@@ -62,7 +62,7 @@ const isActive = (path) => {
   gap: var(--space-1);
   flex: 1;
   height: 100%;
-  color: var(--text-tertiary);
+  color: var(--nav-muted);
   text-decoration: none;
   transition: all var(--transition-base);
   position: relative;
@@ -71,6 +71,7 @@ const isActive = (path) => {
 
 .nav-item:active {
   transform: scale(0.95);
+  color: var(--brand-primary);
 }
 
 .nav-icon {
@@ -85,7 +86,7 @@ const isActive = (path) => {
 
 /* Active state */
 .nav-item--active {
-  color: var(--brand-accent);
+  color: var(--brand-primary);
 }
 
 .nav-item--active .nav-icon {
@@ -112,7 +113,7 @@ const isActive = (path) => {
   transform: translateX(-50%);
   width: 32px;
   height: 3px;
-  background-color: var(--brand-accent);
+  background-color: var(--brand-primary);
   border-radius: 0 0 var(--radius-full) var(--radius-full);
 }
 
