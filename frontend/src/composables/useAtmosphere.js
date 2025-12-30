@@ -20,30 +20,73 @@ export function useAtmosphere() {
   const cityImage = ref(CITY_IMAGES['default']);
   const loading = ref(false);
 
-  // 1. Obtener Foto de la Ciudad
-  const fetchCityImage = (cityName) => {
-      if (!cityName) {
-        cityImage.value = CITY_IMAGES['default']
-      return
-      }
-    
-    // Normalizamos el nombre (ej: "Orlando, FL" -> "Orlando")
-    const cleanName = cityName.split(',')[0].trim();
-    
-    // 1) Primero intentamos curated dictionary (calidad garantizada)
-    const keyMatch = Object.keys(CITY_IMAGES).find((key) =>
-      key !== 'default' && cleanName.toLowerCase().includes(key.toLowerCase())
-    )
+// 1. Obtener Foto de la Ciudad (curated + Wikipedia fallback)
+const fetchCityImage = async (cityName) => {
+  // ✅ Nunca dejar vacío: empieza con default
+  cityImage.value = CITY_IMAGES['default']
+  if (!cityName) return
 
-    if (keyMatch) {
-      cityImage.value = CITY_IMAGES[keyMatch]
+  const cleanName = cityName.split(',')[0].trim()
+
+  // 1) Curated dictionary primero
+  const keyMatch = Object.keys(CITY_IMAGES).find((key) =>
+    key !== 'default' && cleanName.toLowerCase().includes(key.toLowerCase())
+  )
+  if (keyMatch) {
+    cityImage.value = CITY_IMAGES[keyMatch]
+    return
+  }
+
+  // Helpers
+  const preload = (url) =>
+    new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(url)
+      img.onerror = reject
+      img.src = url
+    })
+
+  const fetchWikiImage = async (title) => {
+    const endpoint = 'https://en.wikipedia.org/w/api.php'
+    const params = new URLSearchParams({
+      action: 'query',
+      format: 'json',
+      origin: '*', // ✅ CORS
+      prop: 'pageimages',
+      piprop: 'original|thumbnail',
+      pithumbsize: '1600',
+      titles: title,
+    })
+
+    const res = await fetch(`${endpoint}?${params.toString()}`)
+    if (!res.ok) return null
+
+    const json = await res.json()
+    const pages = json?.query?.pages || {}
+    const page = pages[Object.keys(pages)[0]]
+    const url = page?.original?.source || page?.thumbnail?.source
+    return url || null
+  }
+
+  // 2) Wikipedia fallback (intenta 2 variantes)
+  const tries = [
+    cleanName,
+    `${cleanName}, Florida`, // ayuda en muchos casos (si no aplica, igual cae al default)
+  ]
+
+  for (const t of tries) {
+    try {
+      const url = await fetchWikiImage(t)
+      if (!url) continue
+      await preload(url) // valida que cargue
+      cityImage.value = url
       return
+    } catch (e) {
+      // sigue intentando o deja default
     }
+  }
+}
 
-    // 2) Fallback dinámico sin API key (imagen grande para que no se pixelee)
-    const q = encodeURIComponent(`${cleanName},city,skyline`)
-    cityImage.value = `https://source.unsplash.com/1600x900/?${q}`
-  };
 
   // 2. Fetch Clima (AHORA REAL) 📡
   const fetchWeather = async (cityName) => {
