@@ -53,8 +53,9 @@ const showLayout = computed(() => {
   height: var(--header-height);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 0 var(--space-4);
+  margin-left: 2px;
 
   /* ✅ Usa nav tokens */
   background: var(--nav-bg);
