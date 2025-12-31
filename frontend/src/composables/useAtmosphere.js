@@ -3,15 +3,14 @@ import { ref } from 'vue';
 // 📸 DICCIONARIO DE CIUDADES (Calidad Garantizada)
 // Mapeamos ciudades comunes a fotos espectaculares de Unsplash
 const CITY_IMAGES = {
-  'Orlando': 'https://images.unsplash.com/photo-1597040663442-93e83b4b6ba3?q=80&w=800&auto=format&fit=crop', // Lake Eola
-  'Kissimmee': 'https://images.unsplash.com/photo-1598563608771-49a3cc2001ba?q=80&w=800&auto=format&fit=crop', // Disney/Area vibes
-  'Oviedo': 'https://images.unsplash.com/photo-1596204523926-243ce4493397?q=80&w=800&auto=format&fit=crop', // Suburban green
-  'Winter Park': 'https://images.unsplash.com/photo-1623698064627-2e463a033502?q=80&w=800&auto=format&fit=crop', // Charming street
+  'Orlando': 'https://images.unsplash.com/photo-1597040663442-93e83b4b6ba3?q=80&w=800&auto=format&fit=crop',
+  'Kissimmee': 'https://images.unsplash.com/photo-1465447142348-e9952c393450?q=80&w=800&auto=format&fit=crop', // ✅ usa default
+  'Oviedo': 'https://images.unsplash.com/photo-1596204523926-243ce4493397?q=80&w=800&auto=format&fit=crop',
+  'Winter Park': 'https://images.unsplash.com/photo-1623698064627-2e463a033502?q=80&w=800&auto=format&fit=crop',
   'Tampa': 'https://images.unsplash.com/photo-1543489822-c495eb992524?q=80&w=800&auto=format&fit=crop',
   'Miami': 'https://images.unsplash.com/photo-1514214246283-ef1e12db00e6?q=80&w=800&auto=format&fit=crop',
-  'Sanford': 'https://images.unsplash.com/photo-1629230678854-3c6628c6e28f?q=80&w=800&auto=format&fit=crop', // Lake Monroe vibe
-  'Clermont': 'https://images.unsplash.com/photo-1633633630769-6d64903333e6?q=80&w=800&auto=format&fit=crop', // Hills
-  // Fallback genérico (Carretera de Florida bonita)
+  'Sanford': 'https://images.unsplash.com/photo-1629230678854-3c6628c6e28f?q=80&w=800&auto=format&fit=crop',
+  'Clermont': 'https://images.unsplash.com/photo-1633633630769-6d64903333e6?q=80&w=800&auto=format&fit=crop',
   'default': 'https://images.unsplash.com/photo-1465447142348-e9952c393450?q=80&w=800&auto=format&fit=crop'
 };
 
@@ -32,9 +31,16 @@ const fetchCityImage = async (cityName) => {
   const keyMatch = Object.keys(CITY_IMAGES).find((key) =>
     key !== 'default' && cleanName.toLowerCase().includes(key.toLowerCase())
   )
+
   if (keyMatch) {
-    cityImage.value = CITY_IMAGES[keyMatch]
-    return
+    // ✅ validar que cargue; si falla, NO retornes: cae al fallback de Wikipedia
+    try {
+      await preload(CITY_IMAGES[keyMatch])
+      cityImage.value = CITY_IMAGES[keyMatch]
+      return
+    } catch (e) {
+      // sigue a Wikipedia fallback
+    }
   }
 
   // Helpers
