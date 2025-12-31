@@ -1853,11 +1853,11 @@ async function submitCorrections() {
           </button>
         </div>
         <div class="mini-summary">
-          <span>📦 {{ extractedAddresses.length }} stops</span>
+          <span>{{ extractedAddresses.length }} stops</span>
           <span class="separator">•</span>
-          <span>📅 {{ blockData.hora }} Start</span>
+          <span>{{ blockData.hora }} Start</span>
           <span class="separator">•</span>
-          <span>💰 ${{ blockData.pago }}</span>
+          <span>${{ blockData.pago }}</span>
         </div>
       </div>
 
