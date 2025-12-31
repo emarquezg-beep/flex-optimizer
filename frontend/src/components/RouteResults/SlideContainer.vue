@@ -71,14 +71,14 @@ const goHome = () => {
       class="my-swiper"
     >
       <swiper-slide>
-        <SummarySlide 
+        <SummarySlide
           :normalData="normalPayload"
           :inverseData="inversePayload"
           :selectedScenario="currentSelection"
           @update:selectedScenario="val => currentSelection = val"
         />
       </swiper-slide>
-      
+
       <swiper-slide>
         <DestinationSlide :data="selectedData" />
       </swiper-slide>
@@ -92,63 +92,59 @@ const goHome = () => {
       </swiper-slide>
 
       <swiper-slide>
-        <div class="slide-flex-col">
-          <div class="slide-scroll">
-            <TimeSlide :data="selectedData" />
-          </div>
-
-          <div class="action-footer">
-            <button class="btn-save" @click="handleSave">
-              {{ saveButtonLabel }}
-            </button>
-            <button class="btn-home" @click="goHome">
-              Back to Home
-            </button>
-          </div>
-        </div>
+        <!-- ✅ TimeSlide SOLO contenido -->
+        <TimeSlide :data="selectedData" />
       </swiper-slide>
     </swiper>
+
+    <!-- ✅ Footer GLOBAL overlay (afuera del swiper) -->
+    <div class="global-action-footer">
+      <button class="btn-save" @click="handleSave">
+        {{ saveButtonLabel }}
+      </button>
+      <button class="btn-home" @click="goHome">
+        Back to Home
+      </button>
+    </div>
   </div>
 </template>
+
 
 <style scoped>
 /* TUS ESTILOS SE MANTIENEN IGUALES */
 
-/* Asegura altura completa del swiper */
+.swiper-wrapper-custom {
+  position: relative;
+  height: 100%;
+}
+/* ✅ Reserva espacio para que el footer NO tape el contenido */
+.my-swiper {
+  height: 100%;
+  padding-bottom: var(--global-footer-h, 120px);
+  box-sizing: border-box;
+}
+
+/* Mantén tu regla de altura completa si hoy te funciona estable */
 .swiper-wrapper-custom,
-.my-swiper,
 :deep(.swiper),
 :deep(.swiper-wrapper),
 :deep(.swiper-slide) {
   height: 100%;
 }
 
-/* Columna: contenido arriba, footer abajo */
-.slide-flex-col {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0; /* ✅ clave para que overflow funcione en flex */
-}
+/* ✅ Footer global visible en todos los slides */
+.global-action-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
 
-/* Solo esta zona scrollea */
-.slide-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-/* Footer SIEMPRE visible (sin sticky) */
-.action-footer {
   display: flex;
   flex-direction: column;
   gap: 10px;
 
   padding: 12px 16px;
   padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-
-  margin-top: 0;
-  margin-bottom: 0;
 
   background: linear-gradient(
     to bottom,
@@ -157,8 +153,9 @@ const goHome = () => {
     rgba(0,0,0,0.85)
   );
   backdrop-filter: blur(2px);
-}
 
+  z-index: 10;
+}
 
 .btn-save {
   padding: 16px;
