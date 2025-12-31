@@ -1849,7 +1849,7 @@ async function submitCorrections() {
       <div v-if="!showInputForm && reportData" class="edit-bar">
         <div class="edit-bar-left">
           <button @click="showQuickSettingsModal = true" class="btn-edit-inputs">
-            ✏️ Edit Parameters
+            ✏️ Edit Inputs
           </button>
         </div>
         <div class="mini-summary">
@@ -3490,13 +3490,13 @@ async function submitCorrections() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 20px;
-  background-color: var(--bg-secondary);
-  border-radius: 12px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+
+  padding: 10px 12px;              /* ✅ antes 15px 20px */
+  background: rgba(255,255,255,0.04);
+  border-radius: 14px;
+  margin-bottom: 12px;             /* ✅ antes 20px */
+  box-shadow: none;                /* ✅ quita sombra grande */
   border: 1px solid var(--border-primary);
-  animation: fadeIn 0.5s ease;
 }
 
 @keyframes fadeIn {
@@ -3504,27 +3504,60 @@ async function submitCorrections() {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Botón compacto tipo "chip button" */
 .btn-edit-inputs {
   background: transparent;
-  border: 1px solid var(--brand-primary);
+  border: 1px solid rgba(255,165,0,0.45);
   color: var(--brand-primary);
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-weight: 600;
+
+  padding: 6px 10px;               /* ✅ antes 8px 16px */
+  border-radius: 12px;             /* ✅ antes 20px */
+  font-weight: 800;
+  font-size: 0.82rem;
+  line-height: 1;
+
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
 .btn-edit-inputs:hover {
-  background: var(--brand-primary);
-  color: white;
+  background: rgba(255,165,0,0.12);
+  color: var(--text-primary);
 }
 
-.mini-summary {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  font-weight: 500;
+.btn-edit-inputs:active {
+  transform: scale(0.98);
 }
+/* Mini summary como chips */
+.mini-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  color: var(--text-secondary);
+  font-size: 0.82rem;              /* ✅ antes 0.9 */
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mini-summary .separator {
+  opacity: 0.35;
+}
+
+/* Mobile: permitir wrap sin aumentar tanto la altura */
+@media (max-width: 420px) {
+  .edit-bar {
+    padding: 10px 10px;
+    gap: 10px;
+  }
+
+  .mini-summary {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 6px;
+  }
+}
+
 /* Quick Settings Modal Specifics */
 /* === MODAL ESTILIZADO (DARK MODE) === */
 .quick-settings-modal {
