@@ -247,4 +247,29 @@ const formatMin = (minutes) => {
 .mindset-quote { font-style: italic; color: var(--text-primary); font-size: 0.85rem; line-height: 1.4; margin: 0 0 6px 0; opacity: 0.9; }
 .mindset-footer { text-align: right; }
 .mindset-author { font-size: 0.75rem; color: var(--text-secondary); }
+
+/* Mobile: compact header to avoid scroll */
+@media (max-width: 480px) {
+  .slide-content {
+    padding: 10px 16px 10px;
+  }
+
+  .slide-header {
+    margin-bottom: 10px;
+  }
+
+  .icon-header {
+    display: none; /* ✅ quita el reloj en móvil */
+  }
+
+  .slide-header h3 {
+    font-size: 1.05rem;
+    font-weight: 900;
+  }
+
+  .subtitle {
+    font-size: 0.78rem;
+  }
+}
+
 </style>

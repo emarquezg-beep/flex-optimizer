@@ -1911,6 +1911,7 @@ async function submitCorrections() {
       <div v-if="extractedAddresses.length > 0 && backendResponse && !isProcessing && reportData && normalPayload.pago">
         
         <div class="results-container-slides">
+          <!--
           <div class="results-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
             <h3>📊 Route Analysis</h3>
             <button 
@@ -1920,7 +1921,7 @@ async function submitCorrections() {
               {{ mostrarDetalles ? 'Hide Debug' : 'Show Debug' }}
             </button>
           </div>
-
+          -->
           <SlideContainer 
             :normalPayload="normalPayload"
             :inversePayload="inversePayload"
