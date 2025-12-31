@@ -22,9 +22,8 @@ const formatDuration = (min) => {
 <template>
   <div class="slide-content">
     <div class="slide-header">
-      <div class="icon-header">📍</div>
-      <h3>Route Logistics</h3>
-      <p class="subtitle">{{ data.segments?.length || 0 }} Segments identified</p>
+      <h3 class="title">Route Logistics</h3>
+      <p class="subtitle">{{ data.segments?.length || 0 }} segments</p>
     </div>
 
     <div class="segments-list">
@@ -57,9 +56,7 @@ const formatDuration = (min) => {
             🏙️ {{ seg.downtownCount }} DT
           </span>
         </div>
-      </div>
-      
-      <div class="spacer"></div>
+      </div>   
     </div>
   </div>
 </template>
@@ -69,28 +66,40 @@ const formatDuration = (min) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 15px 20px 0 20px;
+  padding: 12px 16px 0 16px;
 }
 
 .slide-header {
   text-align: center;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   flex-shrink: 0; /* No encoger el header */
 }
 .icon-header { font-size: 1.8rem; margin-bottom: 5px; }
 .slide-header h3 { margin: 0; font-size: 1.4rem; color: var(--text-primary); }
-.subtitle { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }
+.title {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.2vw, 1.2rem); /* fluid, más pequeño */
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+} /* clamp() permite tipografía fluida sin media queries. [web:145][web:146] */
+
+.subtitle {
+  margin: 2px 0 0 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem; /* ↓ antes 0.9 */
+}
 
 /* CONTENEDOR DE SCROLL */
 .segments-list {
   flex: 1;
-  overflow-y: auto; /* Scroll vertical activado */
-  padding-right: 5px; /* Espacio para scrollbar */
+  min-height: 0;         /* clave para overflow en flex column [web:94][web:98] */
+  overflow-y: auto;
+  padding-right: 3px;    /* ↓ antes 5 */
+  padding-bottom: 18px;  /* ✅ reemplaza el spacer */
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  
-  /* Scrollbar bonita */
+  gap: 8px;              /* ↓ antes 12 */
   scrollbar-width: thin;
   scrollbar-color: var(--border-primary) transparent;
 }
@@ -99,62 +108,63 @@ const formatDuration = (min) => {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-primary);
   border-radius: 12px;
-  padding: 12px 15px;
+  padding: 10px 12px; /* ↓ antes 12/15 */
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px; /* ↓ antes 8 */
 }
+
 
 .seg-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid rgba(255,255,255,0.05);
-  padding-bottom: 6px;
-  margin-bottom: 2px;
+  padding-bottom: 4px; /* ↓ antes 6 */
+  margin-bottom: 0;   /* ↓ antes 2 */
 }
 
 .seg-title {
-  font-weight: 700;
+  font-weight: 800;
   color: var(--brand-primary);
-  font-size: 0.95rem;
+  font-size: 0.82rem; /* ↓ antes 0.95 */
   text-transform: uppercase;
 }
 
 .seg-stops-count {
-  font-size: 0.8rem;
+  font-size: 0.75rem; /* ↓ antes 0.8 */
   color: var(--text-secondary);
   background: rgba(255,255,255,0.05);
-  padding: 2px 8px;
+  padding: 2px 7px;   /* ↓ antes 2/8 */
   border-radius: 10px;
 }
 
 .seg-body {
   display: flex;
-  gap: 20px;
+  gap: 14px; /* ↓ antes 20 */
 }
 
 .seg-metric {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.9rem;
+  font-size: 0.85rem; /* ↓ antes 0.9 */
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: 600;
 }
 .seg-metric .icon { font-size: 1rem; }
 
 .seg-footer {
   display: flex;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;     /* ↓ antes 8 */
+  margin-top: 2px; /* ↓ antes 4 */
 }
 
 .badge {
-  font-size: 0.75rem;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-weight: 600;
+  font-size: 0.7rem;  /* ↓ antes 0.75 */
+  padding: 2px 7px;   /* ↓ antes 3/8 */
+  border-radius: 999px; /* más “pill”, menos ruido */
+  font-weight: 700;
 }
 
 .badge.apt {
