@@ -93,8 +93,10 @@ const goHome = () => {
 
       <swiper-slide>
         <div class="slide-flex-col">
-          <TimeSlide :data="selectedData" />
-          
+          <div class="slide-scroll">
+            <TimeSlide :data="selectedData" />
+          </div>
+
           <div class="action-footer">
             <button class="btn-save" @click="handleSave">
               {{ saveButtonLabel }}
@@ -111,45 +113,42 @@ const goHome = () => {
 
 <style scoped>
 /* TUS ESTILOS SE MANTIENEN IGUALES */
-.swiper-wrapper-custom {
-  height: auto;
-  min-height: 680px; 
-  width: 100%;
-  background: var(--bg-surface);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  padding-bottom: 40px; 
-  position: relative;
-}
 
-.my-swiper {
+/* Asegura altura completa del swiper */
+.swiper-wrapper-custom,
+.my-swiper,
+:deep(.swiper),
+:deep(.swiper-wrapper),
+:deep(.swiper-slide) {
   height: 100%;
-  width: 100%;
-  padding-bottom: 20px;
 }
 
+/* Columna: contenido arriba, footer abajo */
 .slide-flex-col {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  justify-content: space-between;
+  min-height: 0; /* ✅ clave para que overflow funcione en flex */
 }
 
+/* Solo esta zona scrollea */
+.slide-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Footer SIEMPRE visible (sin sticky) */
 .action-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 50;
-
-  margin-top: 8px;
-  margin-bottom: 25px;
-
   display: flex;
   flex-direction: column;
   gap: 10px;
 
-  padding: 16px; /* ✅ un solo padding base */
+  padding: 12px 16px;
   padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+
+  margin-top: 0;
+  margin-bottom: 0;
 
   background: linear-gradient(
     to bottom,
