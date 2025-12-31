@@ -44,12 +44,12 @@ const selectedData = computed(() => {
 // 🤖 CAMBIO 3: Texto dinámico para el botón
 const saveButtonLabel = computed(() => {
   if (currentSelection.value === 'normal') {
-    return '💾 Log Normal Route';
+    return 'Log Normal Route';
   }
   // Si estamos en la vista alternativa, usamos su etiqueta si existe (ej: "🤖 AI Suggestion")
   // o un fallback por defecto.
   const label = props.inversePayload?.label || 'Alternative Route';
-  return `💾 Log ${label}`;
+  return `Log ${label}`;
 });
 
 const handleSave = () => {
@@ -100,7 +100,7 @@ const goHome = () => {
               {{ saveButtonLabel }}
             </button>
             <button class="btn-home" @click="goHome">
-              🏠 Back to Home
+              Back to Home
             </button>
           </div>
         </div>
@@ -137,16 +137,29 @@ const goHome = () => {
 }
 
 .action-footer {
-  margin-top: auto;
-  padding: 20px;
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+
+  margin-top: 8px;
+  margin-bottom: 25px;
+
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background: transparent;
-  position: relative;
-  z-index: 50; 
-  margin-bottom: 25px; 
+  gap: 10px;
+
+  padding: 16px; /* ✅ un solo padding base */
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+
+  background: linear-gradient(
+    to bottom,
+    rgba(0,0,0,0),
+    rgba(0,0,0,0.55) 30%,
+    rgba(0,0,0,0.85)
+  );
+  backdrop-filter: blur(2px);
 }
+
 
 .btn-save {
   padding: 16px;
@@ -180,7 +193,7 @@ const goHome = () => {
   font-size: 0.98rem;
   font-weight: 850;
 
-  margin-top: 10px;
+  margin-top: 0 !important;
   cursor: pointer;
 }
 
