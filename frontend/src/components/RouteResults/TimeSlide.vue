@@ -231,7 +231,7 @@ const formatMin = (minutes) => {
   border-radius: 16px;
 
   padding: 12px 15px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 
   border-left: 0;
   box-shadow: none;
@@ -271,5 +271,18 @@ const formatMin = (minutes) => {
     font-size: 0.78rem;
   }
 }
+
+@media (max-width: 480px) {
+  /* ✅ Reduce el “aire” final del slide para que el CTA quede más cerca */
+  .slide-content {
+    padding-bottom: 6px;
+  }
+
+  /* ✅ Si el quote crece, baja un poco el padding sin perder legibilidad */
+  .mindset-card {
+    padding: 10px 12px;
+  }
+}
+
 
 </style>
