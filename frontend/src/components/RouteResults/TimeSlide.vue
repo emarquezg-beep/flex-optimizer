@@ -181,38 +181,70 @@ const formatMin = (minutes) => {
   font-weight: 900;
 }
 
-/* SUMMARY BOX */
+/* SUMMARY BOX (2 mini cards) */
 .summary-box {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid var(--border-primary);
-  border-radius: 10px;
-  padding: 12px;
+  margin-top: auto; /* sigue empujando abajo */
+  margin-bottom: 14px;
+
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.sum-item {
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  padding: 12px 14px;
+
   display: flex;
-  justify-content: space-around;
+  flex-direction: column;
   align-items: center;
-  margin-bottom: 15px;
-  margin-top: auto; /* Empuja hacia abajo */
+  gap: 6px;
 }
 
-.sum-item { display: flex; flex-direction: column; align-items: center; }
-.sum-item .lbl { font-size: 0.7rem; color: var(--text-secondary); }
-.sum-item .val { font-size: 1.1rem; font-weight: bold; color: var(--text-primary); }
-.sum-divider { width: 1px; height: 30px; background: var(--border-primary); opacity: 0.3; }
+.sum-item .lbl {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
 
-/* MINDSET CARD */
+.sum-item .val {
+  font-size: 1.15rem;
+  font-weight: 950;
+  color: var(--text-primary);
+}
+
+.sum-divider {
+  display: none;
+}
+
+/* MINDSET CARD (lower priority than CTA) */
 .mindset-card {
-  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
-  border-radius: 12px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+
   padding: 12px 15px;
-  border-left: 4px solid #3b82f6;
-  margin-bottom: 5px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  margin-bottom: 10px;
+
+  border-left: 0;
+  box-shadow: none;
+
+  /* glow sutil con el color de categoría */
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand-primary) 22%, transparent);
 }
+
 
 .mindset-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .mindset-icon { font-size: 1.1rem; }
 .mindset-cat { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-.mindset-quote { font-style: italic; color: var(--text-primary); font-size: 0.9rem; line-height: 1.4; margin: 0 0 6px 0; opacity: 0.9; }
+.mindset-quote { font-style: italic; color: var(--text-primary); font-size: 0.85rem; line-height: 1.4; margin: 0 0 6px 0; opacity: 0.9; }
 .mindset-footer { text-align: right; }
 .mindset-author { font-size: 0.75rem; color: var(--text-secondary); }
 </style>
