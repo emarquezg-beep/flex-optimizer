@@ -167,23 +167,24 @@ const goHome = () => {
 .btn-save:active { transform: scale(0.98); }
 
 .btn-home {
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-primary);
-  color: var(--text-secondary);
-  border-radius: 12px;
-  font-weight: 600;
+  display: block;
+  width: 100%;
+
+  padding: 13px 16px;
+  border-radius: 14px;
+
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: var(--text-primary);
+
+  font-size: 0.98rem;
+  font-weight: 850;
+
+  margin-top: 10px;
   cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
 }
 
 .btn-home:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-  border-color: var(--text-primary);
+  background: rgba(255,255,255,0.06);
 }
 </style>

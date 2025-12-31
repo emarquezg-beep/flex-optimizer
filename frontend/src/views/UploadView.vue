@@ -2153,9 +2153,43 @@ async function submitCorrections() {
     .logbook-summary p { margin: 5px 0; font-size: 1.1em; display: flex; justify-content: space-between; color: var(--color-text-primary); } /* Light text */
     .logbook-summary p strong { color: var(--color-white); } /* Brighter bold text */
 
-    .button-save-log { display: block; width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold; color: var(--color-black); background-color: var(--color-accent); border: none; border-radius: 5px; cursor: pointer; margin-top: 20px; }
-    .button-save-log:hover { background-color: #bad0b1; }
-    .button-save-log:disabled { background-color: #555; cursor: not-allowed; color: #999; }
+    /* Primary CTA (Log Normal Route) */
+    .button-save-log {
+      display: block;
+      width: 100%;
+
+      padding: 14px 16px;
+      border-radius: 14px;
+
+      border: 1px solid rgba(255,165,0,0.40);
+      background: var(--brand-primary);
+      color: #111; /* o var(--color-black) si lo usas global */
+
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: 0.2px;
+
+      cursor: pointer;
+      transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+      margin-top: 14px;
+    }
+
+    .button-save-log:hover {
+      filter: brightness(1.02);
+    }
+
+    .button-save-log:active {
+      transform: scale(0.99);
+    }
+
+    /* Disabled (una sola regla ✅) */
+    .button-save-log:disabled {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.10);
+      color: rgba(255,255,255,0.45);
+      cursor: not-allowed;
+      opacity: 0.9;
+    }
 
     /* --- Save Status --- */
     .save-status { margin-top: 15px; padding: 10px; border-radius: 5px; font-weight: bold; text-align: center; }
@@ -2822,13 +2856,6 @@ async function submitCorrections() {
   color: var(--color-text-primary);
   font-size: 1.05em;
   line-height: 1.6;
-}
-
-/* Modificar el botón de guardar cuando hay errores */
-.button-save-log:disabled {
-  background-color: #6c2a32 !important;
-  cursor: not-allowed !important;
-  opacity: 0.6 !important;
 }
 
 /* ========================================
