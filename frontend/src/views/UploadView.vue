@@ -1849,7 +1849,7 @@ async function submitCorrections() {
       <div v-if="!showInputForm && reportData" class="edit-bar">
         <div class="edit-bar-left">
           <button @click="showQuickSettingsModal = true" class="btn-edit-inputs">
-            ✏️ Edit Inputs
+            Edit Inputs
           </button>
         </div>
         <div class="mini-summary">
@@ -3506,42 +3506,50 @@ async function submitCorrections() {
 
 /* Botón compacto tipo "chip button" */
 .btn-edit-inputs {
-  background: transparent;
-  border: 1px solid rgba(255,165,0,0.45);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,165,0,0.35);
   color: var(--brand-primary);
 
-  padding: 6px 10px;               /* ✅ antes 8px 16px */
-  border-radius: 12px;             /* ✅ antes 20px */
-  font-weight: 800;
-  font-size: 0.82rem;
+  padding: 6px 10px;
+  border-radius: 12px;
+
+  font-weight: 900;
+  font-size: 0.78rem;
+  letter-spacing: 0.2px;
   line-height: 1;
 
   cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
-}
-
-.btn-edit-inputs:hover {
-  background: rgba(255,165,0,0.12);
-  color: var(--text-primary);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
 .btn-edit-inputs:active {
   transform: scale(0.98);
 }
+
+.btn-edit-inputs:hover {
+  background: rgba(255,165,0,0.10);
+  border-color: rgba(255,165,0,0.55);
+}
+
 /* Mini summary como chips */
 .mini-summary {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 6px;
 
-  color: var(--text-secondary);
-  font-size: 0.82rem;              /* ✅ antes 0.9 */
+  font-size: 0.72rem;      /* ✅ más pequeño */
   font-weight: 700;
-  white-space: nowrap;
+  color: var(--text-secondary);
+
+  white-space: nowrap;     /* ✅ 1 sola línea */
+  overflow: hidden;
+  text-overflow: ellipsis; /* ✅ si no cabe, recorta */
+  max-width: 62%;
 }
 
 .mini-summary .separator {
-  opacity: 0.35;
+  opacity: 0.25;
 }
 
 /* Mobile: permitir wrap sin aumentar tanto la altura */
@@ -3557,6 +3565,15 @@ async function submitCorrections() {
     row-gap: 6px;
   }
 }
+
+@media (max-width: 380px) {
+  .mini-summary {
+    max-width: 58%;
+    font-size: 0.68rem;
+    gap: 5px;
+  }
+}
+
 
 /* Quick Settings Modal Specifics */
 /* === MODAL ESTILIZADO (DARK MODE) === */
