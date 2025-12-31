@@ -32,7 +32,8 @@ watch(() => props.data.primary_city, (newCity) => {
 </script>
 
 <template>
-  <div class="slide-content" :style="cityImage? { backgroundImage: `url(${cityImage})`, '--city-bg': `url(${cityImage})` }: { backgroundImage: 'none', '--city-bg': 'none' }">
+  <div class="slide-content" :style="cityImage? { '--city-bg': `url(${cityImage})` } : { '--city-bg': 'none' }"
+>
     
     <div class="overlay"></div>
 
