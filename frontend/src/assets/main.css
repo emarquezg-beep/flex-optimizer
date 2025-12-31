@@ -116,3 +116,9 @@ select {
   background-size: 12px;
   padding-right: 30px;
 }
+
+:root{
+  --slide-title-size: clamp(1.05rem, 2.25vw, 1.25rem);
+  --slide-subtitle-size: 0.82rem;
+  --slide-header-mb: 12px;
+}

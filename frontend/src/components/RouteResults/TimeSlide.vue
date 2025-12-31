@@ -23,7 +23,7 @@ const formatMin = (minutes) => {
   <div class="slide-content">
     <div class="slide-header">
       <div class="icon-header">⏱️</div>
-      <h3>Time & Distance</h3>
+      <h3 class="title">Time & Distance</h3>
       <p class="subtitle" v-if="data.tactical">
         Total Drive + Work: {{ formatMin(data.tactical.leg1.time + data.tactical.leg2.time + data.tactical.leg3.time) }}
       </p>
@@ -93,13 +93,29 @@ const formatMin = (minutes) => {
   flex-direction: column;
 }
 
-.slide-header { 
-  text-align: center; 
-  margin-bottom: 20px; 
+.slide-header{
+  text-align: center;
+  margin-bottom: var(--slide-header-mb);
 }
-.icon-header { font-size: 1.8rem; margin-bottom: 2px; }
+
+.title{
+  margin: 0;
+  font-size: var(--slide-title-size);
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.subtitle{
+  margin: 4px 0 0;
+  font-size: var(--slide-subtitle-size);
+  color: var(--text-secondary);
+}
+
+
+
 .slide-header h3 { margin: 0; font-size: 1.3rem; color: var(--text-primary); font-weight: 700; }
-.subtitle { margin: 0; color: var(--text-secondary); font-size: 0.85rem; }
+
 
 /* TIMELINE (Audible-like) */
 .timeline-wrapper {

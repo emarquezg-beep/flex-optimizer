@@ -69,26 +69,25 @@ const formatDuration = (min) => {
   padding: 12px 16px 0 16px;
 }
 
-.slide-header {
+.slide-header{
   text-align: center;
-  margin-bottom: 10px;
-  flex-shrink: 0; /* No encoger el header */
+  margin-bottom: var(--slide-header-mb);
 }
-.icon-header { font-size: 1.8rem; margin-bottom: 5px; }
-.slide-header h3 { margin: 0; font-size: 1.4rem; color: var(--text-primary); }
-.title {
+
+.title{
   margin: 0;
-  font-size: clamp(1.05rem, 2.2vw, 1.2rem); /* fluid, más pequeño */
+  font-size: var(--slide-title-size);
   font-weight: 900;
   color: var(--text-primary);
   letter-spacing: -0.01em;
-} /* clamp() permite tipografía fluida sin media queries. [web:145][web:146] */
-
-.subtitle {
-  margin: 2px 0 0 0;
-  color: var(--text-secondary);
-  font-size: 0.82rem; /* ↓ antes 0.9 */
 }
+
+.subtitle{
+  margin: 4px 0 0;
+  font-size: var(--slide-subtitle-size);
+  color: var(--text-secondary);
+}
+
 
 /* CONTENEDOR DE SCROLL */
 .segments-list {

@@ -59,22 +59,23 @@ const props = defineProps({
 
 .slide-header{
   text-align: center;
-  margin-bottom: 12px; /* ↓ antes 20 */
+  margin-bottom: var(--slide-header-mb);
 }
 
 .title{
   margin: 0;
-  font-size: clamp(1.05rem, 2.3vw, 1.25rem);
+  font-size: var(--slide-title-size);
   font-weight: 900;
   color: var(--text-primary);
   letter-spacing: -0.01em;
-} /* clamp() para tipografía fluida. [web:145][web:146] */
+}
 
 .subtitle{
   margin: 4px 0 0;
+  font-size: var(--slide-subtitle-size);
   color: var(--text-secondary);
-  font-size: 0.82rem;
 }
+
 
 .metrics-grid{
   display: grid;
