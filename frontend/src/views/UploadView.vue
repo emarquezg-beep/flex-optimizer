@@ -1784,19 +1784,24 @@ async function submitCorrections() {
           </div>
 
           <div class="json-input-card">
-            <h3>📋 Paste Route JSON</h3>
-            <textarea 
-              v-model="jsonInput" 
-              placeholder='Paste the JSON from the Gem here.'
-              rows="10"
-              class="json-textarea"
-              :disabled="isProcessing || extractedAddresses.length > 0"
-            ></textarea>
+            <details class="json-legacy-details">
+              <summary>JSON manual (legacy)</summary>
+
+              <h3 class="json-legacy-title">📋 Paste Route JSON</h3>
+              <textarea 
+                v-model="jsonInput" 
+                placeholder="Paste the JSON from the Gem here."
+                rows="10"
+                class="json-textarea"
+                :disabled="isProcessing || extractedAddresses.length > 0"
+              ></textarea>
+            </details>
 
             <div v-if="extractedAddresses.length > 0" class="stops-detected">
               ✅ {{ extractedAddresses.length }} stops detected
             </div>
 
+            <!-- ✅ Modal downtown queda fuera del details (para no depender del toggle) -->
             <transition name="modal-fade">
               <div v-if="showDowntownModal" class="modal-overlay" @click.self="skipDowntownSelection">
                 <div class="modal-container downtown-modal">
@@ -1807,7 +1812,7 @@ async function submitCorrections() {
                       Select which ones are downtown (adds +3 min per stop).
                     </p>
                   </div>
-                  
+
                   <div class="modal-body">
                     <div class="apartment-list">
                       <label v-for="apt in orlandoApartments" :key="apt.number" class="apartment-item">
@@ -1819,7 +1824,7 @@ async function submitCorrections() {
                       </label>
                     </div>
                   </div>
-                  
+
                   <div class="modal-footer">
                     <button @click="skipDowntownSelection" class="button-secondary">⏭️ No Downtown Apartments</button>
                     <button @click="confirmDowntownSelection" class="button-primary">✅ Confirm Selection</button>
@@ -1828,6 +1833,7 @@ async function submitCorrections() {
               </div>
             </transition>
 
+            <!-- ✅ Evaluate siempre visible -->
             <button 
               @click="evaluateRoute" 
               class="button-primary button-evaluate"
@@ -1835,8 +1841,8 @@ async function submitCorrections() {
             >
               {{ isUploadingImages ? '🤖 Processing Images...' : (isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios') }}
             </button>
-
           </div>
+
 
           <div class="additional-settings">
             <details>
@@ -4139,5 +4145,44 @@ async function submitCorrections() {
   to { transform: rotate(360deg); }
 }
 
+/* ✅ JSON legacy collapsible */
+.json-legacy-details{
+  width: 100%;
+}
+
+.json-legacy-details summary{
+  padding: var(--space-3);
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  user-select: none;
+  cursor: pointer;
+}
+
+.json-legacy-details summary:hover{
+  color: var(--brand-primary);
+}
+
+.json-legacy-details summary::-webkit-details-marker{
+  display: none;
+}
+
+/* Flechita */
+.json-legacy-details summary::before{
+  content: "▶";
+  font-size: var(--text-xs);
+  transition: transform var(--transition-fast);
+}
+
+.json-legacy-details[open] summary::before{
+  transform: rotate(90deg);
+}
+
+.json-legacy-title{
+  margin: var(--space-3) 0 var(--space-3) 0;
+}
 
 </style>
