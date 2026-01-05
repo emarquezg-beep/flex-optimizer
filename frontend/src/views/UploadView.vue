@@ -1696,22 +1696,10 @@ async function submitCorrections() {
             </div>
           </div>
 
-          <div class="gem-link-container">
-            <a 
-              href="https://gemini.google.com/gem/11PCFo5tGT1kWc0fd9PvoPz6uQryQUzTu?usp=sharing" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              class="gem-link"
-            >
-              🤖 Open Gem to Process Screenshots
-            </a>
-            <p class="gem-hint">Upload your route screenshots to the Gem, then paste the JSON below</p>
-          </div>
-
           <div class="ocr-upload-section">
             <h3>📸 Opción 1: Subir Capturas (OCR Automático)</h3>
             <p class="ocr-description">
-              Sube 1-10 capturas de pantalla de Amazon Flex y FlexPilot extraerá las direcciones automáticamente.
+              Sube 1‑10 capturas de Amazon Flex y FlexPilot hará el resto (AI + OCR).
             </p>
             
             <div class="file-input-container">
@@ -2361,27 +2349,7 @@ async function submitCorrections() {
     padding: 8px;
   }
 }
-/* --- Link al Gem --- */
-.gem-link-container {
-  margin-bottom: 20px;
-  text-align: center;
-}
-.gem-link {
-  display: inline-block;
-  padding: 10px 15px;
-  background-color: var(--color-surface);
-  color: var(--color-accent); /* Usamos el color 'accent' para que resalte */
-  border: 1px solid var(--color-border);
-  border-radius: 5px;
-  text-decoration: none;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-.gem-link:hover {
-  background-color: var(--color-border);
-  color: var(--color-text-primary);
-  border-color: var(--color-accent);
-}
+
 /* ========================================
    RESUMEN CONSCIENTE
    ======================================== */
@@ -3705,91 +3673,105 @@ async function submitCorrections() {
 /* ============================================
    🆕 OCR: ESTILOS
    ============================================ */
-.ocr-upload-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 20px;
-  color: white;
+/* ✅ OCR (Audible-like dark card) */
+.ocr-upload-section{
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
 }
 
-.ocr-upload-section h3 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 600;
+.ocr-upload-section h3{
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
 }
 
-.ocr-description {
-  margin: 0 0 16px 0;
-  opacity: 0.9;
-  font-size: 14px;
+.ocr-description{
+  margin: 0 0 var(--space-4) 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.35;
 }
 
-.file-input-container {
+.file-input-container{
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
-.upload-button {
-  background: white;
-  color: #667eea;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
+.upload-button{
+  width: 100%;
+  background: var(--brand-primary);
+  color: #111; /* texto oscuro sobre CTA amarillo/naranja */
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-weight: var(--font-bold);
   cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 15px;
+  transition: transform var(--transition-base), filter var(--transition-base);
 }
 
-.upload-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+.upload-button:hover{
+  filter: brightness(1.03);
+  transform: translateY(-1px);
 }
 
-.selected-files {
-  background: rgba(255,255,255,0.15);
+.upload-button:active{
+  transform: translateY(0);
+}
+
+.selected-files{
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 14px;
 }
 
-.files-count {
+.files-count{
   margin: 0 0 8px 0;
-  font-weight: 600;
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
 }
 
-.file-list {
+.file-list{
   list-style: none;
   padding: 0;
-  margin: 0 0 12px 0;
+  margin: 0 0 10px 0;
 }
 
-.file-list li {
+.file-list li{
   padding: 6px 0;
-  font-size: 13px;
-  opacity: 0.9;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
-.file-list li:last-child {
+.file-list li:last-child{
   border-bottom: none;
 }
 
-.clear-button {
-  background: rgba(255,255,255,0.2);
-  color: white;
-  border: 1px solid rgba(255,255,255,0.3);
-  padding: 8px 16px;
-  border-radius: 6px;
+.clear-button{
+  width: 100%;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-primary);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 10px 12px;
+  border-radius: 14px;
   cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s ease;
+  font-size: var(--text-sm);
+  transition: filter var(--transition-base);
 }
 
-.clear-button:hover {
-  background: rgba(255,255,255,0.3);
+.clear-button:hover{
+  filter: brightness(1.05);
 }
+
 
 .divider {
   text-align: center;
