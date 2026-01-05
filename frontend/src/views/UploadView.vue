@@ -1779,15 +1779,10 @@ async function submitCorrections() {
             </div>
           </div>
 
-          <div class="divider">
-            <span>O</span>
-          </div>
-
           <div class="json-input-card">
-            <details class="json-legacy-details">
+            <details class="json-legacy-details json-legacy-details--stealth">
               <summary>JSON manual (legacy)</summary>
 
-              <h3 class="json-legacy-title">📋 Paste Route JSON</h3>
               <textarea 
                 v-model="jsonInput" 
                 placeholder="Paste the JSON from the Gem here."
@@ -3656,12 +3651,6 @@ async function submitCorrections() {
   border-color: #3b82f6; /* Borde azul al escribir */
 }
 
-.divider {
-  border: 0; 
-  border-top: 1px solid #334155;
-  margin: 20px 0;
-}
-
 .label-with-button {
   display: flex;
   justify-content: space-between;
@@ -4184,5 +4173,31 @@ async function submitCorrections() {
 .json-legacy-title{
   margin: var(--space-3) 0 var(--space-3) 0;
 }
+
+/* ✅ JSON legacy “stealth” */
+.json-legacy-details--stealth summary{
+  padding: 4px 0;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  opacity: 0.55;
+  justify-content: flex-end;
+}
+
+.json-legacy-details--stealth summary:hover{
+  opacity: 0.9;
+  color: var(--brand-primary);
+}
+
+/* Quita flecha grande para que no llame la atención */
+.json-legacy-details--stealth summary::before{
+  content: "";
+}
+
+/* Cuando abre, que el textarea no se pegue al summary */
+.json-legacy-details--stealth[open] .json-textarea{
+  margin-top: var(--space-3);
+}
+
 
 </style>
