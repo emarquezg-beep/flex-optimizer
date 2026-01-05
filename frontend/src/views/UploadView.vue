@@ -2077,22 +2077,30 @@ async function submitCorrections() {
     }
 
     /* --- Controls & Address List --- */
-    .controls-container{
-    margin-top: var(--space-2);
-    padding: var(--space-3);
-    gap: var(--space-3);
+    .controls-container { 
+      display: flex; 
+      justify-content: space-between; 
+      gap: var(--space-3); 
+      margin-top: var(--space-2); 
+      padding: var(--space-3); 
+      background-color: var(--color-surface); 
+      border: 1px 
+      solid var(--color-border); 
+      border-radius: 8px; 
     }
     .control-group { flex: 1; display: flex; flex-direction: column; }
-    .control-group label{
-      margin-bottom: 6px;
-      font-size: 11px;
+    .control-group label { 
+      margin-bottom: 6px; 
       font-weight: var(--font-semibold);
-    }
+      font-size: 11px; 
+      color: var(--color-text-secondary); 
+    } 
+    /* Select inherits global dark style */
 
-    /* Custom destination input (si aparece) */
-    .custom-input-container{
-      margin: 8px 0 0 0;
+    .custom-input-container { 
+      margin: 8px 0 0 0; 
     }
+    /* Input inherits global dark style */
 
     .address-list { margin-top: 20px; padding: 20px; border: 1px solid var(--color-border); border-radius: 8px; text-align: left; background-color: var(--color-surface); color: var(--color-text-primary); }
     .address-list h2 { margin-top: 0; color: var(--color-primary); }
