@@ -2,8 +2,8 @@
 // ============================================
 // 1. IMPORTS
 // ============================================
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import Tesseract from 'tesseract.js';
 import { computeScoreV5 } from '@/utils/scoring';
 import SlideContainer from '@/components/RouteResults/SlideContainer.vue';
@@ -106,6 +106,20 @@ const fileInputRef = ref(null);
 const selectedFileNames = ref([]);
 const jsonInput = ref('');
 
+const isBusy = computed(() =>
+  isUploadingImages.value ||
+  isProcessing.value ||
+  isSaving.value ||
+  backendResponse.value?.status === 'loading'
+)
+
+const busyTitle = computed(() => {
+  if (isUploadingImages.value) return uploadProgress.value?.message || 'Procesando imágenes…'
+  if (isSaving.value) return 'Guardando…'
+  return 'Evaluando escenarios…'
+})
+
+
 // Modales y Configuración
 const showDowntownModal = ref(false);
 const orlandoApartments = ref([]);
@@ -189,6 +203,21 @@ watch(backendResponse, (newVal) => {
     }, 300);
   }
 });
+
+onBeforeRouteLeave(() => {
+  if (!isBusy.value) return true
+  return window.confirm('Hay un proceso en curso. Si sales ahora podrías perder el resultado. ¿Seguro deseas salir?')
+})
+
+function handleBeforeUnload(e) {
+  if (!isBusy.value) return
+  e.preventDefault()
+  e.returnValue = ''
+}
+
+onMounted(() => window.addEventListener('beforeunload', handleBeforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnload))
+
 
 onMounted(() => {
   console.log('🚀 UploadView montado');
@@ -2024,6 +2053,14 @@ async function submitCorrections() {
             {{ isProcessing ? '⏳ Procesando...' : '✅ Confirmar y Continuar' }}
           </button>
         </div>
+      </div>
+    </div>
+
+    <div v-if="isBusy" class="busy-overlay" @click.stop>
+      <div class="busy-card" role="dialog" aria-modal="true">
+        <div class="busy-spinner" />
+        <h3 class="busy-title">{{ busyTitle }}</h3>
+        <p class="busy-hint">Por favor no cierres la app ni regreses. Esto puede tardar unos segundos.</p>
       </div>
     </div>
 
@@ -4070,6 +4107,54 @@ async function submitCorrections() {
 }
 .progress-error {
   background: linear-gradient(90deg, #ef4444, #f97316);
+}
+
+.busy-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.68);
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  touch-action: none; /* evita gestos raros mientras corre */
+}
+
+.busy-card{
+  width: min(420px, 100%);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+  padding: 16px;
+  text-align: center;
+}
+
+.busy-title{
+  margin: 0 0 6px 0;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+}
+
+.busy-hint{
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.busy-spinner{
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 3px solid rgba(255,255,255,0.18);
+  border-top-color: var(--brand-primary);
+  margin: 0 auto 12px auto;
+  animation: busySpin 0.9s linear infinite;
+}
+
+@keyframes busySpin{
+  to { transform: rotate(360deg); }
 }
 
 
