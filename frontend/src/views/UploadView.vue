@@ -2077,13 +2077,22 @@ async function submitCorrections() {
     }
 
     /* --- Controls & Address List --- */
-    .controls-container { display: flex; justify-content: space-between; gap: 20px; margin-top: 20px; padding: 20px; background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }
+    .controls-container{
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    gap: var(--space-3);
+    }
     .control-group { flex: 1; display: flex; flex-direction: column; }
-    .control-group label { margin-bottom: 8px; font-weight: bold; color: var(--color-text-secondary); } /* Lighter label text */
-    /* Select inherits global dark style */
+    .control-group label{
+      margin-bottom: 6px;
+      font-size: 11px;
+      font-weight: var(--font-semibold);
+    }
 
-    .custom-input-container { margin: 10px 20px; }
-    /* Input inherits global dark style */
+    /* Custom destination input (si aparece) */
+    .custom-input-container{
+      margin: 8px 0 0 0;
+    }
 
     .address-list { margin-top: 20px; padding: 20px; border: 1px solid var(--color-border); border-radius: 8px; text-align: left; background-color: var(--color-surface); color: var(--color-text-primary); }
     .address-list h2 { margin-top: 0; color: var(--color-primary); }
@@ -2864,87 +2873,37 @@ async function submitCorrections() {
   line-height: 1.6;
 }
 
-/* ========================================
-   NUEVOS ESTILOS - DISEÑO SIMPLIFICADO v4.2
-   ======================================== */
+/* ✅ COMPACT HEADER MODE (Block Details + Route Configuration) */
 
-/* Block Info Card */
-.block-info-card {
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--space-6);
-  margin-bottom: var(--space-6);
-  box-shadow: var(--shadow-card);
+/* Block Details */
+.block-info-card{
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
-.block-info-card h2 {
-  margin: 0 0 var(--space-4) 0;
-  color: var(--brand-primary);
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-}
-
-.block-info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--space-3);
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.info-label {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: var(--font-semibold);
-}
-
-.info-value {
+.block-info-card h2{
+  margin: 0 0 var(--space-3) 0;
   font-size: var(--text-lg);
-  color: var(--text-primary);
-  font-weight: var(--font-semibold);
+  line-height: 1.1;
 }
 
-/* Gem Link Container */
-.gem-link-container {
-  background-color: var(--info-bg);
-  border: 2px solid var(--info);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
-  margin-bottom: var(--space-6);
-  text-align: center;
-}
-
-.gem-link {
-  display: inline-flex;
-  align-items: center;
+.block-info-grid{
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-6);
-  background-color: var(--brand-primary);
-  color: white;
-  text-decoration: none;
-  border-radius: var(--radius-base);
-  font-weight: var(--font-semibold);
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.info-item{
+  gap: 2px;
+}
+
+.info-label{
+  font-size: 10px; /* súper compacto */
+  letter-spacing: 0.08em;
+}
+
+.info-value{
   font-size: var(--text-base);
-  transition: all var(--transition-base);
-  box-shadow: var(--shadow-md);
-}
-
-.gem-link:hover {
-  background-color: var(--brand-primary-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.gem-hint {
-  margin-top: var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+  line-height: 1.1;
 }
 
 /* JSON Input Card */
@@ -3015,20 +2974,16 @@ async function submitCorrections() {
   box-shadow: var(--shadow-xl);
 }
 
-/* Route Config Card */
-.route-config-card {
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--space-6);
-  margin-bottom: var(--space-4);
-  box-shadow: var(--shadow-card);
+/* Route Configuration */
+.route-config-card{
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
-.route-config-card h3 {
-  margin: 0 0 var(--space-4) 0;
-  color: var(--text-primary);
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
+.route-config-card h3{
+  margin: 0 0 var(--space-3) 0;
+  font-size: var(--text-base);
+  line-height: 1.1;
 }
 
 /* Additional Settings (collapsible) */
