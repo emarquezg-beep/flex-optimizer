@@ -22,6 +22,7 @@ const DURACION_OPTIONS = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
 const warehouses = [
   { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL' },
   { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL' },
+  { code: 'UFL4', address: '7469 Kingspointe Pkwy Orlando, FL' },
   { code: 'DMO3', address: '1216 S Orange Blossom Trl Orlando, FL' },
   { code: 'DFL4', address: '4401 Seaboard Rd Orlando, FL' },
   { code: 'DFL8', address: '7453 Republic Dr Groveland, FL' },
