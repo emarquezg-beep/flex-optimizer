@@ -4163,5 +4163,23 @@ async function submitCorrections() {
   margin-top: var(--space-3);
 }
 
+/* 🔧 HOTFIX Route Configuration: compactar */
+.route-config-card{
+  padding: var(--space-4) !important;
+  margin-bottom: var(--space-3) !important;
+}
+
+.controls-container{
+  padding: var(--space-3) !important;
+  gap: var(--space-3) !important;
+}
+
+/* Si tus selects usan otra clase, dime cuál y lo ajusto exacto */
+.control-group select,
+.control-group input{
+  padding: 10px 12px !important;
+  border-radius: 12px !important;
+}
+
 
 </style>
