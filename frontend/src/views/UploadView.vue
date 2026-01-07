@@ -1645,7 +1645,7 @@ async function submitCorrections() {
         <div v-show="showInputForm" class="input-section-wrapper">
 
           <div class="block-info-card">
-            <h2>📦 Block Details</h2>
+            <h2>Block Details</h2>
             <div class="block-info-grid">
               <div class="info-item">
                 <span class="info-label">Warehouse</span>
@@ -1675,7 +1675,7 @@ async function submitCorrections() {
           </div>
        
           <div class="ocr-upload-section">
-            <h3>📸 Opción 1: Subir Capturas (OCR Automático)</h3>
+            <h3>Opción 1: Subir Capturas (OCR Automático)</h3>
             <p class="ocr-description">
               Sube 1‑10 capturas de Amazon Flex y FlexPilot hará el resto (AI + OCR).
             </p>
@@ -1756,7 +1756,7 @@ async function submitCorrections() {
 
             </div>
             <div class="route-config-card">
-            <h3>🎯 Route Configuration</h3>
+            <h3>Route Configuration</h3>
             <div class="controls-container">
               <div class="control-group">
                 <label for="warehouse-select">Departure Point</label>
@@ -1837,31 +1837,6 @@ async function submitCorrections() {
               {{ isUploadingImages ? '🤖 Processing Images...' : (isProcessing ? 'Evaluating...' : '🚀 Evaluate Scenarios') }}
             </button>
           </div>
-
-
-          <div class="additional-settings">
-            <details>
-              <summary>⚙️ Advanced Settings (optional)</summary>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Time Before Block (min)</label>
-                  <input type="number" v-model.number="blockData.antes_del_bloque" step="5">
-                </div>
-                <div class="form-group">
-                  <label>Commute 1 (Miles)</label>
-                  <input type="number" v-model.number="blockData.commute_1_manual" step="0.1">
-                </div>
-                <div class="form-group">
-                  <label class="label-with-button">
-                    <span>Warehouse Delay (min)</span>
-                    <button @click.prevent="calculateActualDelay" class="button-tertiary">Now</button>
-                  </label>
-                  <input type="number" v-model.number="blockData.retraso_almacen" step="5">
-                </div>
-              </div>
-            </details>
-          </div>
-
         </div>
       </transition>
       <div v-if="!showInputForm && reportData" class="edit-bar">
