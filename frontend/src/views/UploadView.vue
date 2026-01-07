@@ -1675,10 +1675,11 @@ async function submitCorrections() {
           </div>
        
           <div class="ocr-upload-section">
-            <h3>Opción 1: Subir Capturas (OCR Automático)</h3>
-            <p class="ocr-description">
-              Sube 1‑10 capturas de Amazon Flex y FlexPilot hará el resto (AI + OCR).
-            </p>
+            <div class="card-header">
+              <h3 class="card-title">Sube tus capturas para analizar la ruta</h3>
+              <!-- opcional: si quieres 2da línea MUY discreta -->
+              <p class="card-subtitle">FlexPilot extrae las paradas automáticamente.</p>
+            </div>
             
             <div class="file-input-container">
               <input 
@@ -3624,13 +3625,6 @@ async function submitCorrections() {
   color: var(--text-primary);
 }
 
-.ocr-description{
-  margin: 0 0 var(--space-4) 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.35;
-}
-
 .file-input-container{
   display: flex;
   flex-direction: column;
@@ -4283,6 +4277,31 @@ async function submitCorrections() {
   box-shadow: none !important;
   background: rgba(0,0,0,0.22) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
+}
+
+/* ✅ Header estilo “slide” reutilizable */
+.card-header{
+  margin: 0 0 var(--slide-header-mb) 0;
+}
+
+.card-title{
+  margin: 0;
+  font-size: var(--slide-title-size);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.2px;
+}
+
+.card-subtitle{
+  margin: 6px 0 0 0;
+  font-size: var(--slide-subtitle-size);
+  opacity: 0.82;
+  line-height: 1.3;
+}
+
+/* ✅ Ya no dependemos del h3 dentro de OCR */
+.ocr-upload-section h3{
+  margin: 0; /* neutraliza reglas viejas */
 }
 
 
