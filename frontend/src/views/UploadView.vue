@@ -1673,30 +1673,7 @@ async function submitCorrections() {
               </div>
             </div>
           </div>
-
-          <div class="route-config-card">
-            <h3>🎯 Route Configuration</h3>
-            <div class="controls-container">
-              <div class="control-group">
-                <label for="warehouse-select">Departure Point</label>
-                <select id="warehouse-select" v-model="selectedWarehouseCode">
-                  <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
-                    {{ wh.code }} ({{ wh.commuteMiles }} mi)
-                  </option>
-                </select>
-              </div>
-              <div class="control-group">
-                <label for="destination-select">Final Destination</label>
-                <select id="destination-select" v-model="selectedDestination">
-                  <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
-                </select>
-              </div>
-            </div>
-            <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-              <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
-            </div>
-          </div>
-
+       
           <div class="ocr-upload-section">
             <h3>📸 Opción 1: Subir Capturas (OCR Automático)</h3>
             <p class="ocr-description">
@@ -1778,6 +1755,28 @@ async function submitCorrections() {
               </div>
 
             </div>
+            <div class="route-config-card">
+            <h3>🎯 Route Configuration</h3>
+            <div class="controls-container">
+              <div class="control-group">
+                <label for="warehouse-select">Departure Point</label>
+                <select id="warehouse-select" v-model="selectedWarehouseCode">
+                  <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
+                    {{ wh.code }} ({{ wh.commuteMiles }} mi)
+                  </option>
+                </select>
+              </div>
+              <div class="control-group">
+                <label for="destination-select">Final Destination</label>
+                <select id="destination-select" v-model="selectedDestination">
+                  <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
+                </select>
+              </div>
+            </div>
+            <div v-if="selectedDestination === 'custom'" class="custom-input-container">
+              <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
+            </div>
+          </div>
           </div>
 
           <div class="json-input-card">
@@ -4264,5 +4263,52 @@ async function submitCorrections() {
   padding: 10px 12px !important;
   border-radius: 14px !important;
 }
+
+/* ✅ Route settings dentro de OCR card */
+.route-settings{
+  margin-top: 12px;
+  width: 100%;
+}
+
+.route-settings summary{
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.16);
+  font-weight: 700;
+}
+
+.route-settings summary::-webkit-details-marker{
+  display: none;
+}
+
+/* Flecha discreta */
+.route-settings summary::after{
+  content: "▾";
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.route-settings[open] summary::after{
+  content: "▴";
+}
+
+/* Embedded card: sin sombras enormes dentro de otra card */
+.route-config-card--embedded{
+  margin-top: 10px !important;
+  margin-bottom: 0 !important;
+  box-shadow: none !important;
+  background: rgba(0,0,0,0.22) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+}
+
 
 </style>
