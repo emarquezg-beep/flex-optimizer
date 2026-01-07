@@ -4181,5 +4181,88 @@ async function submitCorrections() {
   border-radius: 12px !important;
 }
 
+/* ✅ Audible-like Card System */
+.aud-card{
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+/* Mini card arriba (Block Details) */
+.block-info-card{
+  background: var(--bg-secondary) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35) !important;
+
+  padding: 14px !important;
+  margin-bottom: 12px !important;
+}
+
+.block-info-card h2{
+  font-size: 18px !important;
+  margin: 0 0 10px 0 !important;
+  line-height: 1.1 !important;
+}
+
+/* Grid real (evita que vuelva a “lista rara”) */
+.block-info-grid{
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px 14px !important;
+}
+
+.info-item{
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+.info-label{
+  font-size: 10px !important;
+  opacity: 0.75 !important;
+  letter-spacing: 0.10em !important;
+}
+
+.info-value{
+  font-size: 15px !important;
+  line-height: 1.15 !important;
+}
+
+/* Route Configuration: más discreta */
+.route-config-card{
+  background: var(--bg-secondary) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35) !important;
+
+  padding: 14px !important;
+  margin-bottom: 12px !important;
+}
+
+.route-config-card h3{
+  margin: 0 0 10px 0 !important;
+  font-size: 16px !important;
+  line-height: 1.1 !important;
+}
+
+/* Controles más compactos (los select se ven grandes hoy) */
+.controls-container{
+  padding: 10px !important;
+  gap: 10px !important;
+}
+
+.control-group label{
+  font-size: 11px !important;
+  margin-bottom: 6px !important;
+  opacity: 0.85 !important;
+}
+
+.control-group select,
+.control-group input{
+  padding: 10px 12px !important;
+  border-radius: 14px !important;
+}
 
 </style>
