@@ -4312,20 +4312,36 @@ async function submitCorrections() {
 
 /* ✅ Block Hero Card */
 .block-hero-card{
+  position: relative;
   padding: 0 !important;
   overflow: hidden;
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr; /* texto / imagen */
   min-height: 150px;
 
-  /* Fondo sólido + gradiente sutil */
+  /* Fondo base (por si la imagen tarda en cargar) */
   background: linear-gradient(135deg, rgba(18,28,46,0.92), rgba(10,15,24,0.92)) !important;
 }
 
-.block-hero-left{
-  padding: 16px;
+.block-hero-right{
+  position: absolute;
+  inset: 0;              /* ocupa TODO el card */
+  z-index: 0;
 }
 
+/* Textos encima */
+.block-hero-left{
+  position: relative;
+  z-index: 1;
+  padding: 16px;
+  max-width: 68%; /* limita el texto para que no invada la zona más "bonita" */
+}
+.block-hero-img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+  display: block;
+  opacity: 0.95;
+}
 .block-hero-grid{
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -4369,6 +4385,34 @@ async function submitCorrections() {
   object-position: right center;
   display: block;
   opacity: 0.95;
+}
+
+/* Overlay general para que la imagen no "se coma" el texto */
+.block-hero-right::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* gradiente sutil + oscurecer un poco el lado izquierdo */
+  background: linear-gradient(
+    90deg,
+    rgba(0,0,0,0.45) 0%,
+    rgba(0,0,0,0.20) 55%,
+    rgba(0,0,0,0.05) 100%
+  );
+  pointer-events: none;
+}
+
+/* ✅ Panel semi-transparente SOLO detrás del texto (no afecta las letras) */
+.block-hero-left::before{
+  content: "";
+  position: absolute;
+  inset: 10px; /* margen interno para que se vea elegante */
+  background: rgba(8, 12, 20, 0.50); /* <-- 50% */
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: -1; /* queda detrás del texto */
 }
 
 /* Overlay sutil para integrar la imagen con el card */
