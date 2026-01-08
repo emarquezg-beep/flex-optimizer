@@ -1670,12 +1670,16 @@ async function submitCorrections() {
 
                 <div class="hero-item">
                   <div class="hero-label">Duration</div>
-                  <div class="hero-value">{{ blockData.duracionhoras }}h</div>
+                  <div class="hero-value">{{ blockData.duracion_horas }}h</div>
                 </div>
 
                 <div class="hero-item hero-item--payment">
                   <div class="hero-label">Payment</div>
                   <div class="hero-value hero-value--payment">${{ blockData.pago }}</div>
+                </div>
+                <div class="hero-item">
+                  <div class="hero-label">>Vehicle</div>
+                  <div class="hero-value">{{ getVehicleNickname(blockData.vehiculo) }}</div>
                 </div>
               </div>
             </div>
