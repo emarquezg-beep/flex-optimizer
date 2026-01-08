@@ -1645,6 +1645,12 @@ async function submitCorrections() {
         <div v-show="showInputForm" class="input-section-wrapper">
 
           <div class="block-info-card block-hero-card">
+            <!-- Fondo: imagen a full -->
+            <div class="block-hero-right" aria-hidden="true">
+              <img class="block-hero-img" src="@/assets/block-hero.png" alt="" />
+            </div>
+
+            <!-- Panel flotante: datos -->
             <div class="block-hero-left">
               <div class="block-hero-grid">
                 <div class="hero-item">
@@ -1673,12 +1679,7 @@ async function submitCorrections() {
                 </div>
               </div>
             </div>
-
-            <div class="block-hero-right" aria-hidden="true">
-              <img class="block-hero-img" src="@/assets/block-hero.png" alt="" />
-            </div>
           </div>
-
        
           <div class="ocr-upload-section">
             <div class="card-header">
@@ -4315,40 +4316,31 @@ async function submitCorrections() {
   position: relative;
   padding: 0 !important;
   overflow: hidden;
-  min-height: 150px;
-
-  /* Fondo base (por si la imagen tarda en cargar) */
+  min-height: 220px; /* 🔥 para que el fondo se luzca */
+  border-radius: 22px;
   background: linear-gradient(135deg, rgba(18,28,46,0.92), rgba(10,15,24,0.92)) !important;
 }
 
 .block-hero-right{
   position: absolute;
-  inset: 0;              /* ocupa TODO el card */
+  inset: 0;
   z-index: 0;
 }
 
-/* Textos encima */
-.block-hero-left{
-  position: relative;
-  z-index: 1;
-  padding: 16px;
-  max-width: 68%; /* limita el texto para que no invada la zona más "bonita" */
-}
+
 .block-hero-img{
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: right center;
   display: block;
-  opacity: 0.95;
+  opacity: 0.98;
 }
 .block-hero-grid{
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 14px;
-  align-content: start;
 }
-
 .hero-label{
   font-size: 10px;
   letter-spacing: 0.10em;
@@ -4363,12 +4355,12 @@ async function submitCorrections() {
 }
 
 .hero-item--payment{
-  grid-column: 1 / -1; /* Payment ocupa fila completa */
+  grid-column: 1 / -1;
   margin-top: 2px;
 }
 
 .hero-value--payment{
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 900;
   letter-spacing: -0.3px;
 }
@@ -4387,19 +4379,33 @@ async function submitCorrections() {
   opacity: 0.95;
 }
 
-/* Overlay general para que la imagen no "se coma" el texto */
+/* Oscurece un poco la zona izquierda para que el texto resalte */
 .block-hero-right::after{
   content: "";
   position: absolute;
   inset: 0;
-  /* gradiente sutil + oscurecer un poco el lado izquierdo */
   background: linear-gradient(
     90deg,
-    rgba(0,0,0,0.45) 0%,
-    rgba(0,0,0,0.20) 55%,
+    rgba(0,0,0,0.55) 0%,
+    rgba(0,0,0,0.20) 60%,
     rgba(0,0,0,0.05) 100%
   );
   pointer-events: none;
+}
+/* Panel flotante */
+.block-hero-left{
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 1;
+  width: min(72%, 320px);
+  padding: 14px;
+  border-radius: 16px;
+
+  background: rgba(8, 12, 20, 0.50); /* 50% */
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
 }
 
 /* ✅ Panel semi-transparente SOLO detrás del texto (no afecta las letras) */
