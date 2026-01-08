@@ -1644,35 +1644,41 @@ async function submitCorrections() {
       <transition name="fade-slide">
         <div v-show="showInputForm" class="input-section-wrapper">
 
-          <div class="block-info-card">
-            <h2>Block Details</h2>
-            <div class="block-info-grid">
-              <div class="info-item">
-                <span class="info-label">Warehouse</span>
-                <span class="info-value">{{ selectedWarehouseCode }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Date</span>
-                <span class="info-value">{{ blockData.fecha }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Start Time</span>
-                <span class="info-value">{{ blockData.hora }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Duration</span>
-                <span class="info-value">{{ blockData.duracion_horas }}h</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Payment</span>
-                <span class="info-value">${{ blockData.pago }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Vehicle</span>
-                <span class="info-value">{{ getVehicleNickname(blockData.vehiculo) }}</span>
+          <div class="block-info-card block-hero-card">
+            <div class="block-hero-left">
+              <div class="block-hero-grid">
+                <div class="hero-item">
+                  <div class="hero-label">Warehouse</div>
+                  <div class="hero-value">{{ selectedWarehouseCode }}</div>
+                </div>
+
+                <div class="hero-item">
+                  <div class="hero-label">Date</div>
+                  <div class="hero-value">{{ blockData.fecha }}</div>
+                </div>
+
+                <div class="hero-item">
+                  <div class="hero-label">Start Time</div>
+                  <div class="hero-value">{{ blockData.hora }}</div>
+                </div>
+
+                <div class="hero-item">
+                  <div class="hero-label">Duration</div>
+                  <div class="hero-value">{{ blockData.duracionhoras }}h</div>
+                </div>
+
+                <div class="hero-item hero-item--payment">
+                  <div class="hero-label">Payment</div>
+                  <div class="hero-value hero-value--payment">${{ blockData.pago }}</div>
+                </div>
               </div>
             </div>
+
+            <div class="block-hero-right" aria-hidden="true">
+              <img class="block-hero-img" src="@/assets/block-hero.png" alt="" />
+            </div>
           </div>
+
        
           <div class="ocr-upload-section">
             <div class="card-header">
@@ -4302,6 +4308,85 @@ async function submitCorrections() {
 /* ✅ Ya no dependemos del h3 dentro de OCR */
 .ocr-upload-section h3{
   margin: 0; /* neutraliza reglas viejas */
+}
+
+/* ✅ Block Hero Card */
+.block-hero-card{
+  padding: 0 !important;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr; /* texto / imagen */
+  min-height: 150px;
+
+  /* Fondo sólido + gradiente sutil */
+  background: linear-gradient(135deg, rgba(18,28,46,0.92), rgba(10,15,24,0.92)) !important;
+}
+
+.block-hero-left{
+  padding: 16px;
+}
+
+.block-hero-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  align-content: start;
+}
+
+.hero-label{
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.hero-value{
+  font-size: 15px;
+  line-height: 1.15;
+  font-weight: 700;
+}
+
+.hero-item--payment{
+  grid-column: 1 / -1; /* Payment ocupa fila completa */
+  margin-top: 2px;
+}
+
+.hero-value--payment{
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.3px;
+}
+
+.block-hero-right{
+  position: relative;
+  min-height: 150px;
+}
+
+.block-hero-img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+  display: block;
+  opacity: 0.95;
+}
+
+/* Overlay sutil para integrar la imagen con el card */
+.block-hero-right::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 40% 40%, rgba(0,255,255,0.10), transparent 55%);
+  pointer-events: none;
+}
+
+@media (max-width: 360px){
+  .block-hero-card{
+    grid-template-columns: 1fr;
+  }
+  .block-hero-right{
+    height: 120px;
+  }
 }
 
 
