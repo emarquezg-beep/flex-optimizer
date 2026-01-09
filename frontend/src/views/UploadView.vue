@@ -4415,12 +4415,19 @@ async function submitCorrections() {
 }
 /* Panel flotante */
 .block-hero-left{
-  background: transparent;
-  border: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 1;
+  width: min(72%, 320px);
+  padding: 14px;
+  border-radius: 16px;
 
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
 
 /* ✅ Panel semi-transparente SOLO detrás del texto (no afecta las letras) */
 .block-hero-left::before{
