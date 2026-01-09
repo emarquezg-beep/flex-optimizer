@@ -2149,10 +2149,22 @@ async function submitCorrections() {
     </div>
 
     <div v-if="isBusy" class="busy-overlay" @click.stop>
-      <div class="busy-card" role="dialog" aria-modal="true">
-        <div class="busy-spinner" />
-        <h3 class="busy-title">{{ busyTitle }}</h3>
-        <p class="busy-hint">Por favor no cierres la app ni regreses. Esto puede tardar unos segundos.</p>
+      <div class="busy-card pro-busy" role="dialog" aria-modal="true">
+        <div class="pro-busy-top">
+          <div class="pro-busy-spinner" />
+          <div class="pro-busy-text">
+            <h3 class="busy-title">{{ busyTitle }}</h3>
+            <p class="pro-busy-line">{{ fancyLine }}</p>
+          </div>
+        </div>
+
+        <div class="pro-busy-bar">
+          <div class="pro-busy-bar-fill" :style="{ width: (uploadProgress.percentage || 12) + '%' }" />
+        </div>
+
+        <p class="busy-hint">
+          Por favor no cierres la app ni regreses. Esto puede tardar unos segundos.
+        </p>
       </div>
     </div>
 
@@ -4720,5 +4732,63 @@ async function submitCorrections() {
   color: rgba(248,250,252,0.55);
 }
 
+.pro-busy{
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(15,23,42,0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+}
+
+.pro-busy-top{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.pro-busy-spinner{
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: rgba(255,176,0,0.95);
+  animation: spin 0.85s linear infinite;
+  flex: 0 0 auto;
+}
+
+.pro-busy-text{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pro-busy-line{
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 750;
+  color: rgba(248,250,252,0.78);
+}
+
+.pro-busy-bar{
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+  margin: 10px 0 12px;
+}
+
+.pro-busy-bar-fill{
+  height: 100%;
+  width: 12%;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+  background: linear-gradient(90deg, #ffb000, #ff8a00);
+}
+
+@keyframes spin{
+  to{ transform: rotate(360deg); }
+}
 
 </style>
