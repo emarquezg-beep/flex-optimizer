@@ -194,6 +194,91 @@ watch(selectedWarehouseCode, (newCode) => {
   }
 });
 
+// Animacion Crunching/Analyzing
+
+const fancyPhrases = {
+  preparing: [
+    'Preparing screenshots…',
+    'Optimizing for OCR…',
+    'Getting things ready…'
+  ],
+  uploading: [
+    'Uploading securely…',
+    'Sending screenshots…',
+    'Syncing data…'
+  ],
+  processing: [
+    'Crunching numbers…',
+    'Reading stops…',
+    'Extracting addresses…',
+    'Analyzing route…'
+  ],
+  retrying: [
+    'Connection hiccup… retrying…',
+    'Re-attempting upload…',
+    'Stabilizing connection…'
+  ],
+  complete: [
+    'Done! Finalizing…'
+  ],
+  error: [
+    'Something went wrong…'
+  ]
+}
+
+const fancyLine = ref('')
+
+let fancyTimer = null
+
+const fancyStageKey = computed(() => {
+  // prioridad: OCR upload/progress stages; si no hay stage pero isProcessing, mostramos processing
+  if (uploadProgress.value?.stage) return uploadProgress.value.stage
+  if (isUploadingImages.value || isProcessing.value) return 'processing'
+  return ''
+})
+
+function startFancyTicker() {
+  stopFancyTicker()
+
+  const key = fancyStageKey.value
+  if (!key) return
+
+  const pool = fancyPhrases[key] || fancyPhrases.processing
+  let idx = 0
+  fancyLine.value = pool[idx]
+
+  fancyTimer = setInterval(() => {
+    idx = (idx + 1) % pool.length
+    fancyLine.value = pool[idx]
+  }, 1400)
+}
+
+function stopFancyTicker() {
+  if (fancyTimer) {
+    clearInterval(fancyTimer)
+    fancyTimer = null
+  }
+}
+
+watch(
+  () => fancyStageKey.value,
+  () => startFancyTicker()
+)
+
+watch(
+  () => (isUploadingImages.value || isProcessing.value),
+  (active) => {
+    if (active) startFancyTicker()
+    else stopFancyTicker()
+  }
+)
+
+onMounted(() => {
+  if (isUploadingImages.value || isProcessing.value) startFancyTicker()
+})
+
+onBeforeUnmount(() => stopFancyTicker())
+
 // Modo Foco: Ocultar form si llega respuesta válida
 watch(backendResponse, (newVal) => {
   if (newVal && !newVal.hasErrors && newVal.status !== 'loading') {
@@ -1720,32 +1805,42 @@ async function submitCorrections() {
                 <span>Resultados en segundos</span>
               </div>
 
-              <!-- Indicador de progreso del upload -->
-              <div v-if="uploadProgress.stage !== ''" class="upload-progress">
-                <div class="progress-bar-container">
-                  <div 
-                    class="progress-bar" 
-                    :style="{ width: uploadProgress.percentage + '%' }"
-                    :class="{
-                      'progress-uploading': uploadProgress.stage === 'uploading',
-                      'progress-processing': uploadProgress.stage === 'processing',
-                      'progress-retrying': uploadProgress.stage === 'retrying',
-                      'progress-complete': uploadProgress.stage === 'complete',
-                      'progress-error': uploadProgress.stage === 'error'
-                    }"
-                  ></div>
+              <!-- Animación “Crunching… / Analyzing…” -->
+              <div v-if="isUploadingImages || isProcessing || uploadProgress.stage !== ''" class="pro-status-card">
+                  <div class="pro-status-top">
+                    <div class="pro-status-dot"></div>
+
+                    <div class="pro-status-text">
+                      <div class="pro-status-title">
+                        {{ isUploadingImages ? 'Processing screenshots' : 'Evaluating route' }}
+                      </div>
+
+                      <div class="pro-status-sub">
+                        <span class="pro-status-phrase">{{ fancyLine }}</span>
+                        <span v-if="uploadProgress.message" class="pro-status-hint">— {{ uploadProgress.message }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="pro-status-bar">
+                    <div
+                      class="pro-status-bar-fill"
+                      :style="{ width: (uploadProgress.percentage || 12) + '%' }"
+                      :class="{
+                        uploading: uploadProgress.stage === 'uploading',
+                        processing: uploadProgress.stage === 'processing',
+                        retrying: uploadProgress.stage === 'retrying',
+                        complete: uploadProgress.stage === 'complete',
+                        error: uploadProgress.stage === 'error'
+                      }"
+                    />
+                  </div>
+
+                  <div v-if="uploadMetrics.imageCount" class="pro-status-meta">
+                    {{ uploadMetrics.imageCount }} imágenes · {{ uploadMetrics.originalSizeMB || uploadMetrics.totalSizeMB }} MB · intento {{ uploadMetrics.attempt || 1 }}
+                  </div>
                 </div>
-                
-                <p class="progress-message">
-                  {{ uploadProgress.message }}
-                </p>
-                
-                <p class="progress-details" v-if="uploadMetrics.totalSizeMB">
-                  {{ uploadMetrics.imageCount }} imágenes • 
-                  {{ uploadMetrics.totalSizeMB }} MB • 
-                  Intento {{ uploadMetrics.attempt }}
-                </p>
-              </div>
+
               
           </div>
 
@@ -4532,6 +4627,100 @@ async function submitCorrections() {
   color: rgba(248,250,252,0.60);
   font-size: 0.85rem;
   white-space: nowrap;
+}
+.pro-status-card{
+  margin: 16px 0;
+  padding: 14px 14px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.pro-status-top{
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.pro-status-dot{
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: #ffb000;
+  box-shadow: 0 0 0 6px rgba(255,176,0,0.12);
+  animation: proPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes proPulse{
+  0%,100%{ transform: scale(1); opacity: 1; }
+  50%{ transform: scale(0.92); opacity: 0.7; }
+}
+
+.pro-status-title{
+  font-weight: 850;
+  color: rgba(248,250,252,0.95);
+  font-size: 0.98rem;
+}
+
+.pro-status-sub{
+  margin-top: 4px;
+  font-size: 0.9rem;
+  color: rgba(248,250,252,0.70);
+  line-height: 1.25;
+}
+
+.pro-status-phrase{
+  font-weight: 750;
+  color: rgba(248,250,252,0.85);
+}
+
+.pro-status-hint{
+  color: rgba(248,250,252,0.55);
+}
+
+.pro-status-bar{
+  margin-top: 12px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+
+.pro-status-bar-fill{
+  height: 100%;
+  width: 12%;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+  background: linear-gradient(90deg, #ffb000, #ff8a00);
+}
+
+.pro-status-bar-fill.uploading{
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.pro-status-bar-fill.processing{
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+}
+
+.pro-status-bar-fill.retrying{
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.pro-status-bar-fill.complete{
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.pro-status-bar-fill.error{
+  background: linear-gradient(90deg, #ef4444, #f97316);
+}
+
+.pro-status-meta{
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: rgba(248,250,252,0.55);
 }
 
 
