@@ -2025,10 +2025,7 @@ async function submitCorrections() {
         </div>
       </transition>
 
-      <div v-if="isProcessing || isUploadingImages" class="status">
-        <h3 v-if="isUploadingImages">🤖 Procesando imágenes con IA...</h3>
-        <h3 v-else>Evaluating route scenarios...</h3>
-      </div>
+
 
       <div v-if="backendResponse && backendResponse.status === 'loading'" class="backend-status">Evaluating scenarios...</div>
 
