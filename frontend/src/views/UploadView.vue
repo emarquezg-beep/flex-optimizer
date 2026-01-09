@@ -4400,6 +4400,10 @@ async function submitCorrections() {
   opacity: 0.95;
 }
 
+.hero-value, .hero-label{
+  text-shadow: 0 2px 10px rgba(0,0,0,0.55);
+}
+
 /* Oscurece un poco la zona izquierda para que el texto resalte */
 .block-hero-right::after{
   content: "";
@@ -4416,11 +4420,20 @@ async function submitCorrections() {
 
 /* Panel flotante */
 .block-hero-left{
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 1;
+  width: min(72%, 320px);
+  padding: 14px;
+  border-radius: 16px;
+
   background: transparent;
-  border: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  border: none; /* opcional */
+  backdrop-filter: none; /* opcional */
+  -webkit-backdrop-filter: none; /* opcional */
 }
+
 
 /* ✅ Panel semi-transparente SOLO detrás del texto (no afecta las letras) */
 .block-hero-left::before{
@@ -4451,6 +4464,12 @@ async function submitCorrections() {
   .block-hero-right{
     height: 120px;
   }
+}
+
+/* ✅ Apaga el panel oscuro que viene del ::before */
+.block-hero-left::before{
+  content: none !important;
+  background: transparent !important;
 }
 
 
