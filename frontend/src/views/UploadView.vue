@@ -1680,7 +1680,7 @@ async function submitCorrections() {
 
                 <div class="hero-item hero-item--payment">
                   <div class="hero-label">Payment</div>
-                  <div class="hero-value hero-value--payment">${{ blockData.pago }}</div>
+                  <div class="hero-value">${{ blockData.pago }}</div>
                 </div>
 
               </div>
@@ -4373,17 +4373,6 @@ async function submitCorrections() {
   font-size: 15px;
   line-height: 1.15;
   font-weight: 700;
-}
-
-.hero-item--payment{
-  grid-column: 1 / -1;
-  margin-top: 2px;
-}
-
-.hero-value--payment{
-  font-size: 24px;
-  font-weight: 900;
-  letter-spacing: -0.3px;
 }
 
 .block-hero-right{
