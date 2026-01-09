@@ -1747,40 +1747,50 @@ async function submitCorrections() {
                 </p>
               </div>
               
-              <div v-if="selectedImages.length > 0" class="ocr-cta-selected">
-                  <div class="selected-pill">
-                     {{ selectedImages.length }} seleccionadas
-                  </div>
+          </div>
 
-                <!-- 🆕 BANNER DE COMPRESIÓN -->
-                <div v-if="uploadMetrics.compressedSizeMB > 0" class="compression-banner">
-                  <div class="compression-stats">
-                    <div class="stat-item">
-                      <span class="stat-label">📦 Original:</span>
-                      <span class="stat-value">{{ uploadMetrics.originalSizeMB }} MB</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">✅ Comprimido:</span>
-                      <span class="stat-value">{{ uploadMetrics.compressedSizeMB }} MB</span>
-                    </div>
-                    <div class="stat-item highlight">
-                      <span class="stat-label">🎉 Ahorro:</span>
-                      <span class="stat-value">{{ ((uploadMetrics.originalSizeMB - uploadMetrics.compressedSizeMB) / uploadMetrics.originalSizeMB * 100).toFixed(1) }}%</span>
-                    </div>
-                  </div>
-                </div>
+          <div v-if="selectedImages.length > 0" class="ocr-selected-wrap">
 
-                <ul class="file-list">
-                  <li v-for="(file, index) in selectedImages" :key="index">
-                    {{ file.name }} ({{ (file.size / 1024).toFixed(1) }} KB)
-                  </li>
-                </ul>
-                  <button type="button" class="selected-clear" @click="clearImages">
-                    Limpiar
-                  </button>
-              </div>
-
+          <div class="ocr-cta-selected">
+            <div class="selected-pill">
+              {{ selectedImages.length }} seleccionadas
             </div>
+
+            <button type="button" class="selected-clear" @click="clearImages">
+              Limpiar
+            </button>
+          </div>
+
+          <!-- 🆕 BANNER DE COMPRESIÓN (igual que el tuyo) -->
+          <div v-if="uploadMetrics.compressedSizeMB > 0" class="compression-banner">
+            <div class="compression-stats">
+              <div class="stat-item">
+                <span class="stat-label">📦 Original:</span>
+                <span class="stat-value">{{ uploadMetrics.originalSizeMB }} MB</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">✅ Comprimido:</span>
+                <span class="stat-value">{{ uploadMetrics.compressedSizeMB }} MB</span>
+              </div>
+              <div class="stat-item highlight">
+                <span class="stat-label">🎉 Ahorro:</span>
+                <span class="stat-value">
+                  {{(((uploadMetrics.originalSizeMB - uploadMetrics.compressedSizeMB) / uploadMetrics.originalSizeMB) * 100).toFixed(1)}}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ✅ LISTA PREMIUM (sin bullets + truncado) -->
+          <ul class="ocr-file-list">
+            <li v-for="(file, index) in selectedImages" :key="index" class="ocr-file-item">
+              <span class="ocr-file-name">{{ file.name }}</span>
+              <span class="ocr-file-size">{{ (file.size / 1024).toFixed(1) }} KB</span>
+            </li>
+          </ul>
+
+        </div>
+
             <div class="route-config-card">
             <h3>Route Configuration</h3>
             <div class="controls-container">
@@ -4478,6 +4488,50 @@ async function submitCorrections() {
 .block-hero-left::before{
   content: none !important;
   background: transparent !important;
+}
+/* Wrap para separar visualmente la sección de “archivos seleccionados” */
+.ocr-selected-wrap{
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ✅ Lista premium */
+.ocr-file-list{
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ocr-file-item{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.ocr-file-name{
+  flex: 1;
+  min-width: 0;
+  color: rgba(248,250,252,0.92);
+  font-weight: 650;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ocr-file-size{
+  color: rgba(248,250,252,0.60);
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 
