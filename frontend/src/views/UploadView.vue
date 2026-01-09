@@ -4446,14 +4446,7 @@ async function submitCorrections() {
   pointer-events: none;
 }
 
-@media (max-width: 360px){
-  .block-hero-card{
-    grid-template-columns: 1fr;
-  }
-  .block-hero-right{
-    height: 120px;
-  }
-}
+
 
 /* ✅ Apaga el panel oscuro que viene del ::before */
 .block-hero-left::before{
