@@ -1687,30 +1687,38 @@ async function submitCorrections() {
             </div>
           </div>
        
-          <div class="ocr-upload-section">
-            <div class="card-header">
-              <h3 class="card-title">Sube tus capturas para analizar la ruta</h3>
-              <!-- opcional: si quieres 2da línea MUY discreta -->
-              <p class="card-subtitle">FlexPilot extrae las paradas automáticamente.</p>
+          <div class="ocr-upload-section ocr-cta-card">
+            <div class="ocr-cta-header">
+              <h3 class="ocr-cta-title">Sube tus capturas y listo</h3>
+              <p class="ocr-cta-subtitle">La Inteligencia Artificial hará el resto.</p>
             </div>
             
-            <div class="file-input-container">
-              <input 
-                type="file" 
+            <div class="ocr-cta-actions">
+              <input
+                type="file"
                 ref="fileInputRef"
                 accept="image/png,image/jpeg,image/jpg"
                 multiple
                 @change="handleImageSelection"
-                style="display: none"
+                style="display: none;"
               />
-              
-              <button 
+
+              <button
                 type="button"
-                class="upload-button"
+                class="ocr-cta-button"
                 @click="fileInputRef?.click()"
+                :disabled="isUploadingImages || isProcessing"
               >
-                📷 Seleccionar Capturas (1-7)
+                Seleccionar capturas 📸
               </button>
+
+               <div class="ocr-cta-meta">
+                <span>PNG/JPG</span>
+                <span class="dot">•</span>
+                <span>OCR automático</span>
+                <span class="dot">•</span>
+                <span>Resultados en segundos</span>
+              </div>
 
               <!-- Indicador de progreso del upload -->
               <div v-if="uploadProgress.stage !== ''" class="upload-progress">
@@ -1739,9 +1747,11 @@ async function submitCorrections() {
                 </p>
               </div>
               
-              <div v-if="selectedImages.length > 0" class="selected-files">
-                <p class="files-count">{{ selectedImages.length }} imagen(es) seleccionadas</p>
-                
+              <div v-if="selectedImages.length > 0" class="ocr-cta-selected">
+                  <div class="selected-pill">
+                     {{ selectedImages.length }} seleccionadas
+                  </div>
+
                 <!-- 🆕 BANNER DE COMPRESIÓN -->
                 <div v-if="uploadMetrics.compressedSizeMB > 0" class="compression-banner">
                   <div class="compression-stats">
@@ -1765,7 +1775,9 @@ async function submitCorrections() {
                     {{ file.name }} ({{ (file.size / 1024).toFixed(1) }} KB)
                   </li>
                 </ul>
-                <button type="button" class="clear-button" @click="clearImages">Limpiar</button>
+                  <button type="button" class="selected-clear" @click="clearImages">
+                    Limpiar
+                  </button>
               </div>
 
             </div>
@@ -3620,97 +3632,111 @@ async function submitCorrections() {
 /* ============================================
    🆕 OCR: ESTILOS
    ============================================ */
-/* ✅ OCR (Audible-like dark card) */
-.ocr-upload-section{
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
-  margin-bottom: var(--space-4);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-card);
+/* ✅ OCR CTA Card (premium) */
+.ocr-cta-card{
+  border-radius: 22px;
+  padding: 18px 18px 16px;
+  margin-bottom: 20px;
+
+  background: radial-gradient(1200px 500px at 20% 0%, rgba(255, 170, 0, 0.20), transparent 55%),
+              linear-gradient(135deg, rgba(15,23,42,0.92), rgba(2,6,23,0.92));
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 10px 35px rgba(0,0,0,0.35);
 }
 
-.ocr-upload-section h3{
-  margin: 0 0 var(--space-2) 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
+.ocr-cta-header{
+  margin-bottom: 14px;
 }
 
-.file-input-container{
+.ocr-cta-title{
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1.15;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.4px;
+}
+
+.ocr-cta-subtitle{
+  margin: 8px 0 0;
+  font-size: 1rem;
+  color: rgba(248,250,252,0.70);
+  line-height: 1.35;
+}
+
+.ocr-cta-actions{
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 10px;
 }
 
-.upload-button{
+.ocr-cta-button{
   width: 100%;
-  background: var(--brand-primary);
-  color: #111; /* texto oscuro sobre CTA amarillo/naranja */
-  border: 1px solid rgba(255,255,255,0.08);
-  padding: 12px 14px;
-  border-radius: 14px;
-  font-weight: var(--font-bold);
+  border: none;
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-size: 1.05rem;
+  font-weight: 800;
   cursor: pointer;
-  transition: transform var(--transition-base), filter var(--transition-base);
+
+  background: linear-gradient(135deg, #ffb000, #ff8a00);
+  color: #111827;
+
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  box-shadow: 0 10px 24px rgba(255, 170, 0, 0.25);
 }
 
-.upload-button:hover{
-  filter: brightness(1.03);
-  transform: translateY(-1px);
+.ocr-cta-button:active{
+  transform: scale(0.99);
 }
 
-.upload-button:active{
-  transform: translateY(0);
+.ocr-cta-button:disabled{
+  opacity: 0.7;
+  cursor: not-allowed;
+  filter: grayscale(0.15);
 }
 
-.selected-files{
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  padding: 12px;
-  border-radius: 14px;
+.ocr-cta-meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.85rem;
+  color: rgba(248,250,252,0.65);
 }
 
-.files-count{
-  margin: 0 0 8px 0;
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
+.ocr-cta-meta .dot{
+  opacity: 0.35;
 }
 
-.file-list{
-  list-style: none;
-  padding: 0;
-  margin: 0 0 10px 0;
+.ocr-cta-selected{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
 }
 
-.file-list li{
-  padding: 6px 0;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-
-.file-list li:last-child{
-  border-bottom: none;
-}
-
-.clear-button{
-  width: 100%;
+.selected-pill{
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: rgba(248,250,252,0.90);
   background: rgba(255,255,255,0.06);
-  color: var(--text-primary);
   border: 1px solid rgba(255,255,255,0.10);
-  padding: 10px 12px;
-  border-radius: 14px;
-  cursor: pointer;
-  font-size: var(--text-sm);
-  transition: filter var(--transition-base);
 }
 
-.clear-button:hover{
-  filter: brightness(1.05);
+.selected-clear{
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(248,250,252,0.90);
+  font-weight: 700;
+  cursor: pointer;
 }
+
 
 
 .divider {
