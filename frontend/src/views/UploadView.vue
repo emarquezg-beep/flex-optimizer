@@ -1672,6 +1672,7 @@ async function submitCorrections() {
                   <div class="hero-label">Duration</div>
                   <div class="hero-value">{{ blockData.duracion_horas }}h</div>
                 </div>
+
                 <div class="hero-item">
                   <div class="hero-label">Vehicle</div>
                   <div class="hero-value">{{ getVehicleNickname(blockData.vehiculo) }}</div>
@@ -4407,7 +4408,7 @@ async function submitCorrections() {
   padding: 14px;
   border-radius: 16px;
 
-  background: rgba(8, 12, 20, 0.50); /* 50% */
+  background: rgba(8, 12, 20, 0.75); /* 75% */
   border: 1px solid rgba(255,255,255,0.10);
   backdrop-filter: blur(7px);
   -webkit-backdrop-filter: blur(7px);
