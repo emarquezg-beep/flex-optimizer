@@ -1653,27 +1653,27 @@ async function submitCorrections() {
             <!-- Panel flotante: datos -->
             <div class="block-hero-left">
               <div class="block-hero-grid">
-                <div class="hero-item">
+                <div class="hero-item hero-item--warehouse">
                   <div class="hero-label">Warehouse</div>
                   <div class="hero-value">{{ selectedWarehouseCode }}</div>
                 </div>
 
-                <div class="hero-item">
+                <div class="hero-item hero-item--date">
                   <div class="hero-label">Date</div>
                   <div class="hero-value">{{ blockData.fecha }}</div>
                 </div>
 
-                <div class="hero-item">
+                <div class="hero-item hero-item--start">
                   <div class="hero-label">Start Time</div>
                   <div class="hero-value">{{ blockData.hora }}</div>
                 </div>
 
-                <div class="hero-item">
+                <div class="hero-item hero-item--duration">
                   <div class="hero-label">Duration</div>
                   <div class="hero-value">{{ blockData.duracion_horas }}h</div>
                 </div>
 
-                <div class="hero-item">
+                <div class="hero-item hero-item--vehicle">
                   <div class="hero-label">Vehicle</div>
                   <div class="hero-value">{{ getVehicleNickname(blockData.vehiculo) }}</div>
                 </div>
@@ -4346,7 +4346,22 @@ async function submitCorrections() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 14px;
+
+  /* 🔥 control total de posiciones */
+  grid-template-areas:
+    "warehouse date"
+    "start    duration"
+    "payment  vehicle";
 }
+
+/* asignación de áreas */
+.hero-item--warehouse { grid-area: warehouse; }
+.hero-item--date      { grid-area: date; }
+.hero-item--start      { grid-area: start; }
+.hero-item--duration   { grid-area: duration; }
+.hero-item--payment    { grid-area: payment; }
+.hero-item--vehicle    { grid-area: vehicle; }
+
 .hero-label{
   font-size: 10px;
   letter-spacing: 0.10em;
@@ -4400,19 +4415,12 @@ async function submitCorrections() {
 }
 /* Panel flotante */
 .block-hero-left{
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 1;
-  width: min(72%, 320px);
-  padding: 14px;
-  border-radius: 16px;
-
-  background: rgba(8, 12, 20, 0.75); /* 75% */
-  border: 1px solid rgba(255,255,255,0.10);
-  backdrop-filter: blur(7px);
-  -webkit-backdrop-filter: blur(7px);
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
+
 
 /* ✅ Panel semi-transparente SOLO detrás del texto (no afecta las letras) */
 .block-hero-left::before{
