@@ -1896,14 +1896,21 @@ async function submitCorrections() {
               <!-- Destino final minimal -->
               <div class="route-config-dest">
                 <label class="dest-label" for="destination-select">Where are you going after?</label>
-                <select id="destination-select" v-model="selectedDestination" class="dest-select">
-                  <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
-                </select>
+                  <select id="destination-select" v-model="selectedDestination" class="dest-select">
+                    <option v-for="dest in destinations" :key="dest.code" :value="dest.address">
+                      {{ dest.code === 'Otro especificar abajo' ? 'Otro…' : dest.code }}
+                    </option>
+                  </select>
               </div>
             </div>
-            <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-                <input type="text" v-model="customDestination" placeholder="Enter custom destination address" class="dest-custom-input"/>
-            </div>
+                  <div v-if="selectedDestination === 'custom'" class="custom-input-container">
+                    <input
+                      type="text"
+                      v-model="customDestination"
+                      placeholder="Enter custom destination address"
+                      class="dest-custom-input"
+                    />
+                  </div>
 
           </div>
 
@@ -4862,5 +4869,11 @@ async function submitCorrections() {
   color: rgba(248,250,252,0.92);
 }
 
+.dest-select{
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+}
 
 </style>
