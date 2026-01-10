@@ -1844,7 +1844,7 @@ async function submitCorrections() {
               
           </div>
 
-        <div v-if="selectedImages.length > 0" class="ocr-selected-wrap">
+          <div v-if="selectedImages.length > 0" class="ocr-selected-wrap">
 
           <div class="ocr-cta-selected">
             <div class="selected-pill">
@@ -1886,25 +1886,28 @@ async function submitCorrections() {
 
         </div>
 
-            <div class="route-config-card route-config-min">
-              <h3>Final Destination</h3>
-              <!-- Warehouse fijo (solo lectura) -->
-              <div class="route-config-fixed">
-                <span class="fixed-label">Warehouse</span>
-                <span class="fixed-chip">{{ selectedWarehouseCode }}</span>
+            <div class="route-config-card">
+            <h3>Route Configuration</h3>
+            <div class="controls-container">
+              <div class="control-group">
+                <label for="warehouse-select">Departure Point</label>
+                <select id="warehouse-select" v-model="selectedWarehouseCode">
+                  <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
+                    {{ wh.code }} ({{ wh.commuteMiles }} mi)
+                  </option>
+                </select>
               </div>
-              <!-- Destino final minimal -->
-              <div class="route-config-dest">
-                <label class="dest-label" for="destination-select">Where are you going after?</label>
-                <select id="destination-select" v-model="selectedDestination" class="dest-select">
+              <div class="control-group">
+                <label for="destination-select">Final Destination</label>
+                <select id="destination-select" v-model="selectedDestination">
                   <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
                 </select>
               </div>
             </div>
             <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-                <input type="text" v-model="customDestination" placeholder="Enter custom destination address" class="dest-custom-input"/>
+              <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
             </div>
-
+          </div>
           </div>
 
           <div class="json-input-card">
@@ -4787,80 +4790,5 @@ async function submitCorrections() {
 @keyframes spin{
   to{ transform: rotate(360deg); }
 }
-
-.route-config-min{
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: none;
-}
-
-.route-config-min h3{
-  margin: 0 0 12px 0;
-  font-size: 1.05rem;
-  font-weight: 850;
-}
-
-.route-config-fixed{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
-  margin-bottom: 12px;
-}
-
-.fixed-label{
-  font-size: 0.8rem;
-  color: rgba(248,250,252,0.60);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 750;
-}
-
-.fixed-chip{
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,176,0,0.35);
-  background: rgba(255,176,0,0.10);
-  color: rgba(248,250,252,0.92);
-  font-weight: 850;
-  font-size: 0.92rem;
-}
-
-.route-config-dest{
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.dest-label{
-  font-size: 0.9rem;
-  color: rgba(248,250,252,0.70);
-  font-weight: 650;
-}
-
-.dest-select{
-  width: 100%;
-  padding: 12px 12px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.10);
-  color: rgba(248,250,252,0.92);
-}
-
-.dest-custom-input{
-  width: 100%;
-  padding: 12px 12px;
-  border-radius: 14px;
-  background: rgba(0,0,0,0.25);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: rgba(248,250,252,0.92);
-}
-
 
 </style>
