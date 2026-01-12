@@ -743,6 +743,7 @@ try {
     hora: data.hora,
     duracion_horas, pago,
     pago_por_hora: pago_por_hora.toFixed(2),
+    retrasoalmacen: Number(data.retrasoalmacen) || 0, // 🔥 AGREGAR ESTA LÍNEA
     antes_del_bloque: antes_del_bloque_hrs.toFixed(2),
     despues_del_bloque: despues_del_bloque_hrs.toFixed(2),
     tiempo_total: tiempo_total.toFixed(2),
