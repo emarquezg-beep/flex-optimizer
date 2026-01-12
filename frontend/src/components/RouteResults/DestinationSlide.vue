@@ -39,13 +39,19 @@ watch(() => props.data.primary_city, (newCity) => {
 
     <div class="content-wrapper">
       
-      <div class="city-header">
-        <span class="label">DESTINATION</span>
-        <h2 class="city-name">{{ data.primary_city || 'Florida Area' }}</h2>
-        <div class="arrival-pill">
-          🏁 Arrival: {{ data.eta_normal }}
+    <div class="city-header">
+      <span class="label">DESTINATION</span>
+      <h2 class="city-name">{{ data.primary_city || 'Florida Area' }}</h2>
+      <div class="time-window">
+        <div class="time-window-label">You'll be in the area</div>
+        <div class="time-range">
+          <span class="time-start">{{ data.eta_city_arrival }}</span>
+          <span class="time-separator">—</span>
+          <span class="time-end">{{ data.eta_city_departure }}</span>
         </div>
       </div>
+    </div>
+
 
       <div class="weather-card" v-if="weather">
         <div class="weather-main">
@@ -222,4 +228,42 @@ watch(() => props.data.primary_city, (newCity) => {
   gap: 8px;
   border: 1px solid rgba(255,255,255,0.1);
 }
+
+.time-window {
+  margin-top: 16px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, rgba(255, 165, 0, 0.1) 0%, rgba(255, 165, 0, 0.05) 100%);
+  border-radius: 12px;
+  border: 1.5px solid rgba(255, 165, 0, 0.3);
+}
+
+.time-window-label {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.time-range {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 1.3em;
+  font-weight: 700;
+  color: var(--brand-primary);
+}
+
+.time-separator {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.time-start,
+.time-end {
+  white-space: nowrap;
+}
+
 </style>
