@@ -687,31 +687,53 @@ function calculateLogData(scenarioKey) {
   const leg3_time = Math.round(parseFloat(chosenReport.toEnd.duration) || 0);
 
   // 🔥 CALCULAR ETAs DE CIUDAD (antes del return)
-  let etaCityArrival = 'N/A';
-  let etaCityDeparture = 'N/A';
+let etaCityArrival = 'N/A';
+let etaCityDeparture = 'N/A';
 
-  try {
-    const [startHours, startMinutes] = data.hora.split(':').map(Number);
-    const blockStart = new Date();
-    blockStart.setHours(startHours, startMinutes, 0, 0);
-    
-    // Tiempo total hasta llegar a la ciudad (warehouse delay + drive)
-    const delayMinutes = Number(data.retrasoalmacen) || 0;
-    const driveMinutes = leg1time; // Tiempo hasta la primera parada
-    const arrivalMinutes = delayMinutes + driveMinutes;
-    
-    // ETA de llegada a ciudad
-    const cityArrival = new Date(blockStart.getTime() + (arrivalMinutes * 60000));
-    etaCityArrival = cityArrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    
-    // ETA de salida de ciudad (arrival + trabajo en la ciudad)
-    const departureMinutes = arrivalMinutes + leg2time;
-    const cityDeparture = new Date(blockStart.getTime() + (departureMinutes * 60000));
-    etaCityDeparture = cityDeparture.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    
-  } catch (e) {
-    console.error('Error calculando ETAs de ciudad:', e);
-  }
+try {
+  console.log('=== DEBUG ETA CIUDAD ===');
+  console.log('data.hora:', data.hora);
+  console.log('data.retrasoalmacen:', data.retrasoalmacen);
+  console.log('leg1time:', leg1time);
+  console.log('leg2time:', leg2time);
+  
+  const [startHours, startMinutes] = data.hora.split(':').map(Number);
+  console.log('startHours:', startHours, 'startMinutes:', startMinutes);
+  
+  const blockStart = new Date();
+  blockStart.setHours(startHours, startMinutes, 0, 0);
+  console.log('blockStart:', blockStart);
+  
+  // Tiempo total hasta llegar a la ciudad (warehouse delay + drive)
+  const delayMinutes = Number(data.retrasoalmacen) || 0;
+  const driveMinutes = leg1time; // Tiempo hasta la primera parada
+  const arrivalMinutes = delayMinutes + driveMinutes;
+  
+  console.log('delayMinutes:', delayMinutes);
+  console.log('driveMinutes:', driveMinutes);
+  console.log('arrivalMinutes:', arrivalMinutes);
+  
+  // ETA de llegada a ciudad
+  const cityArrival = new Date(blockStart.getTime() + (arrivalMinutes * 60000));
+  etaCityArrival = cityArrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  
+  console.log('cityArrival:', cityArrival);
+  console.log('etaCityArrival:', etaCityArrival);
+  
+  // ETA de salida de ciudad (arrival + trabajo en la ciudad)
+  const departureMinutes = arrivalMinutes + leg2time;
+  const cityDeparture = new Date(blockStart.getTime() + (departureMinutes * 60000));
+  etaCityDeparture = cityDeparture.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  
+  console.log('departureMinutes:', departureMinutes);
+  console.log('cityDeparture:', cityDeparture);
+  console.log('etaCityDeparture:', etaCityDeparture);
+  console.log('=== FIN DEBUG ===');
+  
+} catch (e) {
+  console.error('❌ Error calculando ETAs de ciudad:', e);
+  console.error('Stack:', e.stack);
+}
 
   return {
     fecha: data.fecha,
