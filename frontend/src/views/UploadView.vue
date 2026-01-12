@@ -3128,37 +3128,40 @@ async function submitCorrections() {
   line-height: 1.1;
 }
 
-/* Warehouse Badge (fijo, no editable) */
+/* Warehouse Badge (fijo, compacto) */
 .warehouse-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 6px;
+  padding: 8px 12px;
   background: linear-gradient(135deg, rgba(255, 165, 0, 0.15) 0%, rgba(255, 165, 0, 0.05) 100%);
   border: 1.5px solid rgba(255, 165, 0, 0.35);
-  border-radius: 12px;
+  border-radius: 10px;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0; /* Permite que se comprima */
 }
 
 .warehouse-code {
-  font-size: 1.1em;
+  font-size: 0.95em;
   color: var(--brand-primary);
+  white-space: nowrap;
 }
 
 .warehouse-miles {
-  font-size: 0.9em;
+  font-size: 0.85em;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-/* Select de destino compacto (previene overflow) */
+/* Select de destino compacto */
 .destination-select-compact {
   width: 100%;
   max-width: 100%;
-  padding: 10px 12px;
-  font-size: 0.95em;
+  padding: 8px 10px;
+  font-size: 0.9em;
   border: 1.5px solid var(--border-primary);
-  border-radius: 12px;
+  border-radius: 10px;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   cursor: pointer;
@@ -3168,6 +3171,10 @@ async function submitCorrections() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  
+  /* Para mobile: reducir padding del dropdown nativo */
+  appearance: auto;
+  -webkit-appearance: auto;
 }
 
 .destination-select-compact:focus {
@@ -3178,6 +3185,22 @@ async function submitCorrections() {
 
 .destination-select-compact:hover {
   border-color: var(--brand-primary);
+}
+
+/* Ajustar el grid para que sea más compacto */
+.controls-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px; /* Reducido de 16px */
+  margin-top: 12px;
+}
+
+.control-group label {
+  display: block;
+  font-size: 0.85em; /* Más pequeño */
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px; /* Reducido */
 }
 
 
