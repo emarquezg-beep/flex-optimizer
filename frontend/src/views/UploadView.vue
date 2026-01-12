@@ -1886,28 +1886,47 @@ async function submitCorrections() {
 
         </div>
 
-            <div class="route-config-card">
-            <h3>Route Configuration</h3>
+          <div class="route-config-card">
+            <h3>⚙️ Route Configuration</h3>
             <div class="controls-container">
+              <!-- Departure Point: FIJO (badge) -->
               <div class="control-group">
-                <label for="warehouse-select">Departure Point</label>
-                <select id="warehouse-select" v-model="selectedWarehouseCode">
-                  <option v-for="wh in warehouses" :key="wh.code" :value="wh.code">
-                    {{ wh.code }} ({{ wh.commuteMiles }} mi)
+                <label>Departure Point</label>
+                <div class="warehouse-badge">
+                  <span class="warehouse-code">{{ selectedWarehouseCode }}</span>
+                  <span class="warehouse-miles">({{ warehouses.find(w => w.code === selectedWarehouseCode)?.commuteMiles || 0 }} mi)</span>
+                </div>
+              </div>
+
+              <!-- Final Destination: SELECT mejorado -->
+              <div class="control-group">
+                <label for="destination-select">Final Destination</label>
+                <select 
+                  id="destination-select" 
+                  v-model="selectedDestination"
+                  class="destination-select-compact"
+                >
+                  <option 
+                    v-for="dest in destinations" 
+                    :key="dest.code" 
+                    :value="dest.address"
+                  >
+                    {{ dest.code }}
                   </option>
                 </select>
               </div>
-              <div class="control-group">
-                <label for="destination-select">Final Destination</label>
-                <select id="destination-select" v-model="selectedDestination">
-                  <option v-for="dest in destinations" :key="dest.code" :value="dest.address">{{ dest.code }}</option>
-                </select>
-              </div>
             </div>
+
+            <!-- Custom input (si elige "Otro") -->
             <div v-if="selectedDestination === 'custom'" class="custom-input-container">
-              <input type="text" v-model="customDestination" placeholder="Enter custom destination address">
+              <input 
+                type="text" 
+                v-model="customDestination" 
+                placeholder="Enter custom destination address"
+              />
             </div>
           </div>
+
           </div>
 
           <div class="json-input-card">
@@ -3108,6 +3127,59 @@ async function submitCorrections() {
   font-size: var(--text-base);
   line-height: 1.1;
 }
+
+/* Warehouse Badge (fijo, no editable) */
+.warehouse-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(255, 165, 0, 0.15) 0%, rgba(255, 165, 0, 0.05) 100%);
+  border: 1.5px solid rgba(255, 165, 0, 0.35);
+  border-radius: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.warehouse-code {
+  font-size: 1.1em;
+  color: var(--brand-primary);
+}
+
+.warehouse-miles {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+
+/* Select de destino compacto (previene overflow) */
+.destination-select-compact {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px;
+  font-size: 0.95em;
+  border: 1.5px solid var(--border-primary);
+  border-radius: 12px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  /* Previene que el texto se salga */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.destination-select-compact:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(255, 165, 0, 0.15);
+}
+
+.destination-select-compact:hover {
+  border-color: var(--brand-primary);
+}
+
 
 /* Additional Settings (collapsible) */
 .additional-settings {
