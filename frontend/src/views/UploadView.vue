@@ -676,40 +676,56 @@ function calculateLogData(scenarioKey) {
   const regularApts = Math.max(0, totalAptsInReport - totalDtInReport);
   const calcText = `${numero_paradas} stops × ${mult.toFixed(2)} + ${regularApts} apts × 0.75 + ${totalDtInReport} DT × 3`;
 
-  // Tramos tácticos
-  const leg1_dist = parseFloat(chosenReport.toStart.distance) || 0;
-  const leg1_time = Math.round(parseFloat(chosenReport.toStart.duration) || 0);
-  const work_drive_plus_extras = chosenReport.totalWorkDuration - leg1_time;
-  const work_base_stop_time = numero_paradas * mult;
-  const leg2_time = Math.round(work_drive_plus_extras + work_base_stop_time);
-  const leg2_dist = parseFloat(chosenReport.totalWorkMiles) - leg1_dist;
-  const leg3_dist = parseFloat(chosenReport.toEnd.distance) || 0;
-  const leg3_time = Math.round(parseFloat(chosenReport.toEnd.duration) || 0);
+// Tramos tácticos
+const leg1dist = parseFloat(chosenReport.toStart.distance) || 0;
+const leg1time = Math.round(parseFloat(chosenReport.toStart.duration) || 0);
+const workdriveplusextras = chosenReport.totalWorkDuration - leg1time;
+const workbasestoptime = numeroparadas * mult;
+const leg2time = Math.round(workdriveplusextras - workbasestoptime);
+const leg2dist = parseFloat(chosenReport.totalWorkMiles) - leg1dist;
+const leg3dist = parseFloat(chosenReport.toEnd.distance) || 0;
+const leg3time = Math.round(parseFloat(chosenReport.toEnd.duration) || 0);
 
-// 🔥 CALCULAR ETAs DE CIUDAD (antes del return)
+// 🔥 CALCULAR ETAs DE CIUDAD (versión robusta)
 let etaCityArrival = 'N/A';
 let etaCityDeparture = 'N/A';
 
-try {
-  const [startHours, startMinutes] = data.hora.split(':').map(Number);
-  
-  const blockStart = new Date();
-  blockStart.setHours(startHours, startMinutes, 0, 0);
-  
-  // ✅ CAMBIO: retrasoalmacen → retraso_almacen
-  const delayMinutes = Number(data.retraso_almacen) || 0;
-  const driveMinutes = leg1time;
-  const arrivalMinutes = delayMinutes + driveMinutes;
-  
-  const cityArrival = new Date(blockStart.getTime() + (arrivalMinutes * 60000));
-  etaCityArrival = cityArrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  
-  const departureMinutes = arrivalMinutes + leg2time;
-  const cityDeparture = new Date(blockStart.getTime() + (departureMinutes * 60000));
-  etaCityDeparture = cityDeparture.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  
-} catch (e) {
-  console.error('❌ Error calculando ETAs de ciudad:', e);
+// Validación previa
+const hasRequiredData = data.hora && 
+                        (data.retraso_almacen !== undefined) && 
+                        (leg1time !== undefined) && 
+                        (leg2time !== undefined);
+
+if (hasRequiredData) {
+  try {
+    // Parse de hora
+    const horaParts = String(data.hora).split(':');
+    if (horaParts.length === 2) {
+      const startHours = parseInt(horaParts[0], 10);
+      const startMinutes = parseInt(horaParts[1], 10);
+      
+      if (!isNaN(startHours) && !isNaN(startMinutes)) {
+        const blockStart = new Date();
+        blockStart.setHours(startHours, startMinutes, 0, 0);
+        
+        const delayMinutes = Number(data.retraso_almacen) || 0;
+        const driveMinutes = Number(leg1time) || 0;
+        const workMinutes = Number(leg2time) || 0;
+        
+        // Calcular arrival
+        const arrivalMinutes = delayMinutes + driveMinutes;
+        const cityArrival = new Date(blockStart.getTime() + (arrivalMinutes * 60000));
+        etaCityArrival = cityArrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        
+        // Calcular departure
+        const departureMinutes = arrivalMinutes + workMinutes;
+        const cityDeparture = new Date(blockStart.getTime() + (departureMinutes * 60000));
+        etaCityDeparture = cityDeparture.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      }
+    }
+  } catch (e) {
+    // Silencioso, mantiene N/A
+  }
 }
 
   return {
