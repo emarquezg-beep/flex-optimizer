@@ -55,17 +55,13 @@ watch(() => props.data.primary_city, (newCity) => {
 <!-- 🔥 DEBUG TEMPORAL -->
 <div style="margin-top: 20px; padding: 12px; background: #ff0; color: #000; font-size: 11px; font-family: monospace; text-align: left; border-radius: 8px;">
   <div><strong>DEBUG:</strong></div>
-  <div>hora: {{ data.hora }} (tipo: {{ typeof data.hora }})</div>
-  <div>retraso_almacen: {{ data.retraso_almacen }} (tipo: {{ typeof data.retraso_almacen }})</div>
-  <div>leg1.time: {{ data.tactical?.leg1?.time }} (tipo: {{ typeof data.tactical?.leg1?.time }})</div>
-  <div>leg2.time: {{ data.tactical?.leg2?.time }} (tipo: {{ typeof data.tactical?.leg2?.time }})</div>
-  <div style="margin-top: 8px; padding-top: 8px; border-top: 2px solid #000;">
-    <strong>RESULTADOS:</strong>
-  </div>
+  <div>hora: {{ data.hora }}</div>
+  <div>retrasoalmacen: {{ data.retraso_almacen }} ← DEBE TENER VALOR</div>
+  <div>tactical.leg1.time: {{ data.tactical?.leg1?.time }}</div>
+  <div>tactical.leg2.time: {{ data.tactical?.leg2?.time }}</div>
   <div>eta_city_arrival: {{ data.eta_city_arrival }}</div>
   <div>eta_city_departure: {{ data.eta_city_departure }}</div>
 </div>
-
 
 
 
