@@ -686,53 +686,30 @@ function calculateLogData(scenarioKey) {
   const leg3_dist = parseFloat(chosenReport.toEnd.distance) || 0;
   const leg3_time = Math.round(parseFloat(chosenReport.toEnd.duration) || 0);
 
-  // 🔥 CALCULAR ETAs DE CIUDAD (antes del return)
+// 🔥 CALCULAR ETAs DE CIUDAD (antes del return)
 let etaCityArrival = 'N/A';
 let etaCityDeparture = 'N/A';
 
 try {
-  console.log('=== DEBUG ETA CIUDAD ===');
-  console.log('data.hora:', data.hora);
-  console.log('data.retrasoalmacen:', data.retrasoalmacen);
-  console.log('leg1time:', leg1time);
-  console.log('leg2time:', leg2time);
-  
   const [startHours, startMinutes] = data.hora.split(':').map(Number);
-  console.log('startHours:', startHours, 'startMinutes:', startMinutes);
   
   const blockStart = new Date();
   blockStart.setHours(startHours, startMinutes, 0, 0);
-  console.log('blockStart:', blockStart);
   
-  // Tiempo total hasta llegar a la ciudad (warehouse delay + drive)
-  const delayMinutes = Number(data.retrasoalmacen) || 0;
-  const driveMinutes = leg1time; // Tiempo hasta la primera parada
+  // ✅ CAMBIO: retrasoalmacen → retraso_almacen
+  const delayMinutes = Number(data.retraso_almacen) || 0;
+  const driveMinutes = leg1time;
   const arrivalMinutes = delayMinutes + driveMinutes;
   
-  console.log('delayMinutes:', delayMinutes);
-  console.log('driveMinutes:', driveMinutes);
-  console.log('arrivalMinutes:', arrivalMinutes);
-  
-  // ETA de llegada a ciudad
   const cityArrival = new Date(blockStart.getTime() + (arrivalMinutes * 60000));
   etaCityArrival = cityArrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   
-  console.log('cityArrival:', cityArrival);
-  console.log('etaCityArrival:', etaCityArrival);
-  
-  // ETA de salida de ciudad (arrival + trabajo en la ciudad)
   const departureMinutes = arrivalMinutes + leg2time;
   const cityDeparture = new Date(blockStart.getTime() + (departureMinutes * 60000));
   etaCityDeparture = cityDeparture.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   
-  console.log('departureMinutes:', departureMinutes);
-  console.log('cityDeparture:', cityDeparture);
-  console.log('etaCityDeparture:', etaCityDeparture);
-  console.log('=== FIN DEBUG ===');
-  
 } catch (e) {
   console.error('❌ Error calculando ETAs de ciudad:', e);
-  console.error('Stack:', e.stack);
 }
 
   return {
@@ -743,7 +720,7 @@ try {
     hora: data.hora,
     duracion_horas, pago,
     pago_por_hora: pago_por_hora.toFixed(2),
-    retrasoalmacen: Number(data.retrasoalmacen) || 0, // 🔥 AGREGAR ESTA LÍNEA
+    retraso_almacen: Number(data.retraso_almacen) || 0,
     antes_del_bloque: antes_del_bloque_hrs.toFixed(2),
     despues_del_bloque: despues_del_bloque_hrs.toFixed(2),
     tiempo_total: tiempo_total.toFixed(2),
@@ -1082,7 +1059,7 @@ async function sendToBackend() {
                 ? customDestination.value 
                 : selectedDestination.value,
               startTime: blockData.value.hora,
-              warehouseDelay: blockData.value.retrasoalmacen,
+              warehouseDelay: blockData.value.retraso_almacen,
               currentDate: blockData.value.fecha,
               warehouse: warehouse.address,
               warehouseCode: warehouse.code
@@ -2062,7 +2039,7 @@ async function submitCorrections() {
         <div v-if="showQuickSettingsModal" class="modal-overlay" @click.self="showQuickSettingsModal = false">
           <div class="modal-container quick-settings-modal">
             <div class="modal-header">
-              <h3>⚙️ Quick Adjustments</h3>
+              <h3>Quick Adjustments</h3>
               <button @click="showQuickSettingsModal = false" class="close-btn">✕</button>
             </div>
             
