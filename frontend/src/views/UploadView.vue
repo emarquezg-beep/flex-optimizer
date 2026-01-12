@@ -3154,7 +3154,7 @@ async function submitCorrections() {
   white-space: nowrap;
 }
 
-/* Select de destino compacto */
+/* Select de destino compacto (SIN flecha nativa) */
 .destination-select-compact {
   width: 100%;
   max-width: 100%;
@@ -3172,9 +3172,18 @@ async function submitCorrections() {
   text-overflow: ellipsis;
   white-space: nowrap;
   
-  /* Para mobile: reducir padding del dropdown nativo */
-  appearance: auto;
-  -webkit-appearance: auto;
+  /* 🔥 OCULTAR LA FLECHA NATIVA */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  
+  /* Prevenir que aparezca en IE/Edge */
+  background-image: none;
+}
+
+/* Ocultar flecha en IE/Edge (fallback) */
+.destination-select-compact::-ms-expand {
+  display: none;
 }
 
 .destination-select-compact:focus {
@@ -3186,6 +3195,7 @@ async function submitCorrections() {
 .destination-select-compact:hover {
   border-color: var(--brand-primary);
 }
+
 
 /* Ajustar el grid para que sea más compacto */
 .controls-container {
