@@ -686,7 +686,7 @@ function calculateLogData(scenarioKey) {
   const leg3_dist = parseFloat(chosenReport.toEnd.distance) || 0;
   const leg3_time = Math.round(parseFloat(chosenReport.toEnd.duration) || 0);
 
-// 🔥 CALCULAR ETAs DE CIUDAD (antes del return)
+// 🔥 CALCULAR ETAs DE CIUDAD (antes del return) //
 let etaCityArrival = 'N/A';
 let etaCityDeparture = 'N/A';
 
