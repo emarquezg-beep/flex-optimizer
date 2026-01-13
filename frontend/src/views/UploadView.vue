@@ -698,13 +698,13 @@ try {
   
   // ✅ CAMBIO: retrasoalmacen → retraso_almacen
   const delayMinutes = Number(data.retraso_almacen) || 0;
-  const driveMinutes = leg1time;
+  const driveMinutes = leg1_time;
   const arrivalMinutes = delayMinutes + driveMinutes;
   
   const cityArrival = new Date(blockStart.getTime() + (arrivalMinutes * 60000));
   etaCityArrival = cityArrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   
-  const departureMinutes = arrivalMinutes + leg2time;
+  const departureMinutes = arrivalMinutes + leg_2time;
   const cityDeparture = new Date(blockStart.getTime() + (departureMinutes * 60000));
   etaCityDeparture = cityDeparture.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   
