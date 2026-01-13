@@ -704,7 +704,7 @@ try {
   const cityArrival = new Date(blockStart.getTime() + (arrivalMinutes * 60000));
   etaCityArrival = cityArrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   
-  const departureMinutes = arrivalMinutes + leg_2time;
+  const departureMinutes = arrivalMinutes + leg2_time;
   const cityDeparture = new Date(blockStart.getTime() + (departureMinutes * 60000));
   etaCityDeparture = cityDeparture.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   
