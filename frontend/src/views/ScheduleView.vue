@@ -28,6 +28,7 @@ const warehouses = [
   { code: 'DFL8', address: '7453 Republic Dr Groveland, FL' },
   { code: 'DMO4', address: '2400 Mason Ave Daytona Beach, FL' },
   { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL' },
+  { code: 'C060', address: '305 E Altamonte Drive Ste 1000, Altamonte Springs, FL' },
 ]
 
 // Estados

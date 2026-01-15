@@ -131,7 +131,7 @@ const mostrarDetalles = ref(false);
 const ariaData = ref(null); // ARIA multiplier
 
 // Constantes
-const DURACION_OPTIONS = [1, 1.5, 2, 3, 3.5, 4, 4.5, 5];
+const DURACION_OPTIONS = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 const warehouses = ref([
   { code: 'VFL8', address: '9775 air commerce parkway Orlando, FL', commuteMiles: 23 },
   { code: 'VFL1', address: '7469 Kingspointe Pkwy Orlando, FL', commuteMiles: 28 },
@@ -141,6 +141,7 @@ const warehouses = ref([
   { code: 'DFL8', address: '7453 Republic Dr Groveland, FL', commuteMiles: 47 },
   { code: 'DMO4', address: '2400 Mason Ave Daytona Beach, FL', commuteMiles: 50 },
   { code: 'DFL5', address: '3000 Shelby Industrial Dr Apopka, FL', commuteMiles: 24 },
+  { code: 'C060', address: '305 E Altamonte Drive Ste 1000, Altamonte Springs, FL', commuteMiles: 12 },
 ]);
 
 const destinations = ref([
