@@ -3705,15 +3705,16 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
     
     const totalIncome = routesData.reduce((sum, r) => sum + (r.pago || 0), 0);
     
-    // 2. Query para millas por vehículo (con JOIN)
+    // 2. Query para millas por vehículo (con JOIN correcto)
     const { data: vehicleData, error: vehicleError } = await supabase
       .from('routes')
       .select(`
         vehicle_id,
         millas_de_trabajo,
         user_vehicles (
-          marca,
-          modelo,
+          nickname,
+          make,
+          model,
           year
         )
       `)
@@ -3721,23 +3722,28 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
       .gte('fecha', `${taxYear}-01-01`)
       .lte('fecha', `${taxYear}-12-31`)
       .not('vehicle_id', 'is', null);
-    
+
     if (vehicleError) throw vehicleError;
-    
+
     // 3. Agrupar millas por vehículo
     const vehicleMap = {};
     vehicleData.forEach(route => {
       const vId = route.vehicle_id;
       if (!vehicleMap[vId]) {
         const vInfo = route.user_vehicles || {};
+        // Priorizar nickname, si no existe usar make/model/year
+        const displayName = vInfo.nickname || 
+          `${vInfo.year || ''} ${vInfo.make || ''} ${vInfo.model || ''}`.trim() ||
+          'Unknown Vehicle';
+        
         vehicleMap[vId] = {
-          name: `${vInfo.year || ''} ${vInfo.marca || ''} ${vInfo.modelo || ''}`.trim() || 'Unknown Vehicle',
+          name: displayName,
           miles: 0
         };
       }
       vehicleMap[vId].miles += (route.millas_de_trabajo || 0);
     });
-    
+
     const vehicles = Object.values(vehicleMap);
     const totalMiles = vehicles.reduce((sum, v) => sum + v.miles, 0);
     const mileageDeduction = totalMiles * IRS_MILEAGE_RATE;
