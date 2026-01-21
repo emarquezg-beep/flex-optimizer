@@ -4,13 +4,43 @@ import { useAuth } from '@/composables/useAuth';
 import { fetchWithAuth } from '@/lib/api';
 import { 
   TrendingUp, MapPin, DollarSign, Clock, 
-  Activity, Award, Truck 
+  Activity, Award, Truck, Download
 } from 'lucide-vue-next';
 
 const { userId } = useAuth();
 const stats = ref(null);
 const isLoading = ref(true);
 const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+const isDownloading = ref(false);
+
+const downloadTaxReport = async () => {
+  isDownloading.value = true;
+  try {
+    const res = await fetchWithAuth(
+      `${backendUrl}/api/tax-report/${userId.value}?year=2025`,
+      { method: 'GET' }
+    );
+    
+    if (!res.ok) throw new Error('Error generando reporte');
+    
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `FlexPilot_Tax_Report_2025.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    
+  } catch (error) {
+    console.error('Error descargando reporte:', error);
+    alert('Error generando el reporte. Intenta de nuevo.');
+  } finally {
+    isDownloading.value = false;
+  }
+};
 
 onMounted(async () => {
   try {
@@ -95,6 +125,16 @@ const formatDate = (dateStr) => {
             <span class="pill blue">⛽ ${{ stats.recent.dollarsPerMile }}/mi</span>
           </div>
         </div>
+
+        <button 
+          class="tax-report-btn" 
+          @click="downloadTaxReport"
+          :disabled="isDownloading"
+        >
+          <Download :size="18" />
+          <span v-if="!isDownloading">📄 Download 2025 Tax Report</span>
+          <span v-else>Generating PDF...</span>
+        </button>
 
         <div class="metrics-grid">
           <div class="metric-box">
@@ -290,4 +330,39 @@ const formatDate = (dateStr) => {
 .text-right { text-align: right; }
 .money { font-weight: 800; color: #10b981; font-size: 1rem; }
 .miles { font-size: 0.75rem; color: var(--text-tertiary); }
+
+/* --- TAX REPORT BUTTON --- */
+.tax-report-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: white;
+  border: none;
+  padding: 16px;
+  border-radius: 16px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 20px -5px rgba(99, 102, 241, 0.4);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tax-report-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 25px -5px rgba(99, 102, 241, 0.5);
+}
+
+.tax-report-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.tax-report-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 </style>

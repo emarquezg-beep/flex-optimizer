@@ -3679,3 +3679,181 @@ console.log('   GET /api/health - Health check + Supabase wake-up');
 // ═══════════════════════════════════════════════════════════════
 // FIN DE HEALTH ENDPOINTS
 // ═══════════════════════════════════════════════════════════════
+
+// Tax Report PDF (con desglose por vehículo)
+app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
+  const { userId } = req.params;
+  const { year } = req.query;
+  
+  if (userId !== req.userId) {
+    return res.status(403).json({ success: false, error: 'No tienes permiso' });
+  }
+
+  try {
+    const taxYear = year || '2025';
+    const IRS_MILEAGE_RATE = 0.70; // IRS 2025 rate
+    
+    // 1. Query para total income
+    const { data: routesData, error: routesError } = await supabase
+      .from('routes')
+      .select('pago')
+      .eq('user_id', userId)
+      .gte('fecha', `${taxYear}-01-01`)
+      .lte('fecha', `${taxYear}-12-31`);
+    
+    if (routesError) throw routesError;
+    
+    const totalIncome = routesData.reduce((sum, r) => sum + (r.pago || 0), 0);
+    
+    // 2. Query para millas por vehículo (con JOIN)
+    const { data: vehicleData, error: vehicleError } = await supabase
+      .from('routes')
+      .select(`
+        vehicle_id,
+        millas_de_trabajo,
+        user_vehicles (
+          marca,
+          modelo,
+          year
+        )
+      `)
+      .eq('user_id', userId)
+      .gte('fecha', `${taxYear}-01-01`)
+      .lte('fecha', `${taxYear}-12-31`)
+      .not('vehicle_id', 'is', null);
+    
+    if (vehicleError) throw vehicleError;
+    
+    // 3. Agrupar millas por vehículo
+    const vehicleMap = {};
+    vehicleData.forEach(route => {
+      const vId = route.vehicle_id;
+      if (!vehicleMap[vId]) {
+        const vInfo = route.user_vehicles || {};
+        vehicleMap[vId] = {
+          name: `${vInfo.year || ''} ${vInfo.marca || ''} ${vInfo.modelo || ''}`.trim() || 'Unknown Vehicle',
+          miles: 0
+        };
+      }
+      vehicleMap[vId].miles += (route.millas_de_trabajo || 0);
+    });
+    
+    const vehicles = Object.values(vehicleMap);
+    const totalMiles = vehicles.reduce((sum, v) => sum + v.miles, 0);
+    const mileageDeduction = totalMiles * IRS_MILEAGE_RATE;
+    const otherExpenses = 0.00;
+    const totalDeductions = mileageDeduction + otherExpenses;
+    
+    // 4. Generar PDF
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 50 });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=FlexPilot_Tax_Report_${taxYear}.pdf`);
+    
+    doc.pipe(res);
+    
+    // --- HEADER ---
+    doc.fontSize(24).font('Helvetica-Bold').text('Tax Summary', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(12).font('Helvetica').text(
+      `Jan 01 ${taxYear} - Dec 31 ${taxYear}`,
+      { align: 'center' }
+    );
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor('#666').text(
+      'Give this form to your tax preparer or use it while filing your taxes.',
+      { align: 'center' }
+    );
+    doc.moveDown(2);
+    
+    // --- INCOME SECTION ---
+    doc.fillColor('#000').fontSize(16).font('Helvetica-Bold').text('Income');
+    doc.moveDown(0.5);
+    doc.fontSize(12).font('Helvetica');
+    doc.text(`Total Income`, 50, doc.y, { continued: true });
+    doc.text(`$${totalIncome.toFixed(2)}`, { align: 'right' });
+    doc.moveDown(2);
+    
+    // --- DEDUCTIONS SECTION ---
+    doc.fontSize(16).font('Helvetica-Bold').text('Deductions');
+    doc.moveDown(0.5);
+    
+    // Table header
+    doc.fontSize(11).font('Helvetica-Bold');
+    const tableTop = doc.y;
+    doc.text('Expense Category', 50, tableTop);
+    doc.text('Miles', 300, tableTop);
+    doc.text('Deductible', 450, tableTop);
+    doc.moveDown(0.3);
+    
+    // Separator line
+    doc.strokeColor('#ddd').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.5);
+    
+    // Deductible Mileage - BY VEHICLE
+    doc.font('Helvetica-Bold').fontSize(11);
+    doc.text('Deductible Mileage', 50, doc.y);
+    doc.moveDown(0.3);
+    
+    doc.font('Helvetica').fontSize(10);
+    vehicles.forEach(vehicle => {
+      const vY = doc.y;
+      const vehicleDeduction = vehicle.miles * IRS_MILEAGE_RATE;
+      doc.fillColor('#333').text(`  • ${vehicle.name}`, 50, vY);
+      doc.fillColor('#000').text(`${vehicle.miles.toFixed(2)} mi`, 300, vY);
+      doc.text(`$${vehicleDeduction.toFixed(2)}`, 450, vY);
+      doc.moveDown(0.5);
+    });
+    
+    // Subtotal mileage
+    doc.strokeColor('#ddd').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').fontSize(11);
+    const subtotalY = doc.y;
+    doc.text('Total Mileage', 50, subtotalY);
+    doc.text(`${totalMiles.toFixed(2)} mi`, 300, subtotalY);
+    doc.text(`$${mileageDeduction.toFixed(2)}`, 450, subtotalY);
+    doc.moveDown(1.5);
+    
+    // Other Expenses
+    doc.font('Helvetica-Bold');
+    doc.text('Other Expenses', 50, doc.y);
+    doc.moveDown(0.5);
+    
+    doc.font('Helvetica');
+    const otherY = doc.y;
+    doc.text('Tolls', 50, otherY);
+    doc.text(`$${otherExpenses.toFixed(2)}`, 300, otherY);
+    doc.text(`$${otherExpenses.toFixed(2)}`, 450, otherY);
+    doc.moveDown(2);
+    
+    // TOTAL DEDUCTIONS
+    doc.strokeColor('#000').lineWidth(2).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.8);
+    
+    doc.fontSize(14).font('Helvetica-Bold');
+    const totalY = doc.y;
+    doc.text('Total Tax Deductions', 50, totalY);
+    doc.text(`$${totalDeductions.toFixed(2)}`, 450, totalY);
+    doc.moveDown(3);
+    
+    // --- FOOTER ---
+    doc.fontSize(9).font('Helvetica').fillColor('#666');
+    doc.text('Generated by FlexPilot', { align: 'center' });
+    doc.text(new Date().toLocaleDateString('en-US'), { align: 'center' });
+    doc.moveDown(1);
+    doc.fontSize(8).text(
+      'FlexPilot is not responsible for the accuracy of deductions. We recommend consulting with a tax professional.',
+      { align: 'center', width: 500 }
+    );
+    
+    doc.end();
+    
+    console.log(`✅ Tax report generado para user ${userId}, año ${taxYear}, ${vehicles.length} vehículos`);
+    
+  } catch (error) {
+    console.error('❌ Error generando tax report:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});

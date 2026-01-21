@@ -19,6 +19,7 @@
     "lucide-vue-next": "^0.548.0",
     "luxon": "^3.7.2",
     "multer": "^2.0.2",
+    "pdfkit": "^0.17.2",
     "swiper": "^11.2.10",
     "tesseract.js": "^6.0.1",
     "vue-router": "^4.6.3"
