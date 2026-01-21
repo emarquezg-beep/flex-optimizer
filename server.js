@@ -1,5 +1,6 @@
 // server.js (v3.1 - ETA en Caliente + Segmentos Inversos v1.8)
 
+import PDFDocument from 'pdfkit';
 import { DateTime } from 'luxon';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -3751,7 +3752,7 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
     const totalDeductions = mileageDeduction + otherExpenses;
     
     // 4. Generar PDF
-    const PDFDocument = require('pdfkit');
+    
     const doc = new PDFDocument({ margin: 50 });
     
     res.setHeader('Content-Type', 'application/pdf');
