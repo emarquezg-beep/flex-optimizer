@@ -3151,7 +3151,7 @@ console.log('🔍 Endpoint OCR (Primera Pasada) configurado');
 
 
 // ═══════════════════════════════════════════════════════════════
-// ✏️ ENDPOINT 2: RESOLVER DUDAS (Correcciones → JSON Final)
+// ✏️ ENDPOINT 2: RESOLVER DUDAS (OPTIMIZADO - Micro-llamadas)
 // ═══════════════════════════════════════════════════════════════
 app.post('/api/v1/ocr/amazon-stops/resolve-missing', 
   authenticateUser, 
@@ -3178,119 +3178,118 @@ app.post('/api/v1/ocr/amazon-stops/resolve-missing',
 
       console.log(`📝 ${corrections.length} corrección(es) recibida(s)`);
 
-      // 2. Preparar contexto para Gemini
-      const contextData = {
-        stops: stops,
-        corrections: corrections
-      };
+      // 2. Clonar stops para no mutar el original
+      const finalStops = JSON.parse(JSON.stringify(stops));
 
-      // 3. Preparar modelo con JSON Schema
+      // 3. Si no hay correcciones, devolver stops sin cambios
+      if (corrections.length === 0) {
+        console.log('✅ No hay correcciones, devolviendo JSON original');
+        return res.json({
+          success: true,
+          stops: finalStops
+        });
+      }
+
+      // 4. Preparar modelo con JSON Schema (micro-output)
       const model = genAI.getGenerativeModel({
         model: 'gemini-flash-latest',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                stop_number: { type: 'integer' },
-                street_address: { type: 'string' },
-                apartment: { type: 'string' },
-                city: { type: 'string' },
-                ia_suggestion: { type: 'integer' },
-                confidence: { type: 'number' }
-              },
-              required: ['stop_number', 'street_address', 'apartment', 'city', 'ia_suggestion', 'confidence']
-            }
+            type: 'object',
+            properties: {
+              street_address: { type: 'string' },
+              apartment: { type: 'string' },
+              city: { type: 'string' }
+            },
+            required: ['street_address', 'apartment', 'city']
           }
         }
       });
 
-      // 4. Prompt v3 (Segunda Pasada)
-      const promptV3Corrections = `Eres FlexPilot Core, una IA experta en logística de última milla y normalización de direcciones.
+      // 5. Micro-prompt optimizado (máxima eficiencia)
+      const microPrompt = `Eres un parser de direcciones experto. Extrae los campos de esta dirección.
 
-CONTEXTO:
-- Ya se ejecutó una primera extracción OCR sobre capturas de Amazon Flex.
-- Ahora recibes:
-  - una lista de paradas parcialmente procesadas (con posibles campos incompletos),
-  - y una lista de correcciones textuales proporcionadas por el usuario.
-- Tu tarea es aplicar esas correcciones para generar una versión FINAL y CONSISTENTE de todas las paradas.
+REGLAS:
+1. TODO EN MAYÚSCULAS
+2. "street_address": SOLO número + calle (ej: "111 ALOMA AVE")
+3. "apartment": unidad/apt (APT, UNIT, #, STE, letra sola, número suelto). Si no hay, devuelve ""
+4. "city": nombre de ciudad
+5. Ignora nombres de personas o notas (ej: "JUAN PEREZ MARRERO" no es parte de la dirección)
 
-OBJETIVO:
-- Corregir y completar las paradas usando SOLO la información que realmente tengas:
-  - El JSON parcial de paradas.
-  - Las correcciones textuales del usuario (por ejemplo, direcciones completas copiadas desde la app de Flex).
-- Producir un JSON final listo para uso en producción, manteniendo el mismo contrato de salida.
-- No hacer preguntas ni abrir interacción.
+DIRECCIÓN:`;
 
-REGLAS DE COMPORTAMIENTO:
-1. NO INVENTES DATOS:
-   - Si a pesar de las correcciones algún campo sigue siendo ambiguo, deja lo que tenías y ajusta "confidence" acorde.
-2. MAYÚSCULAS:
-   - Convierte todos los textos de salida ("street_address", "apartment", "city") a MAYÚSCULAS.
-3. LÓGICA DE CAMPO "ia_suggestion":
-   - En esta fase TODO sigue en MODO PASIVO.
-   - "ia_suggestion" debe ser SIEMPRE igual a "stop_number".
-4. PRESERVA LA ESTRUCTURA Y EL ORDEN:
-   - Debes mantener la misma cantidad de paradas.
-   - Los "stop_number" deben seguir siendo los mismos (2, 3, 4, ...) que venían en la entrada.
-5. USO DE CORRECCIONES:
-   - Las correcciones del usuario suelen ser direcciones completas, por ejemplo:
-     "1234 FULL ADDRESS AVE APT 202, KISSIMMEE".
-   - Debes:
-     - actualizar "street_address" usando la parte de calle y número,
-     - extraer "apartment" si ves unidad (APT, UNIT, #, etc.),
-     - actualizar "city" si es visible,
-     - ajustar "confidence" hacia arriba si la información se vuelve clara.
+      // 6. Crear micro-llamadas paralelas
+      console.log('🚀 Procesando correcciones en paralelo...');
+      
+      const parsePromises = corrections.map(async (correction) => {
+        try {
+          const addressText = correction.value || correction.current_value || '';
+          
+          if (!addressText.trim()) {
+            console.warn(`⚠️ Corrección vacía para parada ${correction.stop_number}`);
+            return { 
+              stop_number: correction.stop_number, 
+              success: false,
+              error: 'EMPTY_INPUT'
+            };
+          }
 
-ENTRADA:
-${JSON.stringify(contextData, null, 2)}
+          console.log(`  🔍 Parseando parada ${correction.stop_number}: "${addressText}"`);
 
-SALIDA OBLIGATORIA:
-- Devuelve ÚNICAMENTE un JSON válido con el siguiente contrato (array de objetos).
+          const result = await model.generateContent(`${microPrompt}\n${addressText}`);
+          const response = await result.response;
+          const text = response.text();
 
-DEFINICIÓN DE CAMPOS:
-- "stop_number": entero, igual al original.
-- "street_address": texto de calle + número ya corregido.
-- "apartment": unidad de apartamento si aplica, o "".
-- "city": ciudad inferida a partir de los datos visibles y las correcciones.
-- "ia_suggestion": SIEMPRE igual a "stop_number".
-- "confidence": 0.0 a 1.0 según tu seguridad tras aplicar las correcciones.
+          const parsed = JSON.parse(text);
 
-FORMATO:
-- No incluyas texto, explicación ni comentarios antes o después del JSON.
-- Devuelve solo el array JSON.`;
+          console.log(`  ✅ Parada ${correction.stop_number} parseada`);
 
-      // 5. Llamar a Gemini
-      console.log('🤖 Enviando correcciones a Gemini...');
-      const result = await model.generateContent(promptV3Corrections);
-      const response = await result.response;
-      const text = response.text();
+          return {
+            stop_number: correction.stop_number,
+            success: true,
+            data: parsed
+          };
 
-      console.log('✅ Respuesta de correcciones recibida');
+        } catch (error) {
+          console.error(`  ❌ Error parseando parada ${correction.stop_number}:`, error.message);
+          return {
+            stop_number: correction.stop_number,
+            success: false,
+            error: error.message
+          };
+        }
+      });
 
-      // 6. Parsear JSON
-      let finalStops;
-      try {
-        finalStops = JSON.parse(text);
-      } catch (parseError) {
-        console.error('❌ Error parseando respuesta de correcciones:', text);
-        return res.status(500).json({
-          success: false,
-          error: 'Gemini devolvió una respuesta inválida',
-          raw: text
-        });
-      }
+      // 7. Esperar todas las micro-llamadas
+      const parseResults = await Promise.all(parsePromises);
 
-      // 7. Validar que mantiene la misma cantidad de paradas
-      if (finalStops.length !== stops.length) {
-        console.warn(`⚠️ Advertencia: Cantidad de paradas cambió (${stops.length} → ${finalStops.length})`);
-      }
+      // 8. Aplicar correcciones al JSON original
+      let successCount = 0;
+      let failCount = 0;
 
-      console.log(`✅ ${finalStops.length} paradas finalizadas con correcciones aplicadas`);
+      parseResults.forEach(result => {
+        if (result.success) {
+          const stop = finalStops.find(s => s.stop_number === result.stop_number);
+          
+          if (stop) {
+            stop.street_address = result.data.street_address;
+            stop.apartment = result.data.apartment;
+            stop.city = result.data.city;
+            stop.confidence = 0.98; // Alta confianza tras corrección manual
+            successCount++;
+            
+            console.log(`  ✨ Parada ${result.stop_number} actualizada: ${stop.street_address}`);
+          }
+        } else {
+          failCount++;
+          console.warn(`  ⚠️ Parada ${result.stop_number} no pudo ser corregida`);
+        }
+      });
 
-      // 8. Responder
+      console.log(`✅ ${successCount} corrección(es) aplicada(s), ${failCount} fallida(s)`);
+
+      // 9. Responder (mismo contrato que antes)
       res.json({
         success: true,
         stops: finalStops
@@ -3305,7 +3304,8 @@ FORMATO:
     }
 });
 
-console.log('✏️ Endpoint OCR (Correcciones) configurado');
+console.log('✏️ Endpoint OCR (Correcciones OPTIMIZADO) configurado');
+
 
 
 // --- 🆕 FASE 5: Cleanup Automático ---
