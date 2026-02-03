@@ -1,6 +1,6 @@
 <script setup>
 // ============================================
-// 1. IMPORTS
+// 1. IMPORTS //
 // ============================================
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
