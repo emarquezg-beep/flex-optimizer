@@ -1575,17 +1575,14 @@ async function processImagesWithOCR() {
     const { stops, needs_confirmation } = result;
 
     extractedAddresses.value = stops.map((stop) => ({
-      number: stop.stopnumber,
-      streetaddress: stop.streetaddress ?? '',
-      apartment: stop.apartment ?? null, // 👈 importante: preservar null vs ''
-      city: stop.city ?? '',
-      address: [stop.streetaddress, stop.apartment, stop.city]
+      number: stop.stop_number,
+      address: [stop.street_address, stop.apartment, stop.city]
         .filter(Boolean)
-        .join(' ')
+        .join(" ")
         .trim(),
       isDowntown: false,
-      isApartment: Boolean(stop.apartment && String(stop.apartment).trim() !== ''),
-      iasuggestion: stop.iasuggestion ?? stop.stopnumber,
+      isApartment: stop.apartment && stop.apartment.trim() !== "",
+      ia_suggestion: stop.ia_suggestion,
     }));
 
     console.log(`✅ ${extractedAddresses.value.length} paradas cargadas desde OCR`);
@@ -1697,15 +1694,14 @@ async function submitCorrections() {
     const response = await fetchWithAuth(`${backendUrl}/api/v1/ocr/amazon-stops/resolve-missing`, {
       method: 'POST',
       body: JSON.stringify({
-      stops: extractedAddresses.value.map((s) => ({
-        stopnumber: s.number,
-        streetaddress: s.streetaddress ?? '',
-        apartment: s.apartment ?? null,  // 👈 no lo mates con ''
-        city: s.city ?? '',
-        iasuggestion: s.iasuggestion ?? s.number,
-        confidence: 0.8,
-      })),
-
+        stops: extractedAddresses.value.map(addr => ({
+          stop_number: addr.number,
+          street_address: addr.address.split(' ').slice(0, -1).join(' ') || addr.address,
+          apartment: '',
+          city: addr.address.split(' ').pop() || '',
+          ia_suggestion: addr.ia_suggestion,
+          confidence: 0.8
+        })),
         corrections: corrections
       })
     });
