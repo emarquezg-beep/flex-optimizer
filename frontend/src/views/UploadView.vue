@@ -1668,7 +1668,7 @@ async function processImagesWithOCR() {
 }
 
 // ============================================
-// 🆕 OCR: ENVIAR CORRECCIONES
+// 🆕 OCR: ENVIAR CORRECCIONES //
 // ============================================
 async function submitCorrections() {
   console.log('✏️ Enviando correcciones al backend...');
