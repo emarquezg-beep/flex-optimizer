@@ -1715,26 +1715,18 @@ async function processImagesWithOCR() {
 // ============================================
 
 async function submitCorrections() {
-  console.log('✏️ [DEBUG] Enviando correcciones al backend...');
+  addVisualLog('✏️ Enviando correcciones al backend...');
   isProcessing.value = true;
   
   try {
-    // 1. Construir array de correcciones
-    const corrections = needsConfirmation.value.map(item => {
-      const key = `${item.stop_number}_${item.field}`;
-      const userValue = correctionInputs.value[key];
-      return {
-        stop_number: item.stop_number,
-        field: item.field,
-        value: userValue || item.current_value 
-      };
-    });
+    const corrections = needsConfirmation.value.map(item => ({
+      stop_number: item.stop_number,
+      field: item.field,
+      // Priorizar lo que escribió el usuario, si no, mantener el valor actual
+      value: correctionInputs.value[`${item.stop_number}_${item.field}`] || item.current_value 
+    }));
     
-    console.log('📤 [DEBUG] Payload correcciones:', JSON.stringify(corrections));
-    
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-    
-    // --- PAYLOAD CONSTRUCTION DEBUG ---
+    // Payload original (limpio)
     const stopsPayload = extractedAddresses.value.map(addr => ({
       stop_number: addr.number,
       street_address: addr.address.split(' ').slice(0, -1).join(' ') || addr.address,
@@ -1743,83 +1735,61 @@ async function submitCorrections() {
       ia_suggestion: addr.ia_suggestion,
       confidence: 0.8
     }));
-    // ----------------------------------
 
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    
     const response = await fetchWithAuth(`${backendUrl}/api/v1/ocr/amazon-stops/resolve-missing`, {
       method: 'POST',
-      body: JSON.stringify({
-        stops: stopsPayload,
-        corrections: corrections
-      })
+      body: JSON.stringify({ stops: stopsPayload, corrections: corrections })
     });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Error aplicando correcciones');
-    }
     
     const result = await response.json();
     
-    // 🚨 LOG CRÍTICO DEL BACKEND RESPONSE 🚨
-    console.log('📥 [DEBUG] RESPUESTA BACKEND RECIBIDA');
-    console.log(`   Success: ${result.success}`);
-    console.log(`   Total Stops devueltos: ${result.stops ? result.stops.length : 'UNDEFINED'}`);
-    
-    // Verificar si el backend nos devolvió basura o un array con huecos
-    if (result.stops && result.stops.length > 0) {
-      const nullStops = result.stops.filter(s => !s);
-      if (nullStops.length > 0) {
-        console.error(`❌ [DEBUG] ALERTA: El backend devolvió ${nullStops.length} elementos NULOS en el array stops.`);
-      }
-      
-      // Muestreo del primer elemento devuelto
-      console.log('   Muestra Stop [0] del backend:', JSON.stringify(result.stops[0]));
-    }
-
     if (!result.success) throw new Error(result.error || 'Falló la aplicación de correcciones');
-    
-    // 3. Actualizar extractedAddresses (MOMENTO DE LA VERDAD)
-    console.log('🔄 [DEBUG] Mapeando respuesta a extractedAddresses...');
-    
-    const mappedStops = result.stops.map((stop, i) => {
-      if (!stop) {
-        console.error(`❌ [DEBUG] Stop en índice ${i} es nulo durante el mapeo.`);
-        return null; // Esto generará problemas luego, pero queremos verlo en el log
-      }
 
-      // Reconstrucción explícita con logs si falta algo
-      if (stop.stop_number === undefined) console.warn(`⚠️ [DEBUG] Stop ${i} falta stop_number`);
+    addVisualLog('🔄 Recibiendo datos estructurados del Backend...');
+    
+    // Mapeo DIRECTO del Backend (Sin Regex, Sin inventos)
+    // Solo usamos Boolean() para asegurar que isApartment sea true/false y no ""
+    const mappedStops = result.stops.map(stop => {
       
+      // Reconstruir dirección para visualización
+      const fullAddress = [stop.street_address, stop.apartment, stop.city]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
       return {
         number: stop.stop_number,
-        address: [stop.street_address, stop.apartment, stop.city]
-          .filter(Boolean)
-          .join(' ')
-          .trim(),
+        address: fullAddress,
         isDowntown: false,
-        isApartment: stop.apartment && stop.apartment.trim() !== '',
+        // ✅ LA CLAVE: Confiar en el backend, pero forzar tipo Booleano estricto
+        isApartment: Boolean(stop.apartment && stop.apartment.trim() !== ''),
         ia_suggestion: stop.ia_suggestion
       };
-    }).filter(Boolean); // Filtrar nulos por si acaso
+    });
 
     extractedAddresses.value = mappedStops;
     
-    console.log(`💾 [DEBUG] extractedAddresses actualizado. Longitud: ${extractedAddresses.value.length}`);
+    // Log de verificación para tu tranquilidad
+    const sample = mappedStops.find(s => s.isApartment);
+    if (sample) {
+      addVisualLog(`✅ Backend detectó apto en Stop #${sample.number}`, sample);
+    } else {
+      addVisualLog(`⚠️ Backend no reportó apartamentos en las correcciones.`);
+    }
     
-    // 4. Cerrar modal y continuar
     showCorrectionModal.value = false;
     isProcessing.value = false;
     
-    // 5. Check Downtown
-    console.log('🚀 [DEBUG] Llamando a showDowntownDetection...');
+    // Check Downtown con los datos frescos del backend
     const needsDowntownCheck = showDowntownDetection();
-    
     if (needsDowntownCheck) return;
     
     await proceedWithEvaluation();
     
   } catch (error) {
-    console.error('❌ [DEBUG] Error en submitCorrections:', error);
+    addVisualLog(`❌ Error: ${error.message}`);
     alert(`❌ Error: ${error.message}`);
     isProcessing.value = false;
   }

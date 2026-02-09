@@ -3208,16 +3208,19 @@ app.post('/api/v1/ocr/amazon-stops/resolve-missing',
       });
 
       // 5. Micro-prompt optimizado (máxima eficiencia)
-      const microPrompt = `Eres un parser de direcciones experto. Extrae los campos de esta dirección.
+      const microPrompt = `Eres un parser de direcciones estricto. Tu ÚNICA tarea es separar la dirección en sus componentes.
 
-REGLAS:
-1. TODO EN MAYÚSCULAS
-2. "street_address": SOLO número + calle (ej: "111 ALOMA AVE")
-3. "apartment": unidad/apt (APT, UNIT, #, STE, letra sola, número suelto). Si no hay, devuelve ""
-4. "city": nombre de ciudad
-5. Ignora nombres de personas o notas (ej: "JUAN PEREZ MARRERO" no es parte de la dirección)
+Instrucciones CRÍTICAS para el campo "apartment":
+1. Si el texto contiene indicadores como "APT", "UNIT", "STE", "SUITE", "BLDG", "LOT", "#" o un número/letra suelta al final, DEBES extraerlo al campo "apartment".
+2. BAJO NINGUNA CIRCUNSTANCIA dejes el número de apartamento dentro de "street_address".
+3. Si el usuario escribe "123 Main St Apt 4", la salida OBLIGATORIA es: street="123 MAIN ST", apartment="APT 4".
 
-DIRECCIÓN:`;
+Formato de salida (JSON):
+- "street_address": Solo número y calle (SIN el apartamento).
+- "apartment": El designador y número de unidad. Si no existe, usa null.
+- "city": La ciudad.
+
+Texto a procesar:`;
 
       // 6. Crear micro-llamadas paralelas
       console.log('🚀 Procesando correcciones en paralelo...');
