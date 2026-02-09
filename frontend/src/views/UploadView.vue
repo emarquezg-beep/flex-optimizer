@@ -84,6 +84,18 @@ async function fetchWithRetry(fetchFn, url, options, maxRetries = 2) {
   }
 }
 
+// 1. VARIABLE PARA EL DEBUGGER VISUAL
+const visualLogs = ref([]);
+
+function addVisualLog(msg, data = null) {
+  const time = new Date().toLocaleTimeString();
+  const logLine = { id: Date.now(), time, msg, data: data ? JSON.stringify(data, null, 2) : null };
+  // Agregamos al principio para ver lo más nuevo arriba
+  visualLogs.value.unshift(logLine);
+  // Mantenemos también el console.log por si acaso funciona la Solución 1
+  console.log(msg, data || '');
+}
+
 
 // ============================================
 // 2. VARIABLES Y ESTADO
@@ -832,106 +844,71 @@ function isInOrlando(address) {
 // 🕵️‍♂️ DEBUGGING FORENSE: DETECCIÓN (REEMPLAZAR)
 // ============================================
 
+// 2. MODIFICAMOS LA FUNCIÓN DETECT PARA USAR EL VISUAL LOG
 function detectOrlandoApartments() {
-  console.log("🔍 [DEBUG] INICIO detectOrlandoApartments");
+  addVisualLog("🔍 INICIO detectOrlandoApartments");
   
   if (!extractedAddresses.value) {
-    console.error("❌ [DEBUG] extractedAddresses es NULL o UNDEFINED");
+    addVisualLog("❌ extractedAddresses es NULL");
     return [];
   }
 
-  console.log(`📊 [DEBUG] Analizando ${extractedAddresses.value.length} paradas en memoria.`);
-
-  // Loguear los primeros 3 elementos para ver su estructura real en este momento
-  if (extractedAddresses.value.length > 0) {
-    console.log("🔍 [DEBUG] Estructura de parada #0:", JSON.stringify(extractedAddresses.value[0]));
-  }
+  addVisualLog(`📊 Analizando ${extractedAddresses.value.length} paradas.`);
 
   const result = extractedAddresses.value.filter((stop, index) => {
-    // Protección contra elementos nulos/undefined en el array
-    if (!stop) {
-      console.error(`❌ [DEBUG] Elemento en índice ${index} es UNDEFINED/NULL`);
-      return false;
-    }
-
-    // Verificar propiedades críticas
-    if (stop.address === undefined) {
-      console.warn(`⚠️ [DEBUG] Parada índice ${index} (Stop #${stop.number}) no tiene 'address'`);
-    }
-
     try {
-      // Tu lógica original de filtro, pero protegida
+      if (!stop) return false;
       const isApt = stop.isApartment === true;
-      const inOrlando = stop.address && isInOrlando(stop.address);
+      const inOrlando = stop.address && /\bORLANDO\b/i.test(stop.address);
       
       if (isApt && inOrlando) {
-        // Loguear cada positivo para asegurar que tiene datos sanos
+        // Loguear si encontramos uno
+        addVisualLog(`✅ Encontrado Orlando Apt: Stop #${stop.number}`, stop);
+        
         if (stop.number === undefined) {
-          console.error(`🚨 [DEBUG] ¡ALERTA! Detectado apto sin 'number':`, JSON.stringify(stop));
+          addVisualLog(`🚨 ALERTA: Stop #${index} no tiene 'number'!`, stop);
         }
         return true;
       }
       return false;
     } catch (e) {
-      console.error(`💥 [DEBUG] Error filtrando índice ${index}:`, e);
+      addVisualLog(`💥 Error en filtro índice ${index}: ${e.message}`);
       return false;
     }
   });
 
-  console.log(`✅ [DEBUG] FIN detectOrlandoApartments. Encontrados: ${result.length}`);
   return result;
 }
-
+// 3. MODIFICAMOS SHOW DOWNTOWN
 function showDowntownDetection() {
-  console.log("🔍 [DEBUG] INICIO showDowntownDetection");
+  addVisualLog("🔍 INICIO showDowntownDetection");
   try {
-    // 1. Probar detección
     const apartments = detectOrlandoApartments();
-    
-    // LOG CRÍTICO: Ver qué devolvió exactamente la detección
-    console.log("📦 [DEBUG] Array 'apartments' recibido:", JSON.stringify(apartments));
+    addVisualLog(`📦 Apartments recibidos: ${apartments.length}`, apartments);
 
-    if (apartments.length === 0) {
-      console.log("ℹ️ [DEBUG] 0 apartamentos detectados. Saltando modal.");
-      return false;
-    }
-    
-    // 2. Validar variables reactivas
-    console.log("🔄 [DEBUG] Asignando variables reactivas...");
+    if (apartments.length === 0) return false;
     
     orlandoApartments.value = apartments;
     downtownSelection.value = {};
     
-    // 3. Iteración Forense (Aquí es donde ocurría el crash)
     apartments.forEach((apt, idx) => {
-      // Verificación paranoica antes de tocar la variable
-      if (!apt) {
-        console.error(`❌ [DEBUG] CRASH INMINENTE: Item ${idx} en 'apartments' es nulo.`);
-        return;
-      }
-      
-      if (apt.number === undefined || apt.number === null) {
-        console.error(`❌ [DEBUG] CRASH INMINENTE: Item ${idx} no tiene propiedad 'number'.`, apt);
-        // Fallback para evitar pantalla blanca
-        const fallbackKey = `index_${idx}`;
-        downtownSelection.value[fallbackKey] = false;
+      if (!apt || apt.number === undefined) {
+        addVisualLog(`❌ CRASH EVITADO en item ${idx}`, apt);
       } else {
-        console.log(`✨ [DEBUG] Procesando apto Stop #${apt.number}`);
         downtownSelection.value[apt.number] = false;
       }
     });
     
-    console.log("✅ [DEBUG] Variables asignadas. Abriendo modal.");
+    addVisualLog("✅ Abriendo modal...");
     showDowntownModal.value = true;
     return true;
 
   } catch (error) {
-    console.error("💥 [DEBUG] CRASH FATAL en showDowntownDetection:");
-    console.error(error);
-    alert(`DEBUG ERROR: ${error.message}`);
+    addVisualLog(`💥 CRASH FATAL: ${error.message}`);
     return false;
   }
 }
+
 async function evaluateRoute() {
   // ============================================
   // 🆕 DECISIÓN: ¿OCR o JSON Manual?
@@ -2305,7 +2282,24 @@ async function submitCorrections() {
       </div>
     </div>
 
+
+    <div class="visual-debugger">
+      <div class="debugger-header">
+        <span>👨‍💻 Live Logs</span>
+        <button @click="visualLogs = []">Limpiar</button>
+      </div>
+      <div class="debugger-content">
+        <div v-if="visualLogs.length === 0" class="log-empty">Esperando acción...</div>
+        <div v-for="log in visualLogs" :key="log.id" class="log-entry">
+          <span class="log-time">[{{ log.time }}]</span>
+          <span class="log-msg">{{ log.msg }}</span>
+          <pre v-if="log.data" class="log-data">{{ log.data }}</pre>
+        </div>
+      </div>
+    </div>
   </div>
+
+  
 </template>
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
@@ -5013,5 +5007,49 @@ async function submitCorrections() {
 @keyframes spin{
   to{ transform: rotate(360deg); }
 }
+
+/* ESTILOS DEL DEBUGGER VISUAL */
+.visual-debugger {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 400px;
+  height: 50vh;
+  background-color: rgba(0, 0, 0, 0.9);
+  color: #0f0;
+  font-family: 'Courier New', monospace;
+  z-index: 99999;
+  border-top-left-radius: 10px;
+  border: 2px solid #0f0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -5px -5px 20px rgba(0,0,0,0.5);
+}
+
+.debugger-header {
+  padding: 10px;
+  background: #111;
+  border-bottom: 1px solid #333;
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+}
+
+.debugger-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  font-size: 12px;
+}
+
+.log-entry {
+  margin-bottom: 8px;
+  border-bottom: 1px dashed #333;
+  padding-bottom: 5px;
+}
+
+.log-time { color: #888; margin-right: 5px; }
+.log-msg { color: #fff; font-weight: bold; }
+.log-data { color: #ffff00; margin: 5px 0 0 10px; white-space: pre-wrap; word-break: break-all; }
 
 </style>
