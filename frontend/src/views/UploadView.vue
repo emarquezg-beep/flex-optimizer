@@ -858,25 +858,35 @@ function detectOrlandoApartments() {
   const result = extractedAddresses.value.filter((stop, index) => {
     try {
       if (!stop) return false;
-      const isApt = stop.isApartment === true;
-      const inOrlando = stop.address && /\bORLANDO\b/i.test(stop.address);
+
+      // === DIAGNÓSTICO POR PARADA ===
+      const tieneIsApartment = stop.isApartment === true;
+      const textoAddress = stop.address || "";
+      const tieneOrlando = /\bORLANDO\b/i.test(textoAddress);
+
+      // Si es una parada que "parece" de Orlando pero no pasa el filtro, queremos saber por qué
+      if (tieneOrlando || tieneIsApartment) {
+        addVisualLog(`🧐 Revisando Stop #${stop.number}:`, {
+          address: textoAddress,
+          isApartmentFlag: stop.isApartment,
+          regexOrlando: tieneOrlando,
+          PASA_FILTRO: (tieneIsApartment && tieneOrlando)
+        });
+      }
       
-      if (isApt && inOrlando) {
-        // Loguear si encontramos uno
-        addVisualLog(`✅ Encontrado Orlando Apt: Stop #${stop.number}`, stop);
-        
-        if (stop.number === undefined) {
-          addVisualLog(`🚨 ALERTA: Stop #${index} no tiene 'number'!`, stop);
-        }
+      // La lógica real
+      if (tieneIsApartment && tieneOrlando) {
         return true;
       }
       return false;
+
     } catch (e) {
       addVisualLog(`💥 Error en filtro índice ${index}: ${e.message}`);
       return false;
     }
   });
 
+  addVisualLog(`✅ FIN detectOrlandoApartments. Pasaron: ${result.length}`);
   return result;
 }
 // 3. MODIFICAMOS SHOW DOWNTOWN
