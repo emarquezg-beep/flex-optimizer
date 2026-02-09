@@ -828,54 +828,110 @@ function isInOrlando(address) {
   return /\bORLANDO\b/i.test(address);
 }
 
+// ============================================
+// 🕵️‍♂️ DEBUGGING FORENSE: DETECCIÓN (REEMPLAZAR)
+// ============================================
+
 function detectOrlandoApartments() {
-  console.log("🕵️‍♂️ Ejecutando detectOrlandoApartments...");
-  if (!extractedAddresses.value) throw new Error("extractedAddresses es undefined");
+  console.log("🔍 [DEBUG] INICIO detectOrlandoApartments");
   
-  return extractedAddresses.value.filter((stop, index) => {
-    // Debug por parada para encontrar datos corruptos
+  if (!extractedAddresses.value) {
+    console.error("❌ [DEBUG] extractedAddresses es NULL o UNDEFINED");
+    return [];
+  }
+
+  console.log(`📊 [DEBUG] Analizando ${extractedAddresses.value.length} paradas en memoria.`);
+
+  // Loguear los primeros 3 elementos para ver su estructura real en este momento
+  if (extractedAddresses.value.length > 0) {
+    console.log("🔍 [DEBUG] Estructura de parada #0:", JSON.stringify(extractedAddresses.value[0]));
+  }
+
+  const result = extractedAddresses.value.filter((stop, index) => {
+    // Protección contra elementos nulos/undefined en el array
+    if (!stop) {
+      console.error(`❌ [DEBUG] Elemento en índice ${index} es UNDEFINED/NULL`);
+      return false;
+    }
+
+    // Verificar propiedades críticas
+    if (stop.address === undefined) {
+      console.warn(`⚠️ [DEBUG] Parada índice ${index} (Stop #${stop.number}) no tiene 'address'`);
+    }
+
     try {
-      return stop.address && stop.isApartment && isInOrlando(stop.address);
+      // Tu lógica original de filtro, pero protegida
+      const isApt = stop.isApartment === true;
+      const inOrlando = stop.address && isInOrlando(stop.address);
+      
+      if (isApt && inOrlando) {
+        // Loguear cada positivo para asegurar que tiene datos sanos
+        if (stop.number === undefined) {
+          console.error(`🚨 [DEBUG] ¡ALERTA! Detectado apto sin 'number':`, JSON.stringify(stop));
+        }
+        return true;
+      }
+      return false;
     } catch (e) {
-      console.error(`Error en parada ${index}:`, e);
+      console.error(`💥 [DEBUG] Error filtrando índice ${index}:`, e);
       return false;
     }
   });
+
+  console.log(`✅ [DEBUG] FIN detectOrlandoApartments. Encontrados: ${result.length}`);
+  return result;
 }
 
 function showDowntownDetection() {
-  console.log("🕵️‍♂️ Ejecutando showDowntownDetection...");
+  console.log("🔍 [DEBUG] INICIO showDowntownDetection");
   try {
     // 1. Probar detección
     const apartments = detectOrlandoApartments();
-    console.log(`🏢 Apartamentos detectados: ${apartments.length}`);
+    
+    // LOG CRÍTICO: Ver qué devolvió exactamente la detección
+    console.log("📦 [DEBUG] Array 'apartments' recibido:", JSON.stringify(apartments));
 
     if (apartments.length === 0) {
-      return false; // Todo limpio
+      console.log("ℹ️ [DEBUG] 0 apartamentos detectados. Saltando modal.");
+      return false;
     }
     
-    // 2. Probar asignación de variables reactivas (Posible punto de falla)
-    if (!orlandoApartments) throw new Error("Variable 'orlandoApartments' no existe");
-    if (!downtownSelection) throw new Error("Variable 'downtownSelection' no existe");
-    if (!showDowntownModal) throw new Error("Variable 'showDowntownModal' no existe");
-
+    // 2. Validar variables reactivas
+    console.log("🔄 [DEBUG] Asignando variables reactivas...");
+    
     orlandoApartments.value = apartments;
     downtownSelection.value = {};
-    apartments.forEach(apt => {
-      downtownSelection.value[apt.number] = false;
+    
+    // 3. Iteración Forense (Aquí es donde ocurría el crash)
+    apartments.forEach((apt, idx) => {
+      // Verificación paranoica antes de tocar la variable
+      if (!apt) {
+        console.error(`❌ [DEBUG] CRASH INMINENTE: Item ${idx} en 'apartments' es nulo.`);
+        return;
+      }
+      
+      if (apt.number === undefined || apt.number === null) {
+        console.error(`❌ [DEBUG] CRASH INMINENTE: Item ${idx} no tiene propiedad 'number'.`, apt);
+        // Fallback para evitar pantalla blanca
+        const fallbackKey = `index_${idx}`;
+        downtownSelection.value[fallbackKey] = false;
+      } else {
+        console.log(`✨ [DEBUG] Procesando apto Stop #${apt.number}`);
+        downtownSelection.value[apt.number] = false;
+      }
     });
     
+    console.log("✅ [DEBUG] Variables asignadas. Abriendo modal.");
     showDowntownModal.value = true;
-    return true; // Se requiere modal
+    return true;
 
   } catch (error) {
-    // 🚨 AQUÍ CAPTURAMOS EL ERROR SILENCIOSO
-    alert(`💥 CRASH EN DETECCIÓN: ${error.message}`);
-    console.error("Crash Detection:", error);
-    return false; // Asumimos que no hay downtown para no bloquear
+    console.error("💥 [DEBUG] CRASH FATAL en showDowntownDetection:");
+    console.error(error);
+    alert(`DEBUG ERROR: ${error.message}`);
+    return false;
   }
 }
-
 async function evaluateRoute() {
   // ============================================
   // 🆕 DECISIÓN: ¿OCR o JSON Manual?
@@ -1668,10 +1724,11 @@ async function processImagesWithOCR() {
 }
 
 // ============================================
-// 🆕 OCR: ENVIAR CORRECCIONES //
+// ✏️ DEBUGGING FORENSE: SUBMIT CORRECTIONS (REEMPLAZAR)
 // ============================================
+
 async function submitCorrections() {
-  console.log('✏️ Enviando correcciones al backend...');
+  console.log('✏️ [DEBUG] Enviando correcciones al backend...');
   isProcessing.value = true;
   
   try {
@@ -1679,29 +1736,32 @@ async function submitCorrections() {
     const corrections = needsConfirmation.value.map(item => {
       const key = `${item.stop_number}_${item.field}`;
       const userValue = correctionInputs.value[key];
-      
       return {
         stop_number: item.stop_number,
         field: item.field,
-        value: userValue || item.current_value // Si usuario no puso nada, usar el valor actual
+        value: userValue || item.current_value 
       };
     });
     
-    console.log('📝 Correcciones:', corrections);
+    console.log('📤 [DEBUG] Payload correcciones:', JSON.stringify(corrections));
     
-    // 2. Llamar al endpoint de correcciones
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    
+    // --- PAYLOAD CONSTRUCTION DEBUG ---
+    const stopsPayload = extractedAddresses.value.map(addr => ({
+      stop_number: addr.number,
+      street_address: addr.address.split(' ').slice(0, -1).join(' ') || addr.address,
+      apartment: '',
+      city: addr.address.split(' ').pop() || '',
+      ia_suggestion: addr.ia_suggestion,
+      confidence: 0.8
+    }));
+    // ----------------------------------
+
     const response = await fetchWithAuth(`${backendUrl}/api/v1/ocr/amazon-stops/resolve-missing`, {
       method: 'POST',
       body: JSON.stringify({
-        stops: extractedAddresses.value.map(addr => ({
-          stop_number: addr.number,
-          street_address: addr.address.split(' ').slice(0, -1).join(' ') || addr.address,
-          apartment: '',
-          city: addr.address.split(' ').pop() || '',
-          ia_suggestion: addr.ia_suggestion,
-          confidence: 0.8
-        })),
+        stops: stopsPayload,
         corrections: corrections
       })
     });
@@ -1712,41 +1772,67 @@ async function submitCorrections() {
     }
     
     const result = await response.json();
-    console.log('✅ Correcciones aplicadas:', result);
     
-    if (!result.success) {
-      throw new Error(result.error || 'Falló la aplicación de correcciones');
+    // 🚨 LOG CRÍTICO DEL BACKEND RESPONSE 🚨
+    console.log('📥 [DEBUG] RESPUESTA BACKEND RECIBIDA');
+    console.log(`   Success: ${result.success}`);
+    console.log(`   Total Stops devueltos: ${result.stops ? result.stops.length : 'UNDEFINED'}`);
+    
+    // Verificar si el backend nos devolvió basura o un array con huecos
+    if (result.stops && result.stops.length > 0) {
+      const nullStops = result.stops.filter(s => !s);
+      if (nullStops.length > 0) {
+        console.error(`❌ [DEBUG] ALERTA: El backend devolvió ${nullStops.length} elementos NULOS en el array stops.`);
+      }
+      
+      // Muestreo del primer elemento devuelto
+      console.log('   Muestra Stop [0] del backend:', JSON.stringify(result.stops[0]));
     }
+
+    if (!result.success) throw new Error(result.error || 'Falló la aplicación de correcciones');
     
-    // 3. Actualizar extractedAddresses con el JSON corregido
-    extractedAddresses.value = result.stops.map(stop => ({
-      number: stop.stop_number,
-      address: [stop.street_address, stop.apartment, stop.city]
-        .filter(Boolean)
-        .join(' ')
-        .trim(),
-      isDowntown: false,
-      isApartment: stop.apartment && stop.apartment.trim() !== '',
-      ia_suggestion: stop.ia_suggestion
-    }));
+    // 3. Actualizar extractedAddresses (MOMENTO DE LA VERDAD)
+    console.log('🔄 [DEBUG] Mapeando respuesta a extractedAddresses...');
     
-    console.log('✅ Direcciones actualizadas con correcciones');
+    const mappedStops = result.stops.map((stop, i) => {
+      if (!stop) {
+        console.error(`❌ [DEBUG] Stop en índice ${i} es nulo durante el mapeo.`);
+        return null; // Esto generará problemas luego, pero queremos verlo en el log
+      }
+
+      // Reconstrucción explícita con logs si falta algo
+      if (stop.stop_number === undefined) console.warn(`⚠️ [DEBUG] Stop ${i} falta stop_number`);
+      
+      return {
+        number: stop.stop_number,
+        address: [stop.street_address, stop.apartment, stop.city]
+          .filter(Boolean)
+          .join(' ')
+          .trim(),
+        isDowntown: false,
+        isApartment: stop.apartment && stop.apartment.trim() !== '',
+        ia_suggestion: stop.ia_suggestion
+      };
+    }).filter(Boolean); // Filtrar nulos por si acaso
+
+    extractedAddresses.value = mappedStops;
     
-    // 4. Cerrar modal
+    console.log(`💾 [DEBUG] extractedAddresses actualizado. Longitud: ${extractedAddresses.value.length}`);
+    
+    // 4. Cerrar modal y continuar
     showCorrectionModal.value = false;
     isProcessing.value = false;
     
-    // 5. Continuar con flujo normal (downtown check)
+    // 5. Check Downtown
+    console.log('🚀 [DEBUG] Llamando a showDowntownDetection...');
     const needsDowntownCheck = showDowntownDetection();
-    if (needsDowntownCheck) {
-      return;
-    }
     
-    // Si no hay downtown, proceder con evaluación
+    if (needsDowntownCheck) return;
+    
     await proceedWithEvaluation();
     
   } catch (error) {
-    console.error('❌ Error aplicando correcciones:', error);
+    console.error('❌ [DEBUG] Error en submitCorrections:', error);
     alert(`❌ Error: ${error.message}`);
     isProcessing.value = false;
   }
