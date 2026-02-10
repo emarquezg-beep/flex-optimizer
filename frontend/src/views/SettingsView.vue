@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useVehicles } from '@/composables/useVehicles'
-import { LogOut, User, Mail, Car, Plus, Edit2, Archive, Star, RotateCcw } from 'lucide-vue-next'
+import { LogOut, User, Mail, Car, Plus, Edit2, Archive, Star, RotateCcw, ChevronRight } from 'lucide-vue-next'
 import VehicleModal from '@/components/VehicleModal.vue'
 
 const router = useRouter()
@@ -115,166 +115,133 @@ function formatMileage(mileage) {
 <template>
   <div class="view-container">
     <div class="settings-header">
-      <h1 class="settings-title">⚙️ Configuración</h1>
-      <p class="settings-subtitle">Gestiona tu cuenta y preferencias</p>
+      <h1 class="settings-title">Configuración</h1>
+      <p class="settings-subtitle">Perfil y Preferencias</p>
     </div>
 
-    <!-- ==================== SECCIÓN: INFORMACIÓN DE USUARIO ==================== -->
-    <div class="settings-section">
-      <h2 class="section-title">👤 Información de Usuario</h2>
+    <div class="settings-grid">
       
-      <div class="user-info-card">
-        <div class="info-row">
-          <User :size="20" class="info-icon" />
-          <div class="info-content">
-            <span class="info-label">Nombre</span>
-            <span class="info-value">{{ userName }}</span>
+      <div class="settings-col">
+        <section class="settings-card profile-card">
+          <div class="card-header">
+            <h2 class="card-title">Perfil de Piloto</h2>
           </div>
-        </div>
-        
-        <div class="info-row">
-          <Mail :size="20" class="info-icon" />
-          <div class="info-content">
-            <span class="info-label">Email</span>
-            <span class="info-value">{{ user?.email }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== SECCIÓN: MIS VEHÍCULOS ==================== -->
-    <div class="settings-section">
-      <div class="section-header">
-        <h2 class="section-title">🚗 Mis Vehículos</h2>
-        <button @click="openCreateVehicleModal" class="btn-add-vehicle">
-          <Plus :size="18" />
-          Agregar
-        </button>
-      </div>
-
-      <!-- Loading -->
-      <div v-if="isLoadingVehicles" class="loading-state">
-        <p>Cargando vehículos...</p>
-      </div>
-
-      <!-- Lista de vehículos -->
-      <div v-else-if="vehicles.length > 0" class="vehicles-grid">
-        <div 
-          v-for="vehicle in vehicles" 
-          :key="vehicle.id"
-          class="vehicle-card"
-          :class="{ 'is-archived': vehicle.is_archived }"
-        >
-          <!-- Header del card -->
-          <div class="vehicle-header">
-            <div class="vehicle-title-group">
-              <Car :size="20" class="vehicle-icon" />
-              <h3 class="vehicle-nickname">{{ vehicle.nickname }}</h3>
+          
+          <div class="profile-content">
+            <div class="profile-avatar">
+              <span class="avatar-initials">{{ userName.charAt(0) }}</span>
             </div>
             
-            <!-- Badges -->
-            <div class="vehicle-badges">
-              <span v-if="vehicle.is_primary && !vehicle.is_archived" class="badge badge-primary">
-                <Star :size="14" />
-                Principal
-              </span>
-              <span v-if="vehicle.is_archived" class="badge badge-archived">
-                <Archive :size="14" />
-                Archivado
-              </span>
+            <div class="profile-details">
+              <div class="detail-group">
+                <label>Nombre</label>
+                <div class="value-row">
+                  <User :size="16" class="icon-muted" />
+                  <span>{{ userName }}</span>
+                </div>
+              </div>
+              
+              <div class="detail-divider"></div>
+              
+              <div class="detail-group">
+                <label>Email</label>
+                <div class="value-row">
+                  <Mail :size="16" class="icon-muted" />
+                  <span class="text-truncate">{{ user?.email }}</span>
+                </div>
+              </div>
             </div>
           </div>
-
-          <!-- Info del vehículo -->
-          <div class="vehicle-info">
-            <div v-if="vehicle.make || vehicle.model" class="vehicle-detail">
-              <span class="detail-label">Vehículo:</span>
-              <span class="detail-value">
-                {{ vehicle.make }} {{ vehicle.model }}
-                <span v-if="vehicle.year" class="year-badge">{{ vehicle.year }}</span>
-              </span>
-            </div>
-            
-            <div class="vehicle-detail">
-              <span class="detail-label">Millaje acumulado:</span>
-              <span class="detail-value">{{ formatMileage(vehicle.total_mileage) }} mi</span>
-            </div>
-          </div>
-
-          <!-- Acciones -->
-          <div class="vehicle-actions">
-            <button 
-              v-if="!vehicle.is_archived"
-              @click="openEditVehicleModal(vehicle)"
-              class="btn-action btn-edit"
-              title="Editar"
-            >
-              <Edit2 :size="16" />
-            </button>
-
-            <button 
-              v-if="!vehicle.is_primary && !vehicle.is_archived"
-              @click="handleSetPrimary(vehicle.id)"
-              class="btn-action btn-primary-set"
-              title="Marcar como principal"
-            >
-              <Star :size="16" />
-            </button>
-
-            <button 
-              v-if="!vehicle.is_archived"
-              @click="handleArchiveVehicle(vehicle.id)"
-              class="btn-action btn-archive"
-              title="Archivar"
-            >
-              <Archive :size="16" />
-            </button>
-
-            <button 
-              v-if="vehicle.is_archived"
-              @click="handleUnarchiveVehicle(vehicle.id)"
-              class="btn-action btn-unarchive"
-              title="Restaurar"
-            >
-              <RotateCcw :size="16" />
+          
+          <div class="card-footer">
+            <button @click="handleLogout" class="btn-logout" :disabled="isLoggingOut">
+              <LogOut :size="18" />
+              <span>{{ isLoggingOut ? 'Cerrando...' : 'Cerrar Sesión' }}</span>
             </button>
           </div>
-        </div>
+        </section>
+
+        <section class="settings-card coming-soon-card">
+          <div class="card-header">
+            <h2 class="card-title">Preferencias</h2>
+            <span class="badge-soon">Pronto</span>
+          </div>
+          <p class="text-muted text-sm">Más opciones de personalización de ruta y notificaciones en camino.</p>
+        </section>
       </div>
 
-      <!-- Estado vacío -->
-      <div v-else class="empty-state">
-        <Car :size="48" class="empty-icon" />
-        <p class="empty-title">No tienes vehículos registrados</p>
-        <p class="empty-subtitle">Agrega tu primer vehículo para comenzar a trackear tus rutas</p>
-        <button @click="openCreateVehicleModal" class="btn-add-first">
-          <Plus :size="18" />
-          Agregar mi primer vehículo
-        </button>
+      <div class="settings-col">
+        <section class="settings-card vehicles-section">
+          <div class="card-header flex-between">
+            <h2 class="card-title">Flota de Vehículos</h2>
+            <button @click="openCreateVehicleModal" class="btn-icon-primary" title="Agregar Vehículo">
+              <Plus :size="20" />
+            </button>
+          </div>
+
+          <div v-if="isLoadingVehicles" class="loading-container">
+            <div class="spinner"></div>
+          </div>
+
+          <div v-else-if="vehicles.length > 0" class="vehicles-list">
+            <div 
+              v-for="vehicle in vehicles" 
+              :key="vehicle.id"
+              class="vehicle-item"
+              :class="{ 'is-primary': vehicle.is_primary, 'is-archived': vehicle.is_archived }"
+            >
+              <div class="vehicle-main">
+                <div class="vehicle-icon-box">
+                  <Car :size="24" />
+                </div>
+                
+                <div class="vehicle-info">
+                  <div class="vehicle-name-row">
+                    <h3 class="vehicle-name">{{ vehicle.nickname }}</h3>
+                    <span v-if="vehicle.is_primary" class="badge-primary">Principal</span>
+                    <span v-if="vehicle.is_archived" class="badge-archived">Archivado</span>
+                  </div>
+                  <p class="vehicle-specs">
+                    {{ vehicle.make }} {{ vehicle.model }} <span v-if="vehicle.year">• {{ vehicle.year }}</span>
+                  </p>
+                  <div class="vehicle-mileage">
+                    <span class="mileage-val">{{ formatMileage(vehicle.total_mileage) }}</span> 
+                    <span class="mileage-unit">mi</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="vehicle-actions">
+                <button v-if="!vehicle.is_archived" @click="openEditVehicleModal(vehicle)" class="action-btn" title="Editar">
+                  <Edit2 :size="16" />
+                </button>
+                
+                <button v-if="!vehicle.is_primary && !vehicle.is_archived" @click="handleSetPrimary(vehicle.id)" class="action-btn" title="Hacer Principal">
+                  <Star :size="16" />
+                </button>
+                
+                <button v-if="!vehicle.is_archived" @click="handleArchiveVehicle(vehicle.id)" class="action-btn btn-danger" title="Archivar">
+                  <Archive :size="16" />
+                </button>
+                
+                <button v-if="vehicle.is_archived" @click="handleUnarchiveVehicle(vehicle.id)" class="action-btn btn-success" title="Restaurar">
+                  <RotateCcw :size="16" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="empty-vehicles">
+            <div class="empty-icon-box">
+              <Car :size="32" />
+            </div>
+            <p>No hay vehículos registrados.</p>
+            <button @click="openCreateVehicleModal" class="btn-text-primary">Registrar ahora</button>
+          </div>
+        </section>
       </div>
     </div>
 
-    <!-- ==================== SECCIÓN: SESIÓN ==================== -->
-    <div class="settings-section">
-      <h2 class="section-title">🚪 Sesión</h2>
-      
-      <button 
-        @click="handleLogout" 
-        class="logout-button"
-        :disabled="isLoggingOut"
-      >
-        <LogOut :size="20" />
-        {{ isLoggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión' }}
-      </button>
-    </div>
-
-    <div class="settings-section">
-      <p class="coming-soon">
-        🚧 Más opciones de configuración próximamente...
-      </p>
-    </div>
-
-    <!-- ==================== MODAL DE VEHÍCULO ==================== -->
     <VehicleModal 
       :show="showVehicleModal"
       :vehicle="editingVehicle"
@@ -285,398 +252,396 @@ function formatMileage(mileage) {
 </template>
 
 <style scoped>
-.view-container {
-  padding: var(--space-6) var(--space-4);
-  max-width: 900px;
-  margin: 0 auto;
+/* ============================================
+   VARIABLES & THEME
+   ============================================ */
+:root {
+  --bg-main: #0f172a;
+  --bg-card: #1e293b;
+  --bg-hover: #334155;
+  --border-color: #334155;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --accent-orange: #f97316;
+  --accent-blue: #3b82f6;
+  --danger: #ef4444;
+  --success: #10b981;
 }
 
+.view-container {
+  padding: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+  font-family: 'Inter', sans-serif;
+  color: var(--text-main);
+  padding-bottom: 100px; /* Espacio para navbar móvil */
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
 .settings-header {
-  margin-bottom: var(--space-8);
+  margin-bottom: 30px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 20px;
 }
 
 .settings-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-2) 0;
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 0;
+  background: linear-gradient(90deg, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -1px;
 }
 
 .settings-subtitle {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  margin: 0;
+  color: var(--text-muted);
+  margin: 5px 0 0 0;
+  font-size: 1rem;
 }
 
-.settings-section {
-  margin-bottom: var(--space-8);
-}
-
-.section-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-4) 0;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-4);
-}
-
-/* ==================== USER INFO CARD ==================== */
-.user-info-card {
-  background-color: var(--bg-elevated);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  border: 1px solid var(--border-primary);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.info-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.info-icon {
-  color: var(--brand-primary);
-  flex-shrink: 0;
-}
-
-.info-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  flex: 1;
-}
-
-.info-label {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  font-weight: var(--font-medium);
-}
-
-.info-value {
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  font-weight: var(--font-semibold);
-}
-
-/* ==================== VEHICLES SECTION ==================== */
-.btn-add-vehicle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: white;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
-  border: none;
-  border-radius: var(--radius-base);
-  cursor: pointer;
-  transition: all 0.2s var(--ease-out);
-}
-
-.btn-add-vehicle:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.loading-state {
-  text-align: center;
-  padding: var(--space-8);
-  color: var(--text-secondary);
-}
-
-.vehicles-grid {
+/* ============================================
+   GRID LAYOUT
+   ============================================ */
+.settings-grid {
   display: grid;
-  gap: var(--space-4);
+  grid-template-columns: 1fr 1.5fr; /* Perfil ocupa menos, Vehículos más */
+  gap: 24px;
 }
 
-.vehicle-card {
-  background-color: var(--bg-elevated);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  transition: all 0.2s var(--ease-out);
+@media (max-width: 768px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.vehicle-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+.settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.vehicle-card.is-archived {
-  opacity: 0.6;
-  border-style: dashed;
+/* ============================================
+   CARDS GENERAL
+   ============================================ */
+.settings-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.vehicle-header {
+.card-header {
+  padding: 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-3);
 }
 
-.vehicle-title-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
+.flex-between { justify-content: space-between; }
 
-.vehicle-icon {
-  color: var(--brand-primary);
-}
-
-.vehicle-nickname {
-  font-size: var(--text-lg);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
+.card-title {
+  font-size: 1.1rem;
+  font-weight: 700;
   margin: 0;
+  color: white;
 }
 
-.vehicle-badges {
+/* ============================================
+   PROFILE CARD
+   ============================================ */
+.profile-content {
+  padding: 30px 20px;
   display: flex;
-  gap: var(--space-2);
-}
-
-.badge {
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-full);
+  gap: 20px;
 }
 
+.profile-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-blue), #60a5fa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+  border: 4px solid rgba(255,255,255,0.1);
+}
+
+.avatar-initials {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: white;
+}
+
+.profile-details {
+  width: 100%;
+}
+
+.detail-group {
+  margin-bottom: 5px;
+}
+
+.detail-group label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.value-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.05);
+  font-size: 0.95rem;
+}
+
+.icon-muted { color: var(--text-muted); }
+.text-truncate { 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+}
+
+.detail-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 15px 0;
+}
+
+.card-footer {
+  padding: 20px;
+  background: rgba(0,0,0,0.2);
+  border-top: 1px solid var(--border-color);
+}
+
+.btn-logout {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--danger);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-logout:hover:not(:disabled) {
+  background: var(--danger);
+  color: white;
+}
+
+.btn-logout:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ============================================
+   VEHICLES SECTION
+   ============================================ */
+.btn-icon-primary {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--accent-orange);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(249, 115, 22, 0.3);
+  transition: transform 0.2s;
+}
+
+.btn-icon-primary:hover { transform: scale(1.05); }
+
+.vehicles-list {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 15px;
+}
+
+.vehicle-item {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.vehicle-item:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1);
+}
+
+.vehicle-item.is-primary {
+  border: 1px solid rgba(249, 115, 22, 0.5);
+  background: linear-gradient(90deg, rgba(249, 115, 22, 0.05), transparent);
+}
+
+.vehicle-item.is-archived {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+.vehicle-main {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.vehicle-icon-box {
+  width: 48px;
+  height: 48px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.is-primary .vehicle-icon-box {
+  background: rgba(249, 115, 22, 0.2);
+  color: var(--accent-orange);
+}
+
+.vehicle-name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+}
+
+.vehicle-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vehicle-specs {
+  margin: 2px 0 4px 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.vehicle-mileage {
+  font-size: 0.8rem;
+  background: rgba(0,0,0,0.3);
+  padding: 2px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.mileage-val { font-family: monospace; color: var(--accent-blue); }
+.mileage-unit { color: var(--text-muted); margin-left: 2px; }
+
+/* Badges */
 .badge-primary {
-  background-color: #fef3c7;
-  color: #92400e;
+  background: var(--accent-orange);
+  color: white;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .badge-archived {
-  background-color: var(--bg-tertiary);
-  color: var(--text-secondary);
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
-.vehicle-info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-  padding: var(--space-3);
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-base);
-}
-
-.vehicle-detail {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--text-sm);
-}
-
-.detail-label {
-  color: var(--text-secondary);
-  font-weight: var(--font-medium);
-}
-
-.detail-value {
-  color: var(--text-primary);
-  font-weight: var(--font-semibold);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.year-badge {
-  padding: 2px var(--space-2);
-  background-color: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
+/* Acciones */
 .vehicle-actions {
   display: flex;
-  gap: var(--space-2);
-  justify-content: flex-end;
+  gap: 8px;
 }
 
-.btn-action {
+.action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: var(--radius-base);
   cursor: pointer;
-  transition: all 0.2s var(--ease-out);
+  transition: all 0.2s;
 }
 
-.btn-edit {
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.btn-edit:hover {
-  background-color: var(--brand-primary);
+.action-btn:hover {
+  background: var(--bg-hover);
   color: white;
+  border-color: var(--text-muted);
 }
 
-.btn-primary-set {
-  background-color: #fef3c7;
-  color: #92400e;
-}
+.btn-danger:hover { background: rgba(239, 68, 68, 0.2); border-color: var(--danger); color: var(--danger); }
+.btn-success:hover { background: rgba(16, 185, 129, 0.2); border-color: var(--success); color: var(--success); }
 
-.btn-primary-set:hover {
-  background-color: #fde047;
-}
-
-.btn-archive {
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.btn-archive:hover {
-  background-color: var(--error-bg);
-  color: var(--error);
-}
-
-.btn-unarchive {
-  background-color: var(--success-bg);
-  color: var(--success);
-}
-
-.btn-unarchive:hover {
-  background-color: var(--success);
-  color: white;
-}
-
-/* ==================== EMPTY STATE ==================== */
-.empty-state {
+/* Empty State */
+.empty-vehicles {
   text-align: center;
-  padding: var(--space-8) var(--space-4);
+  padding: 40px 20px;
 }
-
-.empty-icon {
-  color: var(--text-tertiary);
-  margin-bottom: var(--space-4);
+.empty-icon-box {
+  margin-bottom: 10px;
+  color: var(--text-muted);
 }
-
-.empty-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-2) 0;
-}
-
-.empty-subtitle {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  margin: 0 0 var(--space-4) 0;
-}
-
-.btn-add-first {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-6);
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: white;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
-  border: none;
-  border-radius: var(--radius-base);
+.btn-text-primary {
+  background: none; border: none;
+  color: var(--accent-orange);
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s var(--ease-out);
 }
 
-.btn-add-first:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-/* ==================== LOGOUT ==================== */
-.logout-button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: white;
-  background-color: var(--error);
-  border: none;
-  border-radius: var(--radius-base);
-  cursor: pointer;
-  transition: all 0.2s var(--ease-out);
-}
-
-.logout-button:hover {
-  background-color: #dc2626;
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.logout-button:active {
-  transform: translateY(0);
-}
-
-.logout-button:disabled {
+/* ============================================
+   COMING SOON
+   ============================================ */
+.coming-soon-card {
+  border-style: dashed;
   opacity: 0.7;
-  cursor: not-allowed;
-  transform: none;
 }
-
-.coming-soon {
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-style: italic;
-  padding: var(--space-4);
-  background-color: var(--bg-elevated);
-  border-radius: var(--radius-base);
-  border: 1px dashed var(--border-secondary);
+.badge-soon {
+  background: rgba(255,255,255,0.1);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
-
-/* ==================== RESPONSIVE ==================== */
-@media (max-width: 768px) {
-  .view-container {
-    padding: var(--space-4) var(--space-3);
-  }
-
-  .settings-title {
-    font-size: var(--text-2xl);
-  }
-
-  .section-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-3);
-  }
-
-  .btn-add-vehicle {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .vehicle-detail {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-1);
-  }
+.loading-container {
+  padding: 40px; display: flex; justify-content: center;
 }
+.spinner {
+  width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent-orange); border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
