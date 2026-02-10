@@ -47,37 +47,41 @@ const app = express();
 const PORT = 3000;
 
 // Tu configuración de CORS (sin cambios)
-// forzando commit
+
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://flex-optimizer.vercel.app',
-  'https://flex-optimizer-git-feature-sl-7cb1e8-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-feature-ai-ad3680-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-feature-oc-8d3859-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-3hdfbclh5-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-feat-route-fc6403-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-feat-ux-oc-54c0e5-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-git-ui-audible-theme-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-bbd5qtp14-ernestos-projects-d9e7c95d.vercel.app',
-  'https://flex-optimizer-3rxo0eaxl-ernestos-projects-d9e7c95d.vercel.app',
+  'https://flex-optimizer.vercel.app', // Tu URL de producción (fija)
 ];
 const corsOptions = {
   origin: function (origin, callback) {
     console.log("--- INICIO DEPURACIÓN CORS ---");
     console.log("Origen (Navegador):", origin);
     
-    let originToTest = origin;
-    if (originToTest && originToTest.endsWith('/')) {
-      originToTest = originToTest.slice(0, -1);
+    // Permitir requests sin origen (como Postman, Apps móviles o scripts server-to-server)
+    if (!origin) {
+      console.log("RESULTADO: Permitido (Sin origen)");
+      return callback(null, true);
     }
 
-    if (allowedOrigins.indexOf(originToTest) !== -1 || !origin) {
-      console.log("RESULTADO: Permitido");
-      callback(null, true);
-    } else {
-      console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
-      callback(new Error('No permitido por CORS'));
+    // 1. Chequeo exacto (localhost y producción)
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log("RESULTADO: Permitido (Lista blanca exacta)");
+      return callback(null, true);
     }
+
+    // 2. 🆕 Chequeo Dinámico para Vercel Previews (Regex)
+    // Esto permite cualquier URL que empiece con "https://flex-optimizer" y termine en ".vercel.app"
+    // Cubre: flex-optimizer-git-ui-audible-theme-ernestos-projects.vercel.app
+    // Cubre: flex-optimizer-cualquier-cosa.vercel.app
+    const vercelPreviewPattern = /^https:\/\/flex-optimizer.*\.vercel\.app$/;
+
+    if (vercelPreviewPattern.test(origin)) {
+      console.log("RESULTADO: Permitido (Vercel Preview Dinámico)");
+      return callback(null, true);
+    }
+
+    console.error('❌ CORS RECHAZADO: Origen no permitido ->', origin);
+    callback(new Error('No permitido por CORS'));
   },
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
