@@ -406,7 +406,7 @@ function closeProfileModal() {
       <div class="hero-content">
         
         <div class="hero-brand">
-          <img src="@/assets/brand-logo.png" alt="FiveThirtyAI" class="brand-logo-img" />
+          <img src="@/assets/logo.png" alt="FiveThirtyAI" class="brand-logo-img" />
         </div>
 
         <div class="hero-info-row">
