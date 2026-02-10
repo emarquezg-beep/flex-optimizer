@@ -3200,7 +3200,7 @@ Analiza esta dirección para la parada`;
           const finalPrompt = `${microPrompt.replace('#STOP_NUMBER', stopNum)} #${stopNum}: "${addressText}"`;
 
           // CAMBIO CLAVE: Quitamos generationConfig para evitar el error 404
-          const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+          const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
           const result = await model.generateContent(finalPrompt);
           const response = await result.response;
