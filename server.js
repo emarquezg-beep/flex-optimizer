@@ -3199,8 +3199,8 @@ Analiza esta dirección para la parada`;
           // Inyectamos el ID de la parada en el prompt
           const finalPrompt = `${microPrompt.replace('#STOP_NUMBER', stopNum)} #${stopNum}: "${addressText}"`;
 
-          // CAMBIO CLAVE: Quitamos generationConfig para evitar el error 404
-          const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+         // ✅ Usamos el modelo ESTABLE actual según tu documentación:
+         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
           const result = await model.generateContent(finalPrompt);
           const response = await result.response;
