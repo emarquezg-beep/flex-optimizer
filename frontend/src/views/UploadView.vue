@@ -1714,27 +1714,45 @@ async function processImagesWithOCR() {
 // ✏️ DEBUGGING FORENSE: SUBMIT CORRECTIONS (REEMPLAZAR)
 // ============================================
 
+// ============================================
+// ✏️ SUBMIT CORRECTIONS (EL MENSAJERO INTELIGENTE)
+// ============================================
+
 async function submitCorrections() {
-  addVisualLog('✏️ Enviando correcciones al backend...');
+  addVisualLog('✏️ Preparando envío al backend...');
   isProcessing.value = true;
   
   try {
+    // 1. CORRECCIONES: Texto CRUDO (Lo que el usuario escribió)
+    // El backend se encargará de parsear esto con Gemini.
     const corrections = needsConfirmation.value.map(item => ({
       stop_number: item.stop_number,
       field: item.field,
-      // Priorizar lo que escribió el usuario, si no, mantener el valor actual
       value: correctionInputs.value[`${item.stop_number}_${item.field}`] || item.current_value 
     }));
     
-    // Payload original (limpio)
-    const stopsPayload = extractedAddresses.value.map(addr => ({
-      stop_number: addr.number,
-      street_address: addr.address.split(' ').slice(0, -1).join(' ') || addr.address,
-      apartment: '',
-      city: addr.address.split(' ').pop() || '',
-      ia_suggestion: addr.ia_suggestion,
-      confidence: 0.8
-    }));
+    // 2. CONTEXTO: El resto de las paradas.
+    // AQUÍ ESTABA EL BUG DE LA AMNESIA.
+    // Para no borrar los apartamentos de las paradas que NO tocamos, hacemos un rescate rápido.
+    const stopsPayload = extractedAddresses.value.map(addr => {
+      
+      // 🛟 SALVAVIDAS: Si ya tenemos un apto visualmente, intentamos preservarlo en el payload
+      // Esto es solo para que el backend nos devuelva el dato coherente en las paradas no tocadas.
+      const rescueRegex = /\b(APT|UNIT|STE|SUITE|BLDG|LOT|#)\s*[\w-]+/i;
+      const visualMatch = addr.address.match(rescueRegex);
+      const rescuedApt = visualMatch ? visualMatch[0] : '';
+      
+      // Enviamos street_address con todo (calle + apto) para asegurar que nada se pierda.
+      // El backend NO tocará este campo a menos que esté en la lista de 'corrections'.
+      return {
+        stop_number: addr.number,
+        street_address: addr.address, // Mandamos todo el string por seguridad
+        apartment: rescuedApt,        // Mandamos lo que rescatamos por si acaso
+        city: '',                     // La ciudad la dejamos vacía, no es crítica para el contexto
+        ia_suggestion: addr.ia_suggestion,
+        confidence: 0.8
+      };
+    });
 
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
     
@@ -1747,42 +1765,50 @@ async function submitCorrections() {
     
     if (!result.success) throw new Error(result.error || 'Falló la aplicación de correcciones');
 
-    addVisualLog('🔄 Recibiendo datos estructurados del Backend...');
+    addVisualLog('🔄 Recibiendo JSON perfecto...');
     
-    // Mapeo DIRECTO del Backend (Sin Regex, Sin inventos)
-    // Solo usamos Boolean() para asegurar que isApartment sea true/false y no ""
+    // 3. RECIBIR Y MOSTRAR
+    // Aquí confiamos en lo que nos devuelve el backend.
     const mappedStops = result.stops.map(stop => {
       
-      // Reconstruir dirección para visualización
-      const fullAddress = [stop.street_address, stop.apartment, stop.city]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
+      // Reconstruimos el string visual
+      // Nota: Si el backend devolvió street_address concatenado (para las no corregidas),
+      // este join funcionará bien porque apartment será '' o redundante, pero visualmente legible.
+      const parts = [stop.street_address];
+      if (stop.apartment && !stop.street_address.includes(stop.apartment)) {
+        parts.push(stop.apartment);
+      }
+      if (stop.city && !stop.street_address.includes(stop.city)) {
+        parts.push(stop.city);
+      }
+      
+      const fullAddress = parts.join(' ').replace(/\s+/g, ' ').trim();
+
+      // Detección de apartamento basada en DATOS, no suposiciones
+      const hasAptData = stop.apartment && stop.apartment.trim() !== '' && stop.apartment !== 'null';
+      // Regex de respaldo solo para visualización
+      const hasAptRegex = /\b(APT|UNIT|STE|SUITE|BLDG|LOT|#)\b/i.test(fullAddress);
 
       return {
         number: stop.stop_number,
         address: fullAddress,
         isDowntown: false,
-        // ✅ LA CLAVE: Confiar en el backend, pero forzar tipo Booleano estricto
-        isApartment: Boolean(stop.apartment && stop.apartment.trim() !== ''),
+        // ✅ Ahora sí: Si Gemini dijo que hay apto, O si visualmente lo hay, es TRUE.
+        isApartment: Boolean(hasAptData || hasAptRegex), 
         ia_suggestion: stop.ia_suggestion
       };
     });
 
     extractedAddresses.value = mappedStops;
     
-    // Log de verificación para tu tranquilidad
-    const sample = mappedStops.find(s => s.isApartment);
-    if (sample) {
-      addVisualLog(`✅ Backend detectó apto en Stop #${sample.number}`, sample);
-    } else {
-      addVisualLog(`⚠️ Backend no reportó apartamentos en las correcciones.`);
-    }
+    // LOG DE VICTORIA
+    const correctedStop = mappedStops.find(s => s.number === corrections[0].stop_number);
+    addVisualLog(`✨ Parada corregida #${correctedStop.number} isApartment: ${correctedStop.isApartment}`);
     
     showCorrectionModal.value = false;
     isProcessing.value = false;
     
-    // Check Downtown con los datos frescos del backend
+    // Check Downtown
     const needsDowntownCheck = showDowntownDetection();
     if (needsDowntownCheck) return;
     

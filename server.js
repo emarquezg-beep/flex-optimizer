@@ -2997,10 +2997,10 @@ app.post('/api/v1/ocr/amazon-stops',
 
       console.log('✅ Respuesta de Gemini recibida');
 
-      // 🔍 DEBUG: Ver JSON crudo de Gemini
-      console.log('\n🔍 ===== JSON CRUDO DE GEMINI (primeros 1000 chars) =====');
-      console.log(text.substring(0, 1000));
-      console.log('...\n');
+// 🔍 DEBUG: Ver JSON COMPLETO sin truncar
+      console.log('\n🔍 ===== JSON CRUDO DE GEMINI (COMPLETO) =====');
+      console.log(text); // Gemini ya devuelve texto, así que esto se verá bien
+      console.log('==============================================\n');
 
       // 6. Parsear JSON
       let stops;
@@ -3150,165 +3150,127 @@ app.post('/api/v1/ocr/amazon-stops',
 console.log('🔍 Endpoint OCR (Primera Pasada) configurado');
 
 
-// ═══════════════════════════════════════════════════════════════
-// ✏️ ENDPOINT 2: RESOLVER DUDAS (OPTIMIZADO - Micro-llamadas)
-// ═══════════════════════════════════════════════════════════════
+// ============================================
+// 🏥 ENDPOINT: CIRUGÍA LIMPIA CON GEMINI
+// ============================================
 app.post('/api/v1/ocr/amazon-stops/resolve-missing', 
   authenticateUser, 
   async (req, res) => {
+    const { stops, corrections } = req.body;
+    
+    console.log('====================================');
+    console.log('🚀 PROCESANDO CORRECCIONES (ESTRATEGIA CIRUGÍA LIMPIA)');
+    console.log(`📊 Paradas en contexto: ${stops.length}`);
+    console.log(`✏️ Correcciones a aplicar: ${corrections.length}`);
+
     try {
-      console.log('✏️ Recibiendo correcciones del usuario...');
-      
-      const { stops, corrections } = req.body;
+      // 1. Prompt "Cirujano"
+      // Instruimos a Gemini para que devuelva JSON perfecto solo para el registro afectado
+      const microPrompt = `Eres un parser de direcciones experto.
+Recibirás una dirección corregida manualmente por un usuario para la parada #STOP_NUMBER.
+Tu tarea es estructurarla perfectamente en JSON.
 
-      // 1. Validaciones
-      if (!stops || !Array.isArray(stops)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Falta el array de "stops"'
-        });
-      }
+REGLAS CRÍTICAS:
+1. "street_address": Solo Calle y Número (Ej: "70 W LUCERNE CIR").
+2. "apartment": Solo la unidad (Ej: "APT 205", "UNIT B", "STE 100"). Si no hay unidad, devuelve cadena vacía "". NUNCA devuelvas "null" como texto.
+3. "city": La ciudad.
+4. "stop_number": Debe ser el número que te indico (#STOP_NUMBER).
+5. "confidence": Devuelve siempre 1.0.
 
-      if (!corrections || !Array.isArray(corrections)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Falta el array de "corrections"'
-        });
-      }
+Formato JSON esperado:
+{
+  "stop_number": <número>,
+  "street_address": "<calle>",
+  "apartment": "<apt>",
+  "city": "<ciudad>",
+  "confidence": 1.0
+}
 
-      console.log(`📝 ${corrections.length} corrección(es) recibida(s)`);
+Analiza esta dirección para la parada`;
 
-      // 2. Clonar stops para no mutar el original
-      const finalStops = JSON.parse(JSON.stringify(stops));
-
-      // 3. Si no hay correcciones, devolver stops sin cambios
-      if (corrections.length === 0) {
-        console.log('✅ No hay correcciones, devolviendo JSON original');
-        return res.json({
-          success: true,
-          stops: finalStops
-        });
-      }
-
-      // 4. Preparar modelo con JSON Schema (micro-output)
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-flash-latest',
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              street_address: { type: 'string' },
-              apartment: { type: 'string' },
-              city: { type: 'string' }
-            },
-            required: ['street_address', 'apartment', 'city']
-          }
-        }
-      });
-
-      // 5. Micro-prompt optimizado (máxima eficiencia)
-      const microPrompt = `Eres un parser de direcciones estricto. Tu ÚNICA tarea es separar la dirección en sus componentes.
-
-Instrucciones CRÍTICAS para el campo "apartment":
-1. Si el texto contiene indicadores como "APT", "UNIT", "STE", "SUITE", "BLDG", "LOT", "#" o un número/letra suelta al final, DEBES extraerlo al campo "apartment".
-2. BAJO NINGUNA CIRCUNSTANCIA dejes el número de apartamento dentro de "street_address".
-3. Si el usuario escribe "123 Main St Apt 4", la salida OBLIGATORIA es: street="123 MAIN ST", apartment="APT 4".
-
-Formato de salida (JSON):
-- "street_address": Solo número y calle (SIN el apartamento).
-- "apartment": El designador y número de unidad. Si no existe, usa null.
-- "city": La ciudad.
-
-Texto a procesar:`;
-
-      // 6. Crear micro-llamadas paralelas
-      console.log('🚀 Procesando correcciones en paralelo...');
-      
+      // 2. Procesar correcciones en PARALELO (Soporta 1, 3, 7 o 20 a la vez)
       const parsePromises = corrections.map(async (correction) => {
         try {
-          const addressText = correction.value || correction.current_value || '';
-          
-          if (!addressText.trim()) {
-            console.warn(`⚠️ Corrección vacía para parada ${correction.stop_number}`);
-            return { 
-              stop_number: correction.stop_number, 
-              success: false,
-              error: 'EMPTY_INPUT'
-            };
-          }
+          const addressText = correction.value; 
+          const stopNum = correction.stop_number;
 
-          console.log(`  🔍 Parseando parada ${correction.stop_number}: "${addressText}"`);
+          console.log(`  🔍 Gemini operando Stop #${stopNum}: "${addressText}"`);
 
-          const result = await model.generateContent(`${microPrompt}\n${addressText}`);
+          // Inyectamos el ID de la parada en el prompt
+          const finalPrompt = `${microPrompt.replace('#STOP_NUMBER', stopNum)} #${stopNum}: "${addressText}"`;
+
+          // Configuración para forzar JSON
+          const model = genAI.getGenerativeModel({ 
+            model: 'gemini-1.5-flash',
+            generationConfig: { responseMimeType: "application/json" }
+          });
+
+          const result = await model.generateContent(finalPrompt);
           const response = await result.response;
           const text = response.text();
 
-          const parsed = JSON.parse(text);
+          // Limpieza y Parseo
+          let parsed = JSON.parse(text);
 
-          console.log(`  ✅ Parada ${correction.stop_number} parseada`);
+          // 🛡️ SANITIZACIÓN: Matar al fantasma "null"
+          if (parsed.apartment && (parsed.apartment.toLowerCase() === 'null' || parsed.apartment === 'NULL')) {
+            parsed.apartment = '';
+          }
+          if (!parsed.apartment) parsed.apartment = ''; // Asegurar que no sea undefined
 
-          return {
-            stop_number: correction.stop_number,
-            success: true,
-            data: parsed
-          };
+          return { success: true, data: parsed };
 
         } catch (error) {
-          console.error(`  ❌ Error parseando parada ${correction.stop_number}:`, error.message);
-          return {
-            stop_number: correction.stop_number,
-            success: false,
-            error: error.message
-          };
+          console.error(`  ❌ Falló operación en Stop #${correction.stop_number}:`, error.message);
+          return { success: false, stop_number: correction.stop_number, error: error.message };
         }
       });
 
-      // 7. Esperar todas las micro-llamadas
-      const parseResults = await Promise.all(parsePromises);
+      // Esperar a que terminen todas las cirugías
+      const results = await Promise.all(parsePromises);
 
-      // 8. Aplicar correcciones al JSON original
+      // 3. EL TRASPLANTE (Merge)
+      // Usamos el array que nos envió el frontend como base
+      let updatedStops = [...stops]; 
+
       let successCount = 0;
-      let failCount = 0;
-
-      parseResults.forEach(result => {
-        if (result.success) {
-          const stop = finalStops.find(s => s.stop_number === result.stop_number);
+      results.forEach(res => {
+        if (res.success) {
+          const newData = res.data;
+          // Buscamos al paciente en la lista por su número
+          const index = updatedStops.findIndex(s => s.stop_number === newData.stop_number);
           
-          if (stop) {
-            stop.street_address = result.data.street_address;
-            stop.apartment = result.data.apartment;
-            stop.city = result.data.city;
-            stop.confidence = 0.98; // Alta confianza tras corrección manual
+          if (index !== -1) {
+            // REEMPLAZO TOTAL DEL ÓRGANO
+            updatedStops[index] = {
+              ...updatedStops[index], // Mantener props oscuras si las hubiera
+              street_address: newData.street_address,
+              apartment: newData.apartment,
+              city: newData.city,
+              confidence: 1.0
+            };
             successCount++;
-            
-            console.log(`  ✨ Parada ${result.stop_number} actualizada: ${stop.street_address}`);
           }
-        } else {
-          failCount++;
-          console.warn(`  ⚠️ Parada ${result.stop_number} no pudo ser corregida`);
         }
       });
 
-      console.log(`✅ ${successCount} corrección(es) aplicada(s), ${failCount} fallida(s)`);
+      console.log(`✅ Cirugías exitosas: ${successCount}/${corrections.length}`);
+      
+      // 🔍 DEBUG FINAL: Verificación visual en logs del servidor
+      const changedStops = updatedStops.filter(s => corrections.some(c => c.stop_number === s.stop_number));
+      console.log('🔍 Muestra de paradas corregidas:', JSON.stringify(changedStops, null, 2));
 
-      // 9. Responder (mismo contrato que antes)
+      // 4. Devolver paciente sano
       res.json({
         success: true,
-        stops: finalStops
+        stops: updatedStops
       });
 
     } catch (error) {
-      console.error('❌ Error en correcciones:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
+      console.error('💥 ERROR CRÍTICO EN CIRUGÍA:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
 });
-
-console.log('✏️ Endpoint OCR (Correcciones OPTIMIZADO) configurado');
-
 
 
 // --- 🆕 FASE 5: Cleanup Automático ---
