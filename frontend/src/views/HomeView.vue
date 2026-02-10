@@ -308,6 +308,21 @@ function formatTime(timeString) {
   return `${hour12}:${minutes} ${ampm}`
 }
 
+// Función para formatear "MM/DD | HH:MM AM"
+function formatNextBlockInfo(block) {
+  if (!block) return 'Sin agenda';
+
+  // Asumiendo que block.fecha viene como "YYYY-MM-DD"
+  // Extraemos mes y día directamente del string para evitar líos de zona horaria
+  const [year, month, day] = block.fecha.split('-');
+  const dateStr = `${month}/${day}`;
+
+  // Reutilizamos tu función existente formatTime para la hora
+  const timeStr = formatTime(block.hora);
+
+  return `${dateStr} | ${timeStr}`;
+}
+
 function getVehicleNickname(vehicleId) {
   if (!vehicleId) return 'No especificado'
   const vehicle = vehicles.value.find(v => v.id === vehicleId)
@@ -423,9 +438,9 @@ function closeProfileModal() {
             <div class="h-divider"></div>
             <div class="h-stat">
               <span class="h-label">PRÓXIMO BLOQUE</span>
-              <span class="h-value h-value--accent">
-                {{ currentWeekBlocks.length > 0 ? formatTime(currentWeekBlocks[0].hora) : '--:--' }}
-              </span>
+            <span class="h-value h-value--accent">
+            {{ currentWeekBlocks.length > 0 ? formatNextBlockInfo(currentWeekBlocks[0]) : 'Sin agenda' }}
+            </span>
             </div>
           </div>
         </div>
