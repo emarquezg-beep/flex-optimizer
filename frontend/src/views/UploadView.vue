@@ -84,18 +84,6 @@ async function fetchWithRetry(fetchFn, url, options, maxRetries = 2) {
   }
 }
 
-// 1. VARIABLE PARA EL DEBUGGER VISUAL
-const visualLogs = ref([]);
-
-function addVisualLog(msg, data = null) {
-  const time = new Date().toLocaleTimeString();
-  const logLine = { id: Date.now(), time, msg, data: data ? JSON.stringify(data, null, 2) : null };
-  // Agregamos al principio para ver lo más nuevo arriba
-  visualLogs.value.unshift(logLine);
-  // Mantenemos también el console.log por si acaso funciona la Solución 1
-  console.log(msg, data || '');
-}
-
 
 // ============================================
 // 2. VARIABLES Y ESTADO
@@ -841,84 +829,53 @@ function isInOrlando(address) {
 }
 
 // ============================================
-// 🕵️‍♂️ DEBUGGING FORENSE: DETECCIÓN (REEMPLAZAR)
+// 🏙️ DETECCIÓN DOWNTOWN (PRODUCCIÓN)
 // ============================================
 
-// 2. MODIFICAMOS LA FUNCIÓN DETECT PARA USAR EL VISUAL LOG
 function detectOrlandoApartments() {
-  addVisualLog("🔍 INICIO detectOrlandoApartments");
-  
-  if (!extractedAddresses.value) {
-    addVisualLog("❌ extractedAddresses es NULL");
-    return [];
-  }
+  if (!extractedAddresses.value) return [];
 
-  addVisualLog(`📊 Analizando ${extractedAddresses.value.length} paradas.`);
-
-  const result = extractedAddresses.value.filter((stop, index) => {
-    try {
-      if (!stop) return false;
-
-      // === DIAGNÓSTICO POR PARADA ===
-      const tieneIsApartment = stop.isApartment === true;
-      const textoAddress = stop.address || "";
-      const tieneOrlando = /\bORLANDO\b/i.test(textoAddress);
-
-      // Si es una parada que "parece" de Orlando pero no pasa el filtro, queremos saber por qué
-      if (tieneOrlando || tieneIsApartment) {
-        addVisualLog(`🧐 Revisando Stop #${stop.number}:`, {
-          address: textoAddress,
-          isApartmentFlag: stop.isApartment,
-          regexOrlando: tieneOrlando,
-          PASA_FILTRO: (tieneIsApartment && tieneOrlando)
-        });
-      }
-      
-      // La lógica real
-      if (tieneIsApartment && tieneOrlando) {
-        return true;
-      }
-      return false;
-
-    } catch (e) {
-      addVisualLog(`💥 Error en filtro índice ${index}: ${e.message}`);
-      return false;
-    }
+  // Filtro robusto: Verifica si es apartamento (dato del backend O visual) Y si está en Orlando
+  return extractedAddresses.value.filter(stop => {
+    if (!stop) return false;
+    
+    // La lógica ganadora: 
+    // 1. Confianza en el flag isApartment (que ahora viene bien del backend)
+    // 2. Doble chequeo de que la dirección contenga "ORLANDO"
+    const isApt = stop.isApartment === true;
+    const inOrlando = stop.address && /\bORLANDO\b/i.test(stop.address);
+    
+    return isApt && inOrlando;
   });
-
-  addVisualLog(`✅ FIN detectOrlandoApartments. Pasaron: ${result.length}`);
-  return result;
 }
+
 // 3. MODIFICAMOS SHOW DOWNTOWN
 function showDowntownDetection() {
-  addVisualLog("🔍 INICIO showDowntownDetection");
   try {
     const apartments = detectOrlandoApartments();
-    addVisualLog(`📦 Apartments recibidos: ${apartments.length}`, apartments);
-
+    
+    // Si no hay candidatos, no molestamos al usuario
     if (apartments.length === 0) return false;
     
+    // Preparamos el modal
     orlandoApartments.value = apartments;
     downtownSelection.value = {};
     
-    apartments.forEach((apt, idx) => {
-      if (!apt || apt.number === undefined) {
-        addVisualLog(`❌ CRASH EVITADO en item ${idx}`, apt);
-      } else {
+    // Inicializamos selección
+    apartments.forEach(apt => {
+      if (apt && apt.number !== undefined) {
         downtownSelection.value[apt.number] = false;
       }
     });
     
-    addVisualLog("✅ Abriendo modal...");
     showDowntownModal.value = true;
     return true;
 
   } catch (error) {
-    addVisualLog(`💥 CRASH FATAL: ${error.message}`);
+    console.error("Error en showDowntownDetection:", error);
     return false;
   }
 }
-
 async function evaluateRoute() {
   // ============================================
   // 🆕 DECISIÓN: ¿OCR o JSON Manual?
@@ -1711,44 +1668,32 @@ async function processImagesWithOCR() {
 }
 
 // ============================================
-// ✏️ DEBUGGING FORENSE: SUBMIT CORRECTIONS (REEMPLAZAR)
-// ============================================
-
-// ============================================
-// ✏️ SUBMIT CORRECTIONS (EL MENSAJERO INTELIGENTE)
+// ✏️ SUBMIT CORRECTIONS (PRODUCCIÓN - MENSAJERO)
 // ============================================
 
 async function submitCorrections() {
-  addVisualLog('✏️ Preparando envío al backend...');
   isProcessing.value = true;
   
   try {
     // 1. CORRECCIONES: Texto CRUDO (Lo que el usuario escribió)
-    // El backend se encargará de parsear esto con Gemini.
     const corrections = needsConfirmation.value.map(item => ({
       stop_number: item.stop_number,
       field: item.field,
       value: correctionInputs.value[`${item.stop_number}_${item.field}`] || item.current_value 
     }));
     
-    // 2. CONTEXTO: El resto de las paradas.
-    // AQUÍ ESTABA EL BUG DE LA AMNESIA.
-    // Para no borrar los apartamentos de las paradas que NO tocamos, hacemos un rescate rápido.
+    // 2. CONTEXTO: Rescate de apartamentos para paradas no tocadas
     const stopsPayload = extractedAddresses.value.map(addr => {
-      
-      // 🛟 SALVAVIDAS: Si ya tenemos un apto visualmente, intentamos preservarlo en el payload
-      // Esto es solo para que el backend nos devuelva el dato coherente en las paradas no tocadas.
+      // Intentamos preservar visualmente el apto para el contexto
       const rescueRegex = /\b(APT|UNIT|STE|SUITE|BLDG|LOT|#)\s*[\w-]+/i;
       const visualMatch = addr.address.match(rescueRegex);
       const rescuedApt = visualMatch ? visualMatch[0] : '';
       
-      // Enviamos street_address con todo (calle + apto) para asegurar que nada se pierda.
-      // El backend NO tocará este campo a menos que esté en la lista de 'corrections'.
       return {
         stop_number: addr.number,
-        street_address: addr.address, // Mandamos todo el string por seguridad
-        apartment: rescuedApt,        // Mandamos lo que rescatamos por si acaso
-        city: '',                     // La ciudad la dejamos vacía, no es crítica para el contexto
+        street_address: addr.address, // Enviamos todo junto
+        apartment: rescuedApt,        // Enviamos lo rescatado
+        city: '',
         ia_suggestion: addr.ia_suggestion,
         confidence: 0.8
       };
@@ -1765,15 +1710,9 @@ async function submitCorrections() {
     
     if (!result.success) throw new Error(result.error || 'Falló la aplicación de correcciones');
 
-    addVisualLog('🔄 Recibiendo JSON perfecto...');
-    
     // 3. RECIBIR Y MOSTRAR
-    // Aquí confiamos en lo que nos devuelve el backend.
     const mappedStops = result.stops.map(stop => {
-      
       // Reconstruimos el string visual
-      // Nota: Si el backend devolvió street_address concatenado (para las no corregidas),
-      // este join funcionará bien porque apartment será '' o redundante, pero visualmente legible.
       const parts = [stop.street_address];
       if (stop.apartment && !stop.street_address.includes(stop.apartment)) {
         parts.push(stop.apartment);
@@ -1784,27 +1723,20 @@ async function submitCorrections() {
       
       const fullAddress = parts.join(' ').replace(/\s+/g, ' ').trim();
 
-      // Detección de apartamento basada en DATOS, no suposiciones
+      // Detección de apartamento basada en DATOS del backend + Respaldo visual
       const hasAptData = stop.apartment && stop.apartment.trim() !== '' && stop.apartment !== 'null';
-      // Regex de respaldo solo para visualización
       const hasAptRegex = /\b(APT|UNIT|STE|SUITE|BLDG|LOT|#)\b/i.test(fullAddress);
 
       return {
         number: stop.stop_number,
         address: fullAddress,
         isDowntown: false,
-        // ✅ Ahora sí: Si Gemini dijo que hay apto, O si visualmente lo hay, es TRUE.
         isApartment: Boolean(hasAptData || hasAptRegex), 
         ia_suggestion: stop.ia_suggestion
       };
     });
 
     extractedAddresses.value = mappedStops;
-    
-    // LOG DE VICTORIA
-    const correctedStop = mappedStops.find(s => s.number === corrections[0].stop_number);
-    addVisualLog(`✨ Parada corregida #${correctedStop.number} isApartment: ${correctedStop.isApartment}`);
-    
     showCorrectionModal.value = false;
     isProcessing.value = false;
     
@@ -1815,12 +1747,11 @@ async function submitCorrections() {
     await proceedWithEvaluation();
     
   } catch (error) {
-    addVisualLog(`❌ Error: ${error.message}`);
-    alert(`❌ Error: ${error.message}`);
+    console.error("Error aplicando correcciones:", error);
+    alert(`Error: ${error.message}`);
     isProcessing.value = false;
   }
 }
-
 </script>
 
 <template>
@@ -2287,26 +2218,9 @@ async function submitCorrections() {
         </p>
       </div>
     </div>
-
-
-    <div class="visual-debugger">
-      <div class="debugger-header">
-        <span>👨‍💻 Live Logs</span>
-        <button @click="visualLogs = []">Limpiar</button>
-      </div>
-      <div class="debugger-content">
-        <div v-if="visualLogs.length === 0" class="log-empty">Esperando acción...</div>
-        <div v-for="log in visualLogs" :key="log.id" class="log-entry">
-          <span class="log-time">[{{ log.time }}]</span>
-          <span class="log-msg">{{ log.msg }}</span>
-          <pre v-if="log.data" class="log-data">{{ log.data }}</pre>
-        </div>
-      </div>
-    </div>
   </div>
-
-  
 </template>
+
 <style scoped>
     /* --- Base Styles (Keep as is) --- */
     .uploader-container { margin-top: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
