@@ -127,6 +127,29 @@ const downtownSelection = ref({});
 const showQuickSettingsModal = ref(false);
 const mostrarDetalles = ref(false);
 
+// ============================================
+// 🧠 LÓGICA: SELECT ALL DOWNTOWN
+// ============================================
+
+// Propiedad computada de doble vía (get/set) para el checkbox "Seleccionar Todo"
+const areAllDowntownSelected = computed({
+  // GET: El checkbox está marcado si TODAS las opciones individuales están marcadas
+  get: () => {
+    const stops = orlandoApartments.value;
+    if (stops.length === 0) return false;
+    
+    // Verificamos si cada parada en la lista tiene su valor correspondiente en true
+    return stops.every(stop => downtownSelection.value[stop.number] === true);
+  },
+  // SET: Cuando el usuario hace click en "Seleccionar Todo"
+  set: (newValue) => {
+    // Iteramos sobre todas las paradas detectadas y les asignamos el nuevo valor (true o false)
+    orlandoApartments.value.forEach(stop => {
+      downtownSelection.value[stop.number] = newValue;
+    });
+  }
+});
+
 // Datos del Backend
 const ariaData = ref(null); // ARIA multiplier
 
@@ -1980,31 +2003,74 @@ async function submitCorrections() {
 
             <!-- ✅ Modal downtown queda fuera del details (para no depender del toggle) -->
             <transition name="modal-fade">
-              <div v-if="showDowntownModal" class="modal-overlay" @click.self="skipDowntownSelection">
-                <div class="modal-container downtown-modal">
+              <div v-if="showDowntownModal" class="modal-overlay downtown-modal">
+                <div class="modal-content downtown-modal-content">
                   <div class="modal-header">
-                    <h3>🏢 Downtown Apartments Detected</h3>
-                    <p class="modal-subtitle">
-                      Found {{ orlandoApartments.length }} apartment(s) in Orlando. 
-                      Select which ones are downtown (adds +3 min per stop).
+                    <h3 class="text-xl font-bold text-white flex items-center">
+                      <span class="text-blue-400 text-2xl mr-2">🏙️</span> 
+                      Detección de Downtown
+                    </h3>
+                    <p class="text-sm text-gray-400 mt-2 leading-relaxed">
+                      Hemos detectado <span class="text-blue-400 font-bold">{{ orlandoApartments.length }} apartamentos en Orlando</span>. 
+                      Marca los que se consideren "Downtown" para que ARIA ajuste los tiempos (añade ~5-10 mins/parada).
                     </p>
                   </div>
-
-                  <div class="modal-body">
-                    <div class="apartment-list">
-                      <label v-for="apt in orlandoApartments" :key="apt.number" class="apartment-item">
-                        <input type="checkbox" v-model="downtownSelection[apt.number]" class="downtown-checkbox-modal">
-                        <div class="apartment-info">
-                          <span class="apt-number">Stop #{{ apt.number }}</span>
-                          <span class="apt-address">{{ apt.address }}</span>
-                        </div>
+                  
+                  <div class="modal-body py-4">
+                    
+                    <div class="bg-blue-900/20 p-3 rounded-lg mb-4 flex items-center border border-blue-900/50">
+                      <label class="inline-flex items-center cursor-pointer w-full">
+                        <input 
+                          type="checkbox" 
+                          v-model="areAllDowntownSelected"
+                          class="form-checkbox h-5 w-5 text-blue-500 bg-gray-900 border-gray-700 rounded focus:ring-blue-500 focus:ring-offset-gray-900"
+                        >
+                        <span class="ml-3 text-white font-bold">Seleccionar / Deseleccionar Todos</span>
                       </label>
                     </div>
-                  </div>
 
-                  <div class="modal-footer">
-                    <button @click="skipDowntownSelection" class="button-secondary">⏭️ No Downtown Apartments</button>
-                    <button @click="confirmDowntownSelection" class="button-primary">✅ Confirm Selection</button>
+                    <div class="space-y-2 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                      <div 
+                        v-for="stop in orlandoApartments" 
+                        :key="stop.number"
+                        class="downtown-item flex items-start p-3 rounded-lg hover:bg-gray-800/50 transition-colors border border-transparent hover:border-gray-700"
+                        :class="{ 'bg-blue-900/10 border-blue-900/30': downtownSelection[stop.number] }"
+                        data-apartment-item
+                        :data-stop-number="stop.number"
+                      >
+                        <div class="flex h-6 items-center">
+                          <input 
+                            type="checkbox" 
+                            v-model="downtownSelection[stop.number]"
+                            class="form-checkbox h-5 w-5 text-blue-500 bg-gray-900 border-gray-700 rounded focus:ring-blue-500 focus:ring-offset-gray-900"
+                            :data-stop="stop.number"
+                          >
+                        </div>
+                        <div class="ml-3 text-sm">
+                          <label class="font-bold text-white block cursor-pointer">
+                            Parada #{{ stop.number }}
+                          </label>
+                          <p class="text-gray-400 font-mono text-xs mt-1 break-words">
+                            {{ stop.address }}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="modal-footer flex justify-end gap-3 bg-gray-900/50 p-4 -mx-6 -mb-6 mt-4 rounded-b-2xl border-t border-gray-800">
+                    <button 
+                      @click="cancelProcess" 
+                      class="px-5 py-2.5 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white transition-all font-medium"
+                    >
+                      Omitir (Ninguno es Downtown)
+                    </button>
+                    <button 
+                      @click="confirmDowntownSelection" 
+                      class="px-5 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-500 font-bold shadow-lg shadow-blue-900/20 flex items-center transition-all"
+                    >
+                      Confirmar Selección
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2131,69 +2197,73 @@ async function submitCorrections() {
     <!-- ============================================
      🆕 MODAL DE CORRECCIONES OCR
      ============================================ -->
-    <div v-if="showCorrectionModal" class="modal-overlay" @click.self="showCorrectionModal = false">
-      <div class="modal-content correction-modal">
+    <div v-if="showCorrectionModal" class="modal-overlay">
+      <div class="modal-content correction-modal-content">
         <div class="modal-header">
-          <h2>✏️ Completar Información</h2>
-          <p class="modal-subtitle">
-            Gemini necesita que completes algunos datos que no pudo leer claramente en las capturas.
+          <h3 class="text-xl font-bold text-white">
+            <span class="text-orange-500">⚠️</span> Verificar Direcciones
+          </h3>
+          <p class="text-sm text-gray-400 mt-1">
+            Gemini tiene dudas en {{ needsConfirmation.length }} paradas. Por favor, corrígelas manualmente.
           </p>
         </div>
-
+        
         <div class="modal-body">
           <div 
-            v-for="item in needsConfirmation" 
-            :key="`${item.stop_number}_${item.field}`"
-            class="correction-item"
+            v-for="(item, index) in needsConfirmation" 
+            :key="index" 
+            class="correction-item p-4 rounded-xl bg-gray-800/50 border border-gray-700 mb-4"
           >
-            <div class="correction-header">
-              <span class="stop-badge">Parada {{ item.stop_number }}</span>
-              <span class="field-badge">{{ item.field === 'street_address' ? 'Dirección' : (item.field === 'apartment' ? 'Apartamento' : 'Ciudad') }}</span>
+            <div class="flex justify-between items-center mb-3">
+              <span class="font-bold text-orange-400 flex items-center">
+                <span class="bg-orange-500/20 px-2 py-1 rounded-md mr-2 text-sm">#{{ item.stop_number }}</span>
+                {{ formatFieldName(item.field) }}
+              </span>
+              <span class="text-xs text-gray-500 bg-gray-900 px-2 py-1 rounded-full">
+                 Confianza IA: {{ Math.round((item.confidence || 0) * 100) }}%
+              </span>
             </div>
-
-            <div class="correction-reason">
-              <span v-if="item.reason === 'TRUNCATED_TEXT'">📋 Texto truncado detectado</span>
-              <span v-else-if="item.reason === 'LOW_CONFIDENCE'">⚠️ Baja confianza ({{ Math.round(item.confidence * 100) }}%)</span>
-              <span v-else-if="item.reason === 'MISSING_CITY'">🏙️ Ciudad no detectada</span>
-            </div>
-
-            <div class="correction-current">
-              <strong>Valor actual:</strong> 
-              <code>{{ item.current_value || '(vacío)' }}</code>
-            </div>
-
-            <div class="correction-input">
-              <label :for="`correction_${item.stop_number}_${item.field}`">
-                Valor correcto:
-              </label>
-              <input 
-                :id="`correction_${item.stop_number}_${item.field}`"
-                type="text"
-                v-model="correctionInputs[`${item.stop_number}_${item.field}`]"
-                :placeholder="`Ej: ${item.field === 'street_address' ? '1234 MAIN ST APT 202' : (item.field === 'apartment' ? 'APT 101' : 'KISSIMMEE')}`"
-              />
-              <small class="input-hint">
-                💡 Tip: Copia la dirección completa desde la app de Amazon Flex
-              </small>
+            
+            <div class="space-y-3">
+              <div>
+                <label class="text-xs uppercase tracking-wider text-gray-500 mb-1 block">Valor Detectado (Dudoso)</label>
+                <div class="bg-gray-900/50 p-3 rounded-lg text-gray-300 text-sm font-mono border border-red-900/30">
+                  {{ item.current_value }}
+                </div>
+              </div>
+              
+              <div>
+                <label class="text-xs uppercase tracking-wider text-orange-300 mb-1 block flex items-center">
+                   Tu Corrección
+                   <span class="ml-2 text-gray-500 normal-case">(Copia y pega la dirección completa si es necesario)</span>
+                </label>
+                <input 
+                  type="text"
+                  v-model="correctionInputs[`${item.stop_number}_${item.field}`]"
+                  :placeholder="item.current_value"
+                  class="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all font-medium"
+                  :data-correction="`${item.stop_number}-${item.field}`"
+                >
+              </div>
             </div>
           </div>
         </div>
-
-        <div class="modal-footer">
-          <button 
-            type="button"
-            class="button-secondary"
-            @click="showCorrectionModal = false"
-          >
-            ❌ Cancelar
-          </button>
-          <button 
-            type="button"
-            class="button-primary"
-            @click="submitCorrections"
+        
+        <div class="modal-footer flex justify-end gap-3 bg-gray-900/50 p-4 -mx-6 -mb-6 mt-4 rounded-b-2xl border-t border-gray-800">
+           <button 
+            @click="cancelProcess" 
+            class="px-5 py-2.5 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white transition-all font-medium"
             :disabled="isProcessing"
           >
-            {{ isProcessing ? '⏳ Procesando...' : '✅ Confirmar y Continuar' }}
+            Cancelar
+          </button>
+          <button 
+            @click="submitCorrections" 
+            class="px-5 py-2.5 rounded-lg bg-orange-600 text-white hover:bg-orange-500 font-bold shadow-lg shadow-orange-900/20 flex items-center transition-all"
+            :disabled="isProcessing"
+          >
+             <span v-if="isProcessing" class="mr-2 animate-spin">⚪</span>
+            {{ isProcessing ? 'Procesando con IA...' : 'Confirmar y Continuar' }}
           </button>
         </div>
       </div>
@@ -4971,5 +5041,96 @@ async function submitCorrections() {
 .log-time { color: #888; margin-right: 5px; }
 .log-msg { color: #fff; font-weight: bold; }
 .log-data { color: #ffff00; margin: 5px 0 0 10px; white-space: pre-wrap; word-break: break-all; }
+
+/* ============================================
+   🎨 ESTILOS: MODALES DARK THEME
+   ============================================ */
+
+/* Base del Modal Overlay (Fondo borroso oscuro) */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.85); /* Más oscuro */
+  backdrop-filter: blur(8px); /* Efecto glass */
+  display: flex;
+  justify-content: center;
+  align-items: center; /* Centrado vertical */
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Contenedor Genérico del Modal */
+.modal-content {
+  background-color: #111827; /* Gris muy oscuro (Tailwind gray-900) */
+  border-radius: 1.5rem; /* Bordes más redondeados */
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  width: 100%;
+  max-width: 600px; /* Un poco más ancho */
+  max-height: 90vh;
+  overflow: hidden; /* Para que el footer no se salga */
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.1); /* Borde sutil */
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Header y Body con padding */
+.modal-header, .modal-body {
+  padding: 1.5rem;
+}
+
+/* Scrollbar personalizado para la lista de downtown */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+/* Checkboxes personalizados (requiere Tailwind Forms plugin o estilos manuales) */
+/* Si no usas el plugin, estos estilos básicos ayudarán */
+input[type="checkbox"].form-checkbox {
+  appearance: none;
+  display: inline-block;
+  vertical-align: middle;
+  background-origin: border-box;
+  user-select: none;
+  flex-shrink: 0;
+  height: 1.25rem;
+  width: 1.25rem;
+  background-color: #111827;
+  border-color: #374151;
+  border-width: 1px;
+  border-radius: 0.25rem;
+}
+
+input[type="checkbox"].form-checkbox:checked {
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+  border-color: transparent;
+  background-color: currentColor; /* Toma el color del texto (text-blue-500) */
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Animaciones de entrada */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 </style>
