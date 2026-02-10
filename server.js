@@ -3188,7 +3188,7 @@ Formato JSON esperado:
 
 Analiza esta dirección para la parada`;
 
-      // 2. Procesar correcciones en PARALELO (Soporta 1, 3, 7 o 20 a la vez)
+// 2. Procesar correcciones en PARALELO
       const parsePromises = corrections.map(async (correction) => {
         try {
           const addressText = correction.value; 
@@ -3199,24 +3199,29 @@ Analiza esta dirección para la parada`;
           // Inyectamos el ID de la parada en el prompt
           const finalPrompt = `${microPrompt.replace('#STOP_NUMBER', stopNum)} #${stopNum}: "${addressText}"`;
 
-          // Configuración para forzar JSON
-          const model = genAI.getGenerativeModel({ 
-            model: 'gemini-1.5-flash',
-            generationConfig: { responseMimeType: "application/json" }
-          });
+          // CAMBIO CLAVE: Quitamos generationConfig para evitar el error 404
+          const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
           const result = await model.generateContent(finalPrompt);
           const response = await result.response;
           const text = response.text();
 
-          // Limpieza y Parseo
-          let parsed = JSON.parse(text);
+          // Limpieza manual de JSON (Markdown y espacios)
+          const cleanText = text.replace(/```json|```/g, '').trim();
+          
+          let parsed;
+          try {
+             parsed = JSON.parse(cleanText);
+          } catch (e) {
+             console.error(`  ❌ Error parseando JSON de Gemini: ${cleanText}`);
+             throw new Error("Invalid JSON response from AI");
+          }
 
           // 🛡️ SANITIZACIÓN: Matar al fantasma "null"
           if (parsed.apartment && (parsed.apartment.toLowerCase() === 'null' || parsed.apartment === 'NULL')) {
             parsed.apartment = '';
           }
-          if (!parsed.apartment) parsed.apartment = ''; // Asegurar que no sea undefined
+          if (!parsed.apartment) parsed.apartment = '';
 
           return { success: true, data: parsed };
 
