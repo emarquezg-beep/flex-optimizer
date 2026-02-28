@@ -3676,11 +3676,13 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
       .select('pago')
       .eq('user_id', userId)
       .gte('fecha', `${taxYear}-01-01`)
-      .lte('fecha', `${taxYear}-12-31`);
-    
+      .lte('fecha', `${taxYear}-12-31`)
+      .gt('pago', 0);
+
     if (routesError) throw routesError;
-    
+
     const totalIncome = routesData.reduce((sum, r) => sum + (r.pago || 0), 0);
+
     
     // 2. Query para millas por vehículo (con JOIN correcto)
     const { data: vehicleData, error: vehicleError } = await supabase
@@ -3688,6 +3690,8 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
       .select(`
         vehicle_id,
         millas_de_trabajo,
+        commute_1,
+        commute_2,
         user_vehicles (
           nickname,
           make,
@@ -3698,34 +3702,40 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
       .eq('user_id', userId)
       .gte('fecha', `${taxYear}-01-01`)
       .lte('fecha', `${taxYear}-12-31`)
+      .gt('pago', 0)
       .not('vehicle_id', 'is', null);
 
     if (vehicleError) throw vehicleError;
 
-    // 3. Agrupar millas por vehículo
+    // Agrupar millas por vehículo (work + commutes)
     const vehicleMap = {};
     vehicleData.forEach(route => {
       const vId = route.vehicle_id;
       if (!vehicleMap[vId]) {
         const vInfo = route.user_vehicles || {};
-        // Priorizar nickname, si no existe usar make/model/year
-        const displayName = vInfo.nickname || 
+        const displayName = vInfo.nickname ||
           `${vInfo.year || ''} ${vInfo.make || ''} ${vInfo.model || ''}`.trim() ||
           'Unknown Vehicle';
-        
         vehicleMap[vId] = {
           name: displayName,
-          miles: 0
+          workMiles: 0,
+          commute1: 0,
+          commute2: 0,
+          totalMiles: 0
         };
       }
-      vehicleMap[vId].miles += (route.millas_de_trabajo || 0);
+      vehicleMap[vId].workMiles   += (route.millas_de_trabajo || 0);
+      vehicleMap[vId].commute1    += (route.commute_1 || 0);
+      vehicleMap[vId].commute2    += (route.commute_2 || 0);
+      vehicleMap[vId].totalMiles  += (route.millas_de_trabajo || 0) + 
+                                      (route.commute_1 || 0) + 
+                                      (route.commute_2 || 0);
     });
 
     const vehicles = Object.values(vehicleMap);
-    const totalMiles = vehicles.reduce((sum, v) => sum + v.miles, 0);
+    const totalMiles = vehicles.reduce((sum, v) => sum + v.totalMiles, 0);
     const mileageDeduction = totalMiles * IRS_MILEAGE_RATE;
-    const otherExpenses = 0.00;
-    const totalDeductions = mileageDeduction + otherExpenses;
+
     
     // 4. Generar PDF
     
