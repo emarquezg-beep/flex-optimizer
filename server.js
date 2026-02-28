@@ -3784,20 +3784,49 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
     doc.strokeColor('#ddd').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown(0.5);
     
-    // Deductible Mileage - BY VEHICLE
-    doc.font('Helvetica-Bold').fontSize(11);
-    doc.text('Deductible Mileage', 50, doc.y);
-    doc.moveDown(0.3);
-    
-    doc.font('Helvetica').fontSize(10);
-    vehicles.forEach(vehicle => {
-      const vY = doc.y;
-      const vehicleDeduction = vehicle.miles * IRS_MILEAGE_RATE;
-      doc.fillColor('#333').text(`  • ${vehicle.name}`, 50, vY);
-      doc.fillColor('#000').text(`${vehicle.miles.toFixed(2)} mi`, 300, vY);
-      doc.text(`$${vehicleDeduction.toFixed(2)}`, 450, vY);
-      doc.moveDown(0.5);
-    });
+// Deductible Mileage - BY VEHICLE con desglose
+doc.font('Helvetica-Bold').fontSize(11);
+doc.text('Deductible Mileage', 50, doc.y);
+doc.moveDown(0.3);
+
+doc.font('Helvetica').fontSize(10);
+vehicles.forEach(vehicle => {
+  // ⚠️ Aseguramos que todos los valores sean números
+  const wMiles = Number(vehicle.workMiles) || 0;
+  const c1Miles = Number(vehicle.commute1) || 0;
+  const c2Miles = Number(vehicle.commute2) || 0;
+  const total = Number(vehicle.totalMiles) || 0;
+  const vehicleDeduction = total * IRS_MILEAGE_RATE;
+
+  // Nombre del vehículo + total
+  doc.font('Helvetica-Bold').fillColor('#000').fontSize(10);
+  const vHeaderY = doc.y;
+  doc.text(`  • ${vehicle.name}`, 50, vHeaderY);
+  doc.text(`${total.toFixed(2)} mi`, 300, vHeaderY);
+  doc.text(`$${vehicleDeduction.toFixed(2)}`, 450, vHeaderY);
+  doc.moveDown(0.4);
+
+  // Desglose interno
+  doc.font('Helvetica').fillColor('#555').fontSize(9);
+
+  const w = doc.y;
+  doc.text(`      Work Miles`, 50, w);
+  doc.text(`${wMiles.toFixed(2)} mi`, 300, w);
+  doc.moveDown(0.3);
+
+  const c1 = doc.y;
+  doc.text(`      Commute (to warehouse)`, 50, c1);
+  doc.text(`${c1Miles.toFixed(2)} mi`, 300, c1);
+  doc.moveDown(0.3);
+
+  const c2 = doc.y;
+  doc.text(`      Commute (return)`, 50, c2);
+  doc.text(`${c2Miles.toFixed(2)} mi`, 300, c2);
+  doc.moveDown(0.8);
+
+  doc.fillColor('#000').fontSize(10); // reset
+});
+
     
     // Subtotal mileage
     doc.strokeColor('#ddd').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
