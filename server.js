@@ -3683,15 +3683,14 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
     if (routesError) throw routesError;
 
     // 2. Query para nombre del operador
-    const { data: profileData, error: profileError } = await supabase
+    const { data: profileData } = await supabase
       .from('user_profiles')
       .select('full_name')
       .eq('user_id', userId)
-      .single();
-
-    if (profileError) throw profileError;
+      .maybeSingle();
 
     const driverName = profileData?.full_name || 'Driver';
+
 
 
     const totalIncome = routesData.reduce((sum, r) => sum + (r.pago || 0), 0);
