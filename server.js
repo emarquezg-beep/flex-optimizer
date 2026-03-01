@@ -3888,7 +3888,7 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
     console.error('❌ Error generando tax report:', error);
     res.status(500).json({ success: false, error: error.message });
   }
-
+});
   // TEMPORAL: Mileage Report 2025 - Esposa
 app.get('/api/tax-report-spouse/2025', authenticateUser, async (req, res) => {
 
@@ -4056,4 +4056,4 @@ app.get('/api/tax-report-spouse/2025', authenticateUser, async (req, res) => {
   }
 });
 
-});
+
