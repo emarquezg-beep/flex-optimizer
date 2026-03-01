@@ -3661,16 +3661,17 @@ console.log('   GET /api/health - Health check + Supabase wake-up');
 app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
   const { userId } = req.params;
   const { year } = req.query;
-  
+
   if (userId !== req.userId) {
     return res.status(403).json({ success: false, error: 'No tienes permiso' });
   }
 
   try {
     const taxYear = year || '2025';
-    const IRS_MILEAGE_RATE = 0.70; // IRS 2025 rate
-    
-    // 1. Query para total income
+    const IRS_MILEAGE_RATE = 0.70;
+    const otherExpenses = 0.00; // ✅ declarada aquí
+
+    // 1. Total income
     const { data: routesData, error: routesError } = await supabase
       .from('routes')
       .select('pago')
@@ -3683,8 +3684,7 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
 
     const totalIncome = routesData.reduce((sum, r) => sum + (r.pago || 0), 0);
 
-    
-    // 2. Query para millas por vehículo (con JOIN correcto)
+    // 2. Millas por vehículo con commutes
     const { data: vehicleData, error: vehicleError } = await supabase
       .from('routes')
       .select(`
@@ -3707,7 +3707,7 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
 
     if (vehicleError) throw vehicleError;
 
-    // Agrupar millas por vehículo (work + commutes)
+    // Agrupar millas por vehículo
     const vehicleMap = {};
     vehicleData.forEach(route => {
       const vId = route.vehicle_id;
@@ -3724,54 +3724,50 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
           totalMiles: 0
         };
       }
-      vehicleMap[vId].workMiles   += (route.millas_de_trabajo || 0);
-      vehicleMap[vId].commute1    += (route.commute_1 || 0);
-      vehicleMap[vId].commute2    += (route.commute_2 || 0);
-      vehicleMap[vId].totalMiles  += (route.millas_de_trabajo || 0) + 
-                                      (route.commute_1 || 0) + 
-                                      (route.commute_2 || 0);
+      vehicleMap[vId].workMiles  += (route.millas_de_trabajo || 0);
+      vehicleMap[vId].commute1   += (route.commute_1 || 0);
+      vehicleMap[vId].commute2   += (route.commute_2 || 0);
+      vehicleMap[vId].totalMiles += (route.millas_de_trabajo || 0) +
+                                    (route.commute_1 || 0) +
+                                    (route.commute_2 || 0);
     });
 
     const vehicles = Object.values(vehicleMap);
     const totalMiles = vehicles.reduce((sum, v) => sum + v.totalMiles, 0);
     const mileageDeduction = totalMiles * IRS_MILEAGE_RATE;
+    const totalDeductions = mileageDeduction + otherExpenses; // ✅ declarada aquí
 
-    
-    // 4. Generar PDF
-    
+    // 3. Generar PDF
     const doc = new PDFDocument({ margin: 50 });
-    
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=FlexPilot_Tax_Report_${taxYear}.pdf`);
-    
+
     doc.pipe(res);
-    
-    // --- HEADER ---
+
+    // HEADER
     doc.fontSize(24).font('Helvetica-Bold').text('Tax Summary', { align: 'center' });
     doc.moveDown(0.3);
-    doc.fontSize(12).font('Helvetica').text(
-      `Jan 01 ${taxYear} - Dec 31 ${taxYear}`,
-      { align: 'center' }
-    );
+    doc.fontSize(12).font('Helvetica').text(`Jan 01 ${taxYear} - Dec 31 ${taxYear}`, { align: 'center' });
     doc.moveDown(0.5);
     doc.fontSize(10).fillColor('#666').text(
       'Give this form to your tax preparer or use it while filing your taxes.',
       { align: 'center' }
     );
     doc.moveDown(2);
-    
-    // --- INCOME SECTION ---
+
+    // INCOME
     doc.fillColor('#000').fontSize(16).font('Helvetica-Bold').text('Income');
     doc.moveDown(0.5);
     doc.fontSize(12).font('Helvetica');
-    doc.text(`Total Income`, 50, doc.y, { continued: true });
+    doc.text('Total Income', 50, doc.y, { continued: true });
     doc.text(`$${totalIncome.toFixed(2)}`, { align: 'right' });
     doc.moveDown(2);
-    
-    // --- DEDUCTIONS SECTION ---
+
+    // DEDUCTIONS
     doc.fontSize(16).font('Helvetica-Bold').text('Deductions');
     doc.moveDown(0.5);
-    
+
     // Table header
     doc.fontSize(11).font('Helvetica-Bold');
     const tableTop = doc.y;
@@ -3779,55 +3775,50 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
     doc.text('Miles', 300, tableTop);
     doc.text('Deductible', 450, tableTop);
     doc.moveDown(0.3);
-    
-    // Separator line
     doc.strokeColor('#ddd').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown(0.5);
-    
-// Deductible Mileage - BY VEHICLE con desglose
-doc.font('Helvetica-Bold').fontSize(11);
-doc.text('Deductible Mileage', 50, doc.y);
-doc.moveDown(0.3);
 
-doc.font('Helvetica').fontSize(10);
-vehicles.forEach(vehicle => {
-  // ⚠️ Aseguramos que todos los valores sean números
-  const wMiles = Number(vehicle.workMiles) || 0;
-  const c1Miles = Number(vehicle.commute1) || 0;
-  const c2Miles = Number(vehicle.commute2) || 0;
-  const total = Number(vehicle.totalMiles) || 0;
-  const vehicleDeduction = total * IRS_MILEAGE_RATE;
+    // Deductible Mileage por vehículo
+    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000');
+    doc.text('Deductible Mileage', 50, doc.y);
+    doc.moveDown(0.3);
 
-  // Nombre del vehículo + total
-  doc.font('Helvetica-Bold').fillColor('#000').fontSize(10);
-  const vHeaderY = doc.y;
-  doc.text(`  • ${vehicle.name}`, 50, vHeaderY);
-  doc.text(`${total.toFixed(2)} mi`, 300, vHeaderY);
-  doc.text(`$${vehicleDeduction.toFixed(2)}`, 450, vHeaderY);
-  doc.moveDown(0.4);
+    vehicles.forEach(vehicle => {
+      const wMiles     = Number(vehicle.workMiles) || 0;
+      const c1Miles    = Number(vehicle.commute1)  || 0;
+      const c2Miles    = Number(vehicle.commute2)  || 0;
+      const total      = Number(vehicle.totalMiles) || 0;
+      const vDeduction = total * IRS_MILEAGE_RATE;
 
-  // Desglose interno
-  doc.font('Helvetica').fillColor('#555').fontSize(9);
+      // Fila del vehículo
+      doc.font('Helvetica-Bold').fillColor('#000').fontSize(10);
+      const vY = doc.y;
+      doc.text(`  • ${vehicle.name}`, 50, vY);
+      doc.text(`${total.toFixed(2)} mi`, 300, vY);
+      doc.text(`$${vDeduction.toFixed(2)}`, 450, vY);
+      doc.moveDown(0.4);
 
-  const w = doc.y;
-  doc.text(`      Work Miles`, 50, w);
-  doc.text(`${wMiles.toFixed(2)} mi`, 300, w);
-  doc.moveDown(0.3);
+      // Desglose interno
+      doc.font('Helvetica').fillColor('#555').fontSize(9);
 
-  const c1 = doc.y;
-  doc.text(`      Commute (to warehouse)`, 50, c1);
-  doc.text(`${c1Miles.toFixed(2)} mi`, 300, c1);
-  doc.moveDown(0.3);
+      const wY = doc.y;
+      doc.text('      Work Miles', 50, wY);
+      doc.text(`${wMiles.toFixed(2)} mi`, 300, wY);
+      doc.moveDown(0.3);
 
-  const c2 = doc.y;
-  doc.text(`      Commute (return)`, 50, c2);
-  doc.text(`${c2Miles.toFixed(2)} mi`, 300, c2);
-  doc.moveDown(0.8);
+      const c1Y = doc.y;
+      doc.text('      Commute (to warehouse)', 50, c1Y);
+      doc.text(`${c1Miles.toFixed(2)} mi`, 300, c1Y);
+      doc.moveDown(0.3);
 
-  doc.fillColor('#000').fontSize(10); // reset
-});
+      const c2Y = doc.y;
+      doc.text('      Commute (return)', 50, c2Y);
+      doc.text(`${c2Miles.toFixed(2)} mi`, 300, c2Y);
+      doc.moveDown(0.8);
 
-    
+      doc.fillColor('#000').fontSize(10);
+    });
+
     // Subtotal mileage
     doc.strokeColor('#ddd').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown(0.3);
@@ -3837,30 +3828,28 @@ vehicles.forEach(vehicle => {
     doc.text(`${totalMiles.toFixed(2)} mi`, 300, subtotalY);
     doc.text(`$${mileageDeduction.toFixed(2)}`, 450, subtotalY);
     doc.moveDown(1.5);
-    
+
     // Other Expenses
     doc.font('Helvetica-Bold');
     doc.text('Other Expenses', 50, doc.y);
     doc.moveDown(0.5);
-    
     doc.font('Helvetica');
     const otherY = doc.y;
     doc.text('Tolls', 50, otherY);
     doc.text(`$${otherExpenses.toFixed(2)}`, 300, otherY);
     doc.text(`$${otherExpenses.toFixed(2)}`, 450, otherY);
     doc.moveDown(2);
-    
+
     // TOTAL DEDUCTIONS
     doc.strokeColor('#000').lineWidth(2).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown(0.8);
-    
     doc.fontSize(14).font('Helvetica-Bold');
     const totalY = doc.y;
     doc.text('Total Tax Deductions', 50, totalY);
     doc.text(`$${totalDeductions.toFixed(2)}`, 450, totalY);
     doc.moveDown(3);
-    
-    // --- FOOTER ---
+
+    // FOOTER
     doc.fontSize(9).font('Helvetica').fillColor('#666');
     doc.text('Generated by FlexPilot', { align: 'center' });
     doc.text(new Date().toLocaleDateString('en-US'), { align: 'center' });
@@ -3869,11 +3858,11 @@ vehicles.forEach(vehicle => {
       'FlexPilot is not responsible for the accuracy of deductions. We recommend consulting with a tax professional.',
       { align: 'center', width: 500 }
     );
-    
+
     doc.end();
-    
+
     console.log(`✅ Tax report generado para user ${userId}, año ${taxYear}, ${vehicles.length} vehículos`);
-    
+
   } catch (error) {
     console.error('❌ Error generando tax report:', error);
     res.status(500).json({ success: false, error: error.message });
