@@ -3888,4 +3888,172 @@ app.get('/api/tax-report/:userId', authenticateUser, async (req, res) => {
     console.error('❌ Error generando tax report:', error);
     res.status(500).json({ success: false, error: error.message });
   }
+
+  // TEMPORAL: Mileage Report 2025 - Esposa
+app.get('/api/tax-report-spouse/2025', authenticateUser, async (req, res) => {
+
+  try {
+    const taxYear = '2025';
+    const IRS_MILEAGE_RATE = 0.70;
+
+    // Datos hardcodeados
+    const driverName = 'Carmen Cecilia Alvarez'; // ← ponlo aquí
+    const totalIncome = 16137.00;
+    const otherExpenses = 803.33; // E-Pass Tolls 2025
+
+    const vehicles = [
+      {
+        name: 'Trax',
+        workMiles: 2506.47,
+        commute1: 1578.22,
+        commute2: 1555.86,
+        totalMiles: 5640.55
+      },
+      {
+        name: 'Kia',
+        workMiles: 5626.42,
+        commute1: 3115.52,
+        commute2: 2952.97,
+        totalMiles: 11694.91
+      }
+    ];
+
+    const totalMiles = vehicles.reduce((sum, v) => sum + v.totalMiles, 0);
+    const mileageDeduction = totalMiles * IRS_MILEAGE_RATE;
+    const totalDeductions = mileageDeduction + otherExpenses;
+
+    // Generar PDF
+    const doc = new PDFDocument({ margin: 50 });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=FlexPilot_Tax_Report_Spouse_${taxYear}.pdf`);
+
+    doc.pipe(res);
+
+    // HEADER
+    doc.fontSize(24).font('Helvetica-Bold').text('Mileage Report', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(12).font('Helvetica').text(`Jan 01 ${taxYear} - Dec 31 ${taxYear}`, { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(13).font('Helvetica-Bold').fillColor('#000').text(driverName, { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor('#666').text(
+      'Give this form to your tax preparer or use it while filing your taxes.',
+      { align: 'center' }
+    );
+    doc.moveDown(2);
+
+    // INCOME
+    doc.fillColor('#000').fontSize(16).font('Helvetica-Bold').text('Income');
+    doc.moveDown(0.5);
+    doc.fontSize(12).font('Helvetica');
+    doc.text('Total Income', 50, doc.y, { continued: true });
+    doc.text(`$${totalIncome.toFixed(2)}`, { align: 'right' });
+    doc.moveDown(2);
+
+    // DEDUCTIONS
+    doc.fontSize(16).font('Helvetica-Bold').text('Deductions');
+    doc.moveDown(0.5);
+
+    // Table header
+    doc.fontSize(11).font('Helvetica-Bold');
+    const tableTop = doc.y;
+    doc.text('Expense Category', 50, tableTop);
+    doc.text('Miles', 300, tableTop);
+    doc.text('Deductible', 450, tableTop);
+    doc.moveDown(0.3);
+    doc.strokeColor('#ddd').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Deductible Mileage por vehículo
+    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000');
+    doc.text('Deductible Mileage', 50, doc.y);
+    doc.moveDown(0.3);
+
+    vehicles.forEach(vehicle => {
+      const wMiles     = Number(vehicle.workMiles) || 0;
+      const c1Miles    = Number(vehicle.commute1)  || 0;
+      const c2Miles    = Number(vehicle.commute2)  || 0;
+      const total      = Number(vehicle.totalMiles) || 0;
+      const vDeduction = total * IRS_MILEAGE_RATE;
+
+      // Fila del vehículo
+      doc.font('Helvetica-Bold').fillColor('#000').fontSize(10);
+      const vY = doc.y;
+      doc.text(`  • ${vehicle.name}`, 50, vY);
+      doc.text(`${total.toFixed(2)} mi`, 300, vY);
+      doc.text(`$${vDeduction.toFixed(2)}`, 450, vY);
+      doc.moveDown(0.4);
+
+      // Desglose interno
+      doc.font('Helvetica').fillColor('#555').fontSize(9);
+
+      const wY = doc.y;
+      doc.text('      Route Miles', 50, wY);
+      doc.text(`${wMiles.toFixed(2)} mi`, 300, wY);
+      doc.moveDown(0.3);
+
+      const c1Y = doc.y;
+      doc.text('      Commute (to warehouse)', 50, c1Y);
+      doc.text(`${c1Miles.toFixed(2)} mi`, 300, c1Y);
+      doc.moveDown(0.3);
+
+      const c2Y = doc.y;
+      doc.text('      Commute (return)', 50, c2Y);
+      doc.text(`${c2Miles.toFixed(2)} mi`, 300, c2Y);
+      doc.moveDown(0.8);
+
+      doc.fillColor('#000').fontSize(10);
+    });
+
+    // Subtotal mileage
+    doc.strokeColor('#ddd').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').fontSize(11);
+    const subtotalY = doc.y;
+    doc.text('Total Mileage', 50, subtotalY);
+    doc.text(`${totalMiles.toFixed(2)} mi`, 300, subtotalY);
+    doc.text(`$${mileageDeduction.toFixed(2)}`, 450, subtotalY);
+    doc.moveDown(1.5);
+
+    // Other Expenses
+    doc.font('Helvetica-Bold');
+    doc.text('Other Expenses', 50, doc.y);
+    doc.moveDown(0.5);
+    doc.font('Helvetica');
+    const otherY = doc.y;
+    doc.text('Tolls (E-Pass)', 50, otherY);
+    doc.text(`$${otherExpenses.toFixed(2)}`, 300, otherY);
+    doc.text(`$${otherExpenses.toFixed(2)}`, 450, otherY);
+    doc.moveDown(2);
+
+    // TOTAL DEDUCTIONS
+    doc.strokeColor('#000').lineWidth(2).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.8);
+    doc.fontSize(14).font('Helvetica-Bold');
+    const totalY = doc.y;
+    doc.text('Total Tax Deductions', 50, totalY);
+    doc.text(`$${totalDeductions.toFixed(2)}`, 450, totalY);
+    doc.moveDown(3);
+
+    // FOOTER
+    doc.fontSize(9).font('Helvetica').fillColor('#666');
+    doc.text('Generated by FiveThirtyAI', { align: 'center' });
+    doc.text(new Date().toLocaleDateString('en-US'), { align: 'center' });
+    doc.moveDown(1);
+    doc.fontSize(8).text(
+      'FiveThirtyAI is not responsible for the accuracy of deductions. We recommend consulting with a tax professional.',
+      { align: 'center', width: 500 }
+    );
+
+    doc.end();
+
+    console.log(`✅ Tax report esposa generado`);
+
+  } catch (error) {
+    console.error('❌ Error generando tax report esposa:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 });
