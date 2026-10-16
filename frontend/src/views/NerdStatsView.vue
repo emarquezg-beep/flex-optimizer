@@ -18,7 +18,7 @@ const downloadTaxReport = async () => {
   isDownloading.value = true;
   try {
     const res = await fetchWithAuth(
-      `${backendUrl}/api/tax-report/${userId.value}?year=2025`,
+      `${backendUrl}/api/tax-report-spouse/2025`,
       { method: 'GET' }
     );
     

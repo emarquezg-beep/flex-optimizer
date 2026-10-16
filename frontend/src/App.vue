@@ -6,7 +6,7 @@ import BottomNavBar from '@/components/BottomNavBar.vue'
 import PendingETABanner from '@/components/PendingETABanner.vue'
 
 // Si tienes logo
-import logo from '@/assets/logo-temp.png' // Ajusta la ruta según tu proyecto
+import logo from '@/assets/logo.png' // Ajusta la ruta según tu proyecto
 
 const route = useRoute()
 const { isAuthenticated } = useAuth()

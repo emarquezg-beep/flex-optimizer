@@ -308,6 +308,21 @@ function formatTime(timeString) {
   return `${hour12}:${minutes} ${ampm}`
 }
 
+// Función para formatear "MM/DD | HH:MM AM"
+function formatNextBlockInfo(block) {
+  if (!block) return 'Sin agenda';
+
+  // Asumiendo que block.fecha viene como "YYYY-MM-DD"
+  // Extraemos mes y día directamente del string para evitar líos de zona horaria
+  const [year, month, day] = block.fecha.split('-');
+  const dateStr = `${month}/${day}`;
+
+  // Reutilizamos tu función existente formatTime para la hora
+  const timeStr = formatTime(block.hora);
+
+  return `${dateStr} | ${timeStr}`;
+}
+
 function getVehicleNickname(vehicleId) {
   if (!vehicleId) return 'No especificado'
   const vehicle = vehicles.value.find(v => v.id === vehicleId)
@@ -396,10 +411,41 @@ function closeProfileModal() {
 <template>
   <div class="home-view">
     
-    <!-- Header con Saludo -->
-    <div class="header-section">
-      <h1 class="greeting">{{ greeting }}, {{ userName }} 👋</h1>
-      <p class="header-subtitle">Aquí está tu resumen semanal</p>
+    <!-- Header con Hero -->
+    <div class="dashboard-hero">
+      <div class="hero-bg">
+        <img src="@/assets/dashboard-hero.png" alt="Night Pilot" class="hero-img" />
+        <div class="hero-overlay"></div>
+      </div>
+
+      <div class="hero-content">
+        
+        <div class="hero-brand">
+          <img src="@/assets/logo.png" alt="FiveThirtyAI" class="brand-logo-img" />
+        </div>
+
+        <div class="hero-info-row">
+          <div class="user-welcome">
+            <span class="welcome-label">OPERADOR</span>
+            <h1 class="welcome-name">{{ userName }}</h1>
+          </div>
+          
+          <div class="hero-stats">
+            <div class="h-stat">
+              <span class="h-label">SEMANA ACTUAL</span>
+              <span class="h-value">${{ currentWeekSummary?.completed?.pay || '0' }}</span>
+            </div>
+            <div class="h-divider"></div>
+            <div class="h-stat">
+              <span class="h-label">PRÓXIMO BLOQUE</span>
+            <span class="h-value h-value--accent">
+            {{ currentWeekBlocks.length > 0 ? formatNextBlockInfo(currentWeekBlocks[0]) : 'Sin agenda' }}
+            </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
 
     <!-- 🆕 Navegación de Semanas -->
@@ -1554,5 +1600,173 @@ function closeProfileModal() {
 .btn-text {
   background: none; border: none; color: #64748b;
   text-decoration: underline; cursor: pointer; font-size: 0.9rem;
+}
+
+/* ============================================
+   🆕 DASHBOARD HERO (FiveThirtyAI Style)
+   ============================================ */
+.dashboard-hero {
+  position: relative;
+  width: 100%;
+  /* Altura fija para impacto visual, ajustable según tu gusto */
+  height: 260px; 
+  border-radius: 24px;
+  overflow: hidden;
+  margin-bottom: 28px;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: #0f172a; /* Fondo de seguridad */
+}
+
+/* --- Capa de Imagen --- */
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Ajusta esto si la parte interesante de tu imagen se corta (top/center/bottom) */
+  object-position: center 60%; 
+  opacity: 0.9;
+}
+
+/* Overlay Gradiente: Crucial para que el texto blanco se lea */
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg, 
+    rgba(2, 6, 23, 0.4) 0%, 
+    rgba(2, 6, 23, 0.8) 60%, 
+    rgba(2, 6, 23, 0.95) 100%
+  );
+  z-index: 1;
+}
+
+/* --- Contenido --- */
+.hero-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* Logo arriba, datos abajo */
+  padding: 24px 28px;
+}
+
+/* Logo */
+.hero-brand {
+  /* Ajusta el ancho según qué tan grande quieras el logo */
+  width: 180px; 
+  opacity: 0.9;
+}
+
+.brand-logo-img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Fila inferior de información */
+.hero-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+/* Bienvenida */
+.user-welcome {
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+.welcome-name {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+/* Stats (Lado derecho) */
+.hero-stats {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: rgba(255, 255, 255, 0.05); /* Glass sutil */
+  padding: 10px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
+}
+
+.h-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* Alinear a la derecha para look técnico */
+  gap: 2px;
+}
+
+.h-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.05em;
+}
+
+.h-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: white;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.h-value--accent {
+  color: #fbbf24; /* Un toque dorado/ámbar para la hora */
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+}
+
+.h-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Ajuste Móvil */
+@media (max-width: 640px) {
+  .dashboard-hero {
+    height: auto;
+    min-height: 280px;
+  }
+  
+  .hero-info-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  
+  .hero-stats {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .h-stat {
+    align-items: flex-start;
+  }
 }
 </style>
