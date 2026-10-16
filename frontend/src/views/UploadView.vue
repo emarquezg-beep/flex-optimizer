@@ -1883,8 +1883,22 @@ async function submitCorrections() {
             </div>
           </div>
 
+           <div class="json-input-card">
+            <details class="json-legacy-details json-legacy-details--stealth">
+              <summary>JSON manual (legacy)</summary>
+              <textarea
+                v-model="jsonInput"
+                placeholder="Paste the JSON from the Gem here."
+                rows="10"
+                class="json-textarea"
+                :disabled="isProcessing || extractedAddresses.length > 0"
+              ></textarea>
+            </details>
+          </div>
+
+
           <button @click="evaluateRoute" class="button-primary button-evaluate"
-              :disabled="(isProcessing || isUploadingImages) || (selectedImages.length === 0)">
+              :disabled="(isProcessing || isUploadingImages) || (selectedImages.length === 0 && !jsonInput.trim())">
               {{ isUploadingImages ? 'Processing...' : '🚀 Evaluate' }}
           </button>
 
